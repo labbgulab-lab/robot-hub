@@ -585,20 +585,30 @@ class NaoqiAdapter(RobotAdapter):
         return notes
 
 
+# Pepper's Say-It dashboard (job/pepper/dashboard): Python 2.7 + pynaoqi,
+# standard library only, fixed on 127.0.0.1:8780, robot address as argv[1].
+PEPPER_DASHBOARD_PORT = 8780
+PEPPER_DASHBOARD_WAIT_S = 30.0
+
+
 class PepperAdapter(NaoqiAdapter):
     """Pepper: a NAOqi 2.5 robot, reached exactly like NAO (Python 2.7 +
     pynaoqi, ALProxy on 9559, no login -- profiles/pepper.md).
 
     What differs is what it must *not* do. It has no Sit or Lying postures,
     so no posture buttons. It listens on its own four microphones, so it
-    claims nothing on this laptop. And it has no system of ours to launch
-    yet, so Launch says so instead of touching NAO_LLM: the inherited
-    clean-up would kill a NAO's NAO_LLM running beside it.
+    claims nothing on this laptop. Its Launch is the Say-It dashboard, under
+    the same Python 2.7 and SDK, and never NAO's clean-up, which would kill a
+    NAO's NAO_LLM running beside it.
+
+    Settings, in [robots.pepper.settings]:
+        dashboard_path  the dashboard folder; default ../pepper/dashboard
     """
 
     type_id = "pepper"
     display_name = "Pepper"
     postures = ()
+    launch_timeout_s = PEPPER_DASHBOARD_WAIT_S + 30
 
     def stable_key(self, found: Found) -> str:
         key = super().stable_key(found)
@@ -610,10 +620,38 @@ class PepperAdapter(NaoqiAdapter):
     async def ensure_zero_instances(self) -> list[str]:
         return []
 
+    def _dashboard(self) -> Path:
+        folder = self.config.path(self.type_id, "dashboard_path") or (
+            self.config.repo_root / ".." / "pepper" / "dashboard").resolve()
+        script = folder / "pepper_dashboard.py"
+        if not script.is_file():
+            raise AdapterUnavailable(
+                "Pepper's dashboard is not at {} -- set dashboard_path in "
+                "[robots.pepper.settings]".format(folder))
+        return script
+
     async def launch(self) -> str:
-        raise AdapterUnavailable(
-            "Pepper has no conversation system to launch yet -- Connect, "
-            "speech and battery work; the Pepper app is the next step")
+        script = self._dashboard()
+        url = "http://127.0.0.1:{}/".format(PEPPER_DASHBOARD_PORT)
+        supervisor = get_supervisor()
+        # Started by hand (start.sh) or by an earlier hub: use it as it is.
+        if await supervisor.wait_for_http(url + "api/status", 1.5):
+            self.notes.append("Pepper's dashboard was already running")
+            return url
+        self._child_name = "pepper_dashboard:{}".format(self.stable_key(self.found))
+        await supervisor.start(
+            self._child_name, [str(self._python2), str(script), self.found.address],
+            cwd=script.parent, env=self._env(), port=PEPPER_DASHBOARD_PORT,
+            owner=self.stable_key(self.found), log_prefix="Pepper")
+        if not await supervisor.wait_for_http(url + "api/status", PEPPER_DASHBOARD_WAIT_S,
+                                              name=self._child_name):
+            await supervisor.stop(self._child_name)
+            self._child_name = ""
+            raise RuntimeError(
+                "Pepper's dashboard never answered on port {} within {:.0f} s "
+                "-- its own output is in the log above".format(
+                    PEPPER_DASHBOARD_PORT, PEPPER_DASHBOARD_WAIT_S))
+        return url
 
     async def system_status(self) -> dict[str, Any]:
         status = await super().system_status()

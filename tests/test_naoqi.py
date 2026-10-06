@@ -113,8 +113,45 @@ def test_pepper_launch_never_touches_nao_llm():
     # The NAO clean-up kills NAO_LLM's interpreter -- a NAO beside Pepper
     # would lose its running session.
     import asyncio
-    import pytest
     p = _pepper()
     assert asyncio.run(p.ensure_zero_instances()) == []
-    with pytest.raises(N.AdapterUnavailable, match="no conversation system"):
-        asyncio.run(p.launch())
+
+
+class _Sup:
+    def __init__(self, up_before):
+        self.up_before, self.started = up_before, None
+
+    async def wait_for_http(self, url, timeout_s, name=""):
+        return self.up_before or self.started is not None
+
+    async def start(self, name, argv, **kw):
+        self.started = (name, argv, kw)
+
+    async def stop(self, name):
+        pass
+
+
+def _pepper_launch(monkeypatch, tmp_path, up_before):
+    import asyncio
+    (tmp_path / "pepper_dashboard.py").write_text("# dashboard")
+    p = _pepper()
+    p.config = type("C", (), {"path": lambda self, t, k: tmp_path, "repo_root": tmp_path})()
+    p.notes, p._child_name = [], ""
+    p._python2, p._sdk = Path("C:/Python27/python.exe"), tmp_path
+    p._env = lambda: {}
+    sup = _Sup(up_before)
+    monkeypatch.setattr(N, "get_supervisor", lambda: sup)
+    return asyncio.run(p.launch()), sup
+
+
+def test_pepper_launch_starts_the_dashboard_on_the_robot(monkeypatch, tmp_path):
+    url, sup = _pepper_launch(monkeypatch, tmp_path, up_before=False)
+    assert url == "http://127.0.0.1:8780/"
+    name, argv, kw = sup.started
+    assert argv[1].endswith("pepper_dashboard.py") and argv[2] == "172.20.10.2"
+    assert kw["port"] == 8780
+
+
+def test_a_dashboard_started_by_hand_is_reused(monkeypatch, tmp_path):
+    url, sup = _pepper_launch(monkeypatch, tmp_path, up_before=True)
+    assert url == "http://127.0.0.1:8780/" and sup.started is None
