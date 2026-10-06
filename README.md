@@ -118,6 +118,11 @@ The hub launches each robot's own program. Clone the ones you need **next to
   The NAO card also needs Python 2.7 and the pynaoqi 2.8.6 SDK. Set both paths in
   `config.toml` (copy `config.example.toml`); see `docs/SETUP.md`.
 
+**All four robots on Windows in one go:** get the *robot-lab kit* from Tomer
+(USB: the NAOqi SDK and the Pepper dashboard, which are not on GitHub) and run
+`tools/setup-windows.ps1 -Kit <kit folder>`. It installs Git and Pythons 3.12 +
+2.7, clones everything into `%USERPROFILE%obot-lab`, and writes `config.toml`.
+
 ### 6. Something wrong?
 
 Run `.\run.ps1 -Doctor` (Mac: `./run.sh --doctor`). It checks everything and
