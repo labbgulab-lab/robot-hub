@@ -46,7 +46,20 @@ Step "Programs"
 Ensure-Winget "Git.Git" { [bool](Get-Command git -ErrorAction SilentlyContinue) } "Git"
 Ensure-Winget "Python.Python.3.12" { [bool](& py -3.12 -c "print(1)" 2>$null) } "Python 3.12"
 $py2 = "C:\Python27\python.exe"
-Ensure-Winget "Python.Python.2" { Test-Path $py2 } "Python 2.7"
+# Python 2.7 from the kit's own installer when it is there (no download, the
+# exact version the robots were tested with), else from winget.
+$py2Msi = Get-ChildItem $Kit -Filter "python-2.7*.amd64.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not (Test-Path $py2) -and $py2Msi) {
+    Write-Host "   installing Python 2.7 from $($py2Msi.Name) (Windows asks for permission) ..."
+    $p = Start-Process msiexec.exe -Verb RunAs -Wait -PassThru -ArgumentList `
+        "/i `"$($py2Msi.FullName)`" /qn ALLUSERS=1 TARGETDIR=C:\Python27\"
+    if ($p.ExitCode -ne 0 -or -not (Test-Path $py2)) {
+        throw "Python 2.7 did not install (msiexec exit $($p.ExitCode)) - run $($py2Msi.Name) by hand into C:\Python27"
+    }
+    Done "Python 2.7 installed from the kit"
+} else {
+    Ensure-Winget "Python.Python.2" { Test-Path $py2 } "Python 2.7"
+}
 
 # ------------------------------------------------------------------ code
 Step "Code from GitHub -> $Root"
