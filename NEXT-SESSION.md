@@ -54,6 +54,7 @@ On 2026-10-05 neither NAO nor Furhat had it saved.
 | Furhat on hardware | ✅ 2026-10-05 (Connect sets the English voice; skill OpenAIChat 1.3.0) |
 | NAO posture buttons (Sit / Lie down / Stand up) | ✅ with a heat guard |
 | Reachy Lite | ❌ not plugged in |
+| Pepper card (detect, Connect speaks, battery, Launch = Say-It dashboard) | ✅ 2026-10-06 on hardware (NAOqi 2.5.10.7); the dashboard folder `job/pepper/dashboard` is not yet in robot-lab |
 
 ## Run it
 
