@@ -1,0 +1,467 @@
+/* Robot Hub.
+ *
+ * Visual language follows the design reference: light surfaces, one accent
+ * blue, tinted avatar tiles, a metrics row, and a full-width primary action.
+ * The card's button *positions* follow PLAN.md 9.3 instead -- Disconnect
+ * top-left, Connect top-right, the larger Launch across the bottom.
+ *
+ * Everything tunable is a token below. A restyle should mean editing :root,
+ * not hunting through rules. */
+
+:root {
+  color-scheme: light;
+
+  --bg: #ededed;
+  --surface: #fff;
+  --ink: #17253b;
+  --muted: #65738a;
+  --border: #dfe2e6;
+  --border-soft: #edf0f5;
+
+  --blue: #2563eb;
+  --blue-dark: #1d51c7;
+  --blue-light: #edf4ff;
+  --blue-ring: #e7effd;
+
+  --green: #14884a;
+  --green-light: #e8f6ee;
+  --amber: #8a6a16;
+  --amber-light: #fff5df;
+  --red: #c0392f;
+  --red-light: #fdeceb;
+  --grey-light: #f0f4f8;
+  --grey-ink: #526780;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shell: 1240px;
+  --pad-x: 40px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 "Segoe UI", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+button:focus-visible, a:focus-visible, summary:focus-visible {
+  outline: 3px solid #6094f8;
+  outline-offset: 3px;
+}
+
+svg {
+  width: 20px; height: 20px;
+  fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.hidden { display: none !important; }
+.noscript { padding: 24px; text-align: center; }
+
+/* ---------------------------------------------------------------- top bar */
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); }
+.topbar-inner {
+  max-width: var(--shell); margin: auto;
+  min-height: 60px; padding: 14px var(--pad-x);
+  display: flex; align-items: center; gap: 16px;
+}
+.brand { margin: 0; font-weight: 650; font-size: 20px; letter-spacing: -.4px; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+
+.toggle {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; color: var(--muted); cursor: pointer; user-select: none;
+}
+.toggle input { accent-color: var(--blue); width: 16px; height: 16px; cursor: pointer; }
+
+.hub-link { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.hub-link .dot { background: #c2ccd9; }
+.hub-link.live .dot { background: var(--green); }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; flex-shrink: 0; }
+.dot-blue { background: var(--blue); }
+.dot-green { background: var(--green); }
+
+/* ----------------------------------------------------------------- banner */
+.banner {
+  display: flex; align-items: center; gap: 10px;
+  max-width: var(--shell); margin: 14px auto 0;
+  padding: 12px 16px;
+  background: var(--red-light);
+  border: 1px solid #f3c9c5;
+  border-radius: var(--radius);
+  color: #8d2a22;
+  font-size: 14px;
+}
+.banner svg { width: 18px; height: 18px; }
+
+/* ----------------------------------------------------------------- layout */
+main { max-width: var(--shell); margin: auto; padding: 22px var(--pad-x) 28px; }
+
+.summary { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 24px; }
+.summary-item { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.summary-item strong { color: var(--ink); font-weight: 650; }
+.updated { margin-left: auto; font-size: 13px; color: var(--muted); }
+
+.scan-button {
+  display: flex; justify-content: center; align-items: center; gap: 8px;
+  min-height: 40px; padding: 8px 14px;
+  border: 1px solid #d5dfed; background: var(--surface);
+  border-radius: var(--radius-sm);
+  color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap;
+  transition: background .2s, border-color .2s;
+}
+.scan-button:hover:not(:disabled) { background: var(--blue-light); border-color: #a6c4fa; }
+
+.section-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  margin: 22px 0 12px;
+}
+h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.count { color: var(--muted); font-weight: 400; margin-left: 5px; }
+.range { display: flex; gap: 7px; align-items: center; color: var(--muted); font-size: 13px; }
+.range svg { width: 16px; height: 16px; }
+
+/* ------------------------------------------------------------------ cards */
+.robot-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+
+.robot-card {
+  display: flex; flex-direction: column;
+  position: relative;
+  min-width: 0; padding: 18px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color .2s, box-shadow .2s, opacity .3s;
+}
+.robot-card:hover { border-color: #b7c5d8; }
+
+/* Dim when the robot is not there. The single most important signal on the
+   page: a card lights up within seconds of its robot appearing. */
+.robot-card[data-state="ABSENT"],
+.robot-card[data-state="DISABLED"] { opacity: .55; }
+.robot-card[data-state="CONNECTED"] { border-color: #8eb4f6; box-shadow: 0 0 0 3px var(--blue-ring); }
+.robot-card[data-state="RUNNING"]   { border-color: #86ccA4; box-shadow: 0 0 0 3px #e6f5ec; }
+.robot-card[data-state="DEGRADED"]  { border-color: #e3c377; box-shadow: 0 0 0 3px #fdf3dd; }
+.robot-card[data-state="ERROR"]     { border-color: #e9a29b; box-shadow: 0 0 0 3px #fbe4e2; }
+
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
+
+.robot-avatar {
+  display: grid; place-items: center;
+  width: 56px; height: 56px; margin: 16px auto 10px;
+  border-radius: 14px;
+  color: #527ecc; background: var(--blue-light);
+  background-size: cover; background-position: center;
+}
+.robot-avatar svg { width: 32px; height: 32px; stroke-width: 1.4; }
+/* Keyed by robot, not by position -- cards reorder as robots come and go. */
+.robot-card[data-type-id="furhat"]          .robot-avatar { color: #5a7b96; background: #eef3f7; }
+.robot-card[data-type-id="reachy_wireless"] .robot-avatar { color: #548b9d; background: #edf6f9; }
+.robot-card[data-type-id="reachy_lite"]     .robot-avatar { color: #647daa; background: #f0f3fa; }
+.robot-card[data-type-id="naoqi"]           .robot-avatar { color: #527ecc; background: var(--blue-light); }
+/* A photo, once web/photos/<type_id>.png exists, replaces the glyph. */
+.robot-avatar.has-photo svg { display: none; }
+/* The per-robot rules above use the `background` shorthand, which resets the
+   size -- a 280 px logo would show cropped. Restore it for a loaded logo. */
+.robot-card .robot-avatar.has-photo {
+  background-color: transparent;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+}
+
+.robot-name { text-align: center; font-size: 20px; font-weight: 650; letter-spacing: -.4px; margin: 0; }
+/* Fixed height, clamped to two lines, so the metrics row and the Launch
+   button line up across all four cards however long a detail sentence is. */
+.robot-detail {
+  text-align: center; color: var(--muted); font-size: 13px;
+  margin: 3px 0 16px; height: 2.7em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.metrics {
+  border-top: 1px solid var(--border-soft); padding-top: 12px;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.metric { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.metric-right { text-align: right; }
+.metric-label { color: var(--muted); font-size: 12px; }
+.metric-value { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.metric-value svg { width: 17px; height: 17px; color: #7287a3; }
+.metric-right .metric-value { justify-content: flex-end; }
+.metric-right .metric-value span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.metric-value.low { color: var(--red); }
+.metric-value.low svg { color: var(--red); }
+
+/* The status colours are the state machine, straight from PLAN.md 5.2.
+   Amber is never cosmetic: it means a leading indicator tripped. */
+.status { color: var(--grey-ink); }
+.status .dot { background: currentColor; }
+.robot-card[data-state="DETECTED"]   .status { color: var(--grey-ink); }
+.robot-card[data-state="CONNECTING"] .status { color: var(--amber); }
+.robot-card[data-state="CONNECTING"] .status .dot { animation: pulse 1.1s infinite; }
+.robot-card[data-state="CONNECTED"]  .status { color: var(--blue); }
+.robot-card[data-state="RUNNING"]    .status { color: var(--green); }
+.robot-card[data-state="DEGRADED"]   .status { color: var(--amber); }
+.robot-card[data-state="ERROR"]      .status { color: var(--red); }
+@keyframes pulse { 50% { opacity: .2; } }
+
+/* "Connected, but could not speak" -- a real state, and diagnostic. */
+.robot-name .silent { color: var(--amber); }
+.robot-name .silent svg { width: 15px; height: 15px; vertical-align: -2px; }
+
+/* ---------------------------------------------------------------- buttons */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600;
+  transition: background .2s, border-color .2s, opacity .2s;
+}
+.pill svg { width: 15px; height: 15px; }
+.pill:disabled { opacity: .35; }
+
+.pill-connect { color: #0f6b3b; background: var(--green-light); border-color: #bfe4cd; }
+.pill-connect:hover:not(:disabled) { background: #dcf0e5; }
+.pill-disconnect { color: #a4322a; background: var(--red-light); border-color: #f3c9c5; }
+.pill-disconnect:hover:not(:disabled) { background: #fbdedb; }
+.pill-override { color: #7a5a10; background: var(--amber-light); border-color: #ecd9a8; }
+.pill-dismiss { color: var(--ink); background: var(--grey-light); border-color: var(--border); }
+
+.launch-button {
+  margin-top: 16px; width: 100%; min-height: 44px;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: #fff; background: var(--blue);
+  font-size: 14px; font-weight: 600;
+  transition: background .2s;
+}
+.launch-button:hover:not(:disabled) { background: var(--blue-dark); }
+.launch-button:disabled { background: var(--grey-light); color: #90a0b5; }
+.launch-button svg { width: 17px; height: 17px; }
+.robot-card[data-state="RUNNING"] .launch-button { background: var(--blue-light); color: #235dcc; border-color: #d5e5ff; }
+.robot-card[data-state="RUNNING"] .launch-button:hover { background: #dceaff; }
+
+/* Launching stays blue -- it is the same button, busy -- with a spinner and
+   a bar sweeping along the bottom, so a two-minute launch never looks idle. */
+.robot-card .launch-button.busy { background: var(--blue); color: #fff; cursor: progress; position: relative; overflow: hidden; }
+.robot-card .launch-button.busy::after {
+  content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: 35%;
+  background: #ffffff8c; border-radius: 3px;
+  animation: sweep 1.6s ease-in-out infinite;
+}
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+.launch-button .elapsed { font-weight: 400; opacity: .8; font-variant-numeric: tabular-nums; }
+
+.launch-note, .posture-note { margin: 8px 0 0; font-size: 12px; line-height: 1.4; text-align: center; color: var(--muted); }
+.launch-note.error, .posture-note.error { color: var(--red); }
+
+/* NAO's posture row. Neutral like Dismiss; Stand up is amber like Override
+   because it raises the robot -- someone should be next to it -- and turns
+   solid amber when armed for its second tap. */
+.card-posture {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+  margin-top: 12px;
+}
+.pill-posture {
+  position: relative; overflow: hidden; min-width: 0;
+  justify-content: center; padding: 6px 4px; white-space: nowrap;
+  color: var(--ink); background: var(--grey-light); border-color: var(--border);
+}
+.pill-posture span { overflow: hidden; text-overflow: ellipsis; }
+.pill-posture:hover:not(:disabled) { background: #e6ebf1; }
+.pill-stand { color: #7a5a10; background: var(--amber-light); border-color: #ecd9a8; }
+.pill-stand:hover:not(:disabled) { background: #fcecc4; }
+.pill-stand.armed, .pill-stand.armed:hover:not(:disabled) {
+  color: #fff; background: var(--amber); border-color: var(--amber);
+}
+/* The command in flight: the other two dim, this one stays readable and
+   sweeps like a launching Launch. */
+.pill-posture.busy, .pill-posture.busy:disabled {
+  opacity: 1; cursor: progress;
+  color: var(--blue-dark); background: var(--blue-light); border-color: #d5e5ff;
+}
+.pill-posture.busy::after {
+  content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 35%;
+  background: var(--blue); border-radius: 2px;
+  animation: sweep 1.6s ease-in-out infinite;
+}
+.posture-note svg { width: 13px; height: 13px; margin-right: 5px; vertical-align: -2px; }
+.posture-note.warn { color: var(--amber); }
+
+/* --------------------------------------------------------------- conflict */
+/* A refused launch names the holder. It covers the card because it needs an
+   answer: stop the other thing, or override (PLAN.md 7.2). */
+.card-conflict {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 10px; padding: 20px; text-align: center;
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+.card-conflict svg { width: 22px; height: 22px; color: #b07d12; }
+.conflict-text { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink); }
+.conflict-actions { display: flex; gap: 8px; }
+
+/* -------------------------------------------------------------------- log */
+.log-section, .keys-section, .files-section { margin-top: 26px; }
+.log-section details, .keys-section details, .files-section details {
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 4px 18px 6px;
+}
+.log-section summary, .keys-section summary, .files-section summary {
+  list-style: none; cursor: pointer;
+  padding: 12px 0; display: flex; align-items: center; gap: 8px;
+}
+.log-section summary::-webkit-details-marker, .keys-section summary::-webkit-details-marker,
+.files-section summary::-webkit-details-marker { display: none; }
+.log-section summary::after, .keys-section summary::after, .files-section summary::after {
+  content: ""; width: 7px; height: 7px; margin-left: 4px;
+  border-right: 1.7px solid var(--muted); border-bottom: 1.7px solid var(--muted);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform .2s;
+}
+.log-section details[open] summary::after, .keys-section details[open] summary::after,
+.files-section details[open] summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+
+/* Sits in the summary row; `order` keeps the open/close chevron by the title. */
+/* Same look as "Scan now", a little shorter to fit the header row. */
+.log-copy {
+  order: 1; margin-left: auto;
+  display: inline-flex; justify-content: center; align-items: center; gap: 8px;
+  min-height: 34px; padding: 6px 14px;
+  border: 1px solid #d5dfed; border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink);
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+  transition: background .2s, border-color .2s;
+}
+.log-copy:hover { background: var(--blue-light); border-color: #a6c4fa; }
+.log-copy svg { width: 16px; height: 16px; }
+.log-copy.copied { color: var(--green); border-color: #bfe4cd; background: var(--green-light); }
+
+.log {
+  list-style: none; margin: 0 0 12px; padding: 0;
+  max-height: 260px; overflow-y: auto;
+  font-size: 13px; line-height: 1.6;
+}
+.log li { display: flex; gap: 10px; padding: 4px 0; border-top: 1px solid var(--border-soft); }
+.log time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.log .ok    { color: var(--green); }
+.log .warn  { color: var(--amber); }
+.log .error { color: var(--red); }
+.log .info  { color: var(--ink); }
+
+footer { display: flex; color: #6c798d; font-size: 12px; margin-top: 18px; padding: 0 2px; }
+footer span { display: flex; align-items: center; gap: 6px; }
+footer svg { width: 14px; height: 14px; }
+
+/* ------------------------------------------------------------------ toast */
+.toast {
+  position: fixed; bottom: 26px; left: 50%;
+  transform: translate(-50%, 15px);
+  padding: 12px 20px;
+  background: var(--ink); color: #fff;
+  box-shadow: 0 8px 32px #16253a26; border-radius: var(--radius);
+  font-size: 14px; max-width: calc(100% - 32px); width: max-content;
+  opacity: 0; transition: opacity .2s, transform .2s;
+  pointer-events: none; z-index: 5;
+}
+.toast.visible { opacity: 1; transform: translate(-50%, 0); }
+
+/* ------------------------------------------------------------- keys */
+.keys-note { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.key-list { list-style: none; margin: 0 0 12px; padding: 0; font-size: 14px; }
+.key-list li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-top: 1px solid var(--border-soft);
+}
+.key-list .empty { color: var(--muted); }
+.key-provider {
+  font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--blue-light); color: var(--blue-dark);
+}
+.key-provider.no-speech { background: var(--grey-light); color: var(--grey-ink); }
+.key-label { font-weight: 600; }
+.key-tail { color: var(--muted); font-family: Consolas, monospace; font-size: 13px; }
+.key-users { color: var(--muted); font-size: 13px; margin-left: auto; }
+.key-delete {
+  border: 1px solid var(--border); background: var(--surface); color: var(--red);
+  border-radius: var(--radius-sm); padding: 4px 6px; display: flex;
+}
+.key-delete svg { width: 15px; height: 15px; }
+.key-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.key-form select, .key-form input {
+  font: inherit; font-size: 14px; padding: 7px 10px; min-width: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink);
+}
+.key-form input[type="password"] { flex: 1 1 260px; }
+.key-form input[type="text"] { flex: 0 1 200px; }
+
+.card-key {
+  display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  font-size: 13px; color: var(--muted);
+}
+.card-key svg { width: 16px; height: 16px; flex: none; }
+.key-select {
+  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink);
+}
+.card-key.fallback .key-select { color: var(--amber); }
+
+.spinning { animation: spin 1.1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ----------------------------------------------------------- responsive */
+@media (max-width: 1080px) { .robot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px)  { .updated { margin-left: 0; } .summary .scan-button { margin-left: auto; } }
+@media (max-width: 600px) {
+  :root { --pad-x: 20px; }
+  .topbar-inner { min-height: 56px; padding: 12px var(--pad-x); flex-wrap: wrap; }
+  .topbar-right { gap: 12px; }
+  main { padding: 18px var(--pad-x) 24px; }
+  .updated { order: 1; width: 100%; }
+  .summary .scan-button { margin-left: 0; }
+  .robot-grid { grid-template-columns: 1fr; gap: 12px; }
+  .section-header { margin-top: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ------------------------------------------------------------- files */
+.files-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.files-robot { font-size: 14px; font-weight: 600; }
+#files-robot {
+  font: inherit; font-size: 14px; padding: 7px 10px; min-width: 0; flex: 0 1 240px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink);
+}
+.files-refresh { color: var(--muted); }
+.file-list li { flex-wrap: wrap; }
+.file-list li > svg { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.file-main { display: flex; flex-direction: column; min-width: 0; flex: 1 1 220px; }
+.file-name { font-weight: 600; overflow-wrap: anywhere; }
+.file-meta { color: var(--muted); font-size: 13px; }
+.file-key {
+  font: inherit; font-size: 13px; padding: 5px 8px; max-width: 100%;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink);
+}
+.file-download {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 32px; padding: 5px 12px;
+  border: 1px solid #d5dfed; border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.file-download:hover { background: var(--blue-light); border-color: #a6c4fa; }
+.file-download:disabled { opacity: .7; cursor: progress; }
+.file-download svg { width: 15px; height: 15px; }
+.file-form input[type="file"] { flex: 1 1 260px; font-size: 14px; }
+.files-status { margin: 0 0 14px; font-size: 13px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.files-status.error { color: var(--red); }
+.files-status.ok { color: var(--green); }
+.files-status svg { width: 16px; height: 16px; flex: none; }

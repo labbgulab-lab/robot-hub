@@ -1,0 +1,39 @@
+{
+  "captured_at": "2026-09-06T09:09:28+00:00",
+  "host": "DESKTOP-XXXXXXX",
+  "os": "Windows-11-10.0.26200-SP0",
+  "adapters": [
+    {
+      "IPAddress": "169.254.231.139",
+      "InterfaceAlias": "Ethernet 2",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.207.159",
+      "InterfaceAlias": "Bluetooth Network Connection",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.43.110",
+      "InterfaceAlias": "Local Area Connection* 4",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.233.193",
+      "InterfaceAlias": "Local Area Connection* 3",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "132.73.160.228",
+      "InterfaceAlias": "Wi-Fi",
+      "PrefixLength": 19
+    },
+    {
+      "IPAddress": "100.98.102.61",
+      "InterfaceAlias": "Tailscale",
+      "PrefixLength": 32
+    }
+  ],
+  "listening_ports": "[{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":135,\"OwningProcess\":1604},{\"LocalAddress\":\"::\",\"LocalPort\":135,\"OwningProcess\":1604},{\"LocalAddress\":\"132.73.160.228\",\"LocalPort\":139,\"OwningProcess\":4},{\"LocalAddress\":\"::\",\"LocalPort\":445,\"OwningProcess\":4},{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":5040,\"OwningProcess\":9432},{\"LocalAddress\":\"::\",\"LocalPort\":5357,\"OwningProcess\":4},{\"LocalAddress\":\"::\",\"LocalPort\":7680,\"OwningProcess\":2156},{\"LocalAddress\":\"127.0.0.1\",\"LocalPort\":7778,\"OwningProcess\":5176},{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":49664,\"OwningProcess\":1340},{\"LocalAddress\":\"::\",\"LocalPort\":49664,\"OwningProcess\":1340},{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":49665,\"OwningProcess\":1160},{\"LocalAddress\":\"::\",\"LocalPort\":49665,\"OwningProcess\":1160},{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":49666,\"OwningProcess\":2268},{\"LocalAddress\":\"::\",\"LocalPort\":49666,\"OwningProcess\":2268},{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":49667,\"OwningProcess\":3380},{\"LocalAddress\":\"::\",\"LocalPort\":49667,\"OwningProcess\":3380},{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":49668,\"OwningProcess\":4156},{\"LocalAddress\":\"::\",\"LocalPort\":49668,\"OwningProcess\":4156},{\"LocalAddress\":\"::1\",\"LocalPort\":49669,\"OwningProcess\":4816},{\"LocalAddress\":\"::\",\"LocalPort\":49674,\"OwningProcess\":1284},{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":49674,\"OwningProcess\":1284},{\"LocalAddress\":\"0.0.0.0\",\"LocalPort\":49691,\"OwningProcess\":9124},{\"LocalAddress\":\"fd7a:115c:a1e0::e001:6689\",\"LocalPort\":50304,\"OwningProcess\":8880},{\"LocalAddress\":\"100.98.102.61\",\"LocalPort\":50796,\"OwningProcess\":8880}]\n",
+  "audio_devices": "[{\"FriendlyName\":\"Speakers (Realtek(R) Audio)\",\"InstanceId\":\"SWD\\\\MMDEVAPI\\\\{0.0.0.00000000}.{9F7032BA-EB20-47AA-937D-C439D30ED357}\"},{\"FriendlyName\":\"Microphone Array (Intel\u00c2\u00ae Smart Sound Technology for Digital Microphones)\",\"InstanceId\":\"SWD\\\\MMDEVAPI\\\\{0.0.1.00000000}.{1D76F4C3-0CBC-48A9-8D4B-83A8D465169F}\"}]\n"
+}

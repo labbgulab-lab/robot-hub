@@ -1,0 +1,349 @@
+{
+  "name": "naoqi",
+  "captured_at": "2026-09-14T08:01:01+00:00",
+  "ip": "169.254.219.18",
+  "mac": "00:13:95:1F:59:3B",
+  "vendor_guess": "unknown (raw MAC recorded)",
+  "names": {
+    "reverse_dns": null
+  },
+  "mdns_hostname_resolves_to": "169.254.219.18",
+  "latency": {
+    "replies": 10,
+    "sent": 10,
+    "loss_pct": 0,
+    "min_ms": 1,
+    "avg_ms": 1.0,
+    "max_ms": 1,
+    "raw_times_ms": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  },
+  "open_ports": [
+    22,
+    80,
+    7102,
+    8002,
+    9443,
+    9503,
+    9559
+  ],
+  "wide_scan": true,
+  "services": {
+    "22": {
+      "purpose_guess": "ssh",
+      "banner": "SSH-2.0-OpenSSH_7.1"
+    },
+    "80": {
+      "purpose_guess": "http",
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://169.254.219.18:80",
+        "status": 200,
+        "final_url": "http://169.254.219.18:80/",
+        "server": "nginx/1.8.1",
+        "content_type": "text/html",
+        "title": "",
+        "headers": {
+          "Server": "nginx/1.8.1",
+          "Date": "Mon, 14 Sep 2026 08:00:13 GMT",
+          "Content-Type": "text/html",
+          "Last-Modified": "Wed, 15 Jan 2020 13:51:33 GMT",
+          "Transfer-Encoding": "chunked",
+          "Connection": "keep-alive",
+          "ETag": "W/\"5e1f18e5-5af\"",
+          "Content-Encoding": "gzip"
+        },
+        "body_snippet": "<!doctype html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"initial-scale = 1.33, minimum-scale = 1.33, maximum-scale = 1.33\" />\n    <meta http-equiv=\"cache-control\" content=\"max-age=0\" />\n    <meta http-equiv=\"cache-control\" content=\"no-cache\" />\n    <meta http-equiv=\"expires\" content=\"0\" />\n    <meta http-equiv=\"expires\" content=\"Tue, 01 Jan 1980 1:00:00 GMT\" />\n    <meta http-equiv=\"pragma\" content=\"no-cache\" />\n    <title translate=\"ROBOT_WEB_PAGE\"></title>\n    <link rel=\"shortcut icon\" href=\"favicon.ico\" />\n    <link rel=\"stylesheet\" href=\"css/sty",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body bgcolor=\"white\">\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.8.1</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "/status": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body bgcolor=\"white\">\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.8.1</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "/info": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body bgcolor=\"white\">\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.8.1</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "/api": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body bgcolor=\"white\">\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.8.1</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "/docs": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body bgcolor=\"white\">\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.8.1</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "/openapi.json": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body bgcolor=\"white\">\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.8.1</center>\r\n</body>\r\n</html>\r\n"
+          }
+        }
+      }
+    },
+    "7102": {
+      "purpose_guess": null,
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://169.254.219.18:7102",
+        "status": 200,
+        "final_url": "http://169.254.219.18:7102/",
+        "server": "LoLADbgItf",
+        "content_type": "text/html",
+        "title": "LoLA - Web Debug",
+        "headers": {
+          "server": "LoLADbgItf",
+          "content-type": "text/html",
+          "accept-ranges": "bytes",
+          "content-length": "324",
+          "cache-control": "no-store",
+          "connection": "keep-alive",
+          "etag": "000001445C05841C"
+        },
+        "body_snippet": "\u00ef\u00bb\u00bf<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <title id='Description'>LoLA - Web Debug</title>\n  <link rel=\"stylesheet\" href=\"index.css\" />\n</head>\n<body>\n  <h1>LoLA Web Debug</h1>\n  <p>\n    <ul>\n      <li><a href=\"monitor\">Monitor</a></li>\n      <li><a href=\"config\">Configuration</a></li>\n    </ul>\n  </p>\n</body>\n</html>\n\n",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html><body><h1>404</h1>File not found...</body></html>"
+          },
+          "/status": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html><body><h1>404</h1>File not found...</body></html>"
+          },
+          "/info": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html><body><h1>404</h1>File not found...</body></html>"
+          },
+          "/api": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html><body><h1>404</h1>File not found...</body></html>"
+          },
+          "/docs": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html><body><h1>404</h1>File not found...</body></html>"
+          },
+          "/openapi.json": {
+            "status": 404,
+            "content_type": "text/html",
+            "snippet": "<html><body><h1>404</h1>File not found...</body></html>"
+          }
+        }
+      }
+    },
+    "8002": {
+      "purpose_guess": null,
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://169.254.219.18:8002",
+        "status": 404,
+        "final_url": "http://169.254.219.18:8002/",
+        "server": "TornadoServer/4.3",
+        "content_type": "text/html; charset=UTF-8",
+        "title": "404: Not Found",
+        "headers": {
+          "Date": "Mon, 14 Sep 2026 08:00:18 GMT",
+          "Content-Length": "69",
+          "Content-Type": "text/html; charset=UTF-8",
+          "Server": "TornadoServer/4.3"
+        },
+        "body_snippet": "<html><title>404: Not Found</title><body>404: Not Found</body></html>",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": "text/html; charset=UTF-8",
+            "snippet": "<html><title>404: Not Found</title><body>404: Not Found</body></html>"
+          },
+          "/status": {
+            "status": 404,
+            "content_type": "text/html; charset=UTF-8",
+            "snippet": "<html><title>404: Not Found</title><body>404: Not Found</body></html>"
+          },
+          "/info": {
+            "status": 404,
+            "content_type": "text/html; charset=UTF-8",
+            "snippet": "<html><title>404: Not Found</title><body>404: Not Found</body></html>"
+          },
+          "/api": {
+            "status": 404,
+            "content_type": "text/html; charset=UTF-8",
+            "snippet": "<html><title>404: Not Found</title><body>404: Not Found</body></html>"
+          },
+          "/docs": {
+            "status": 404,
+            "content_type": "text/html; charset=UTF-8",
+            "snippet": "<html><title>404: Not Found</title><body>404: Not Found</body></html>"
+          },
+          "/openapi.json": {
+            "status": 404,
+            "content_type": "text/html; charset=UTF-8",
+            "snippet": "<html><title>404: Not Found</title><body>404: Not Found</body></html>"
+          }
+        }
+      }
+    },
+    "9443": {
+      "purpose_guess": null,
+      "banner": null
+    },
+    "9503": {
+      "purpose_guess": null,
+      "banner": null
+    },
+    "9559": {
+      "purpose_guess": "NAOqi",
+      "banner": null
+    }
+  },
+  "mdns_records_for_this_ip": [
+    {
+      "type": "_naoqi._tcp.local.",
+      "name": "nao._naoqi._tcp.local.",
+      "server": "nao.local.",
+      "port": 9559,
+      "addresses": [
+        "169.254.219.18"
+      ],
+      "properties": {
+        "MdnsInterfaceLocal": "0",
+        "RobotMaterialization": "Real",
+        "RobotType": "Nao"
+      }
+    },
+    {
+      "type": "_ssh._tcp.local.",
+      "name": "nao._ssh._tcp.local.",
+      "server": "nao.local.",
+      "port": 22,
+      "addresses": [
+        "169.254.219.18"
+      ],
+      "properties": {
+        "": "None"
+      }
+    },
+    {
+      "type": "_sftp-ssh._tcp.local.",
+      "name": "nao._sftp-ssh._tcp.local.",
+      "server": "nao.local.",
+      "port": 22,
+      "addresses": [
+        "169.254.219.18"
+      ],
+      "properties": {
+        "": "None"
+      }
+    }
+  ],
+  "mdns_records_all": [
+    {
+      "type": "_naoqi._tcp.local.",
+      "name": "nao._naoqi._tcp.local.",
+      "server": "nao.local.",
+      "port": 9559,
+      "addresses": [
+        "169.254.219.18"
+      ],
+      "properties": {
+        "MdnsInterfaceLocal": "0",
+        "RobotMaterialization": "Real",
+        "RobotType": "Nao"
+      }
+    },
+    {
+      "type": "_ssh._tcp.local.",
+      "name": "nao._ssh._tcp.local.",
+      "server": "nao.local.",
+      "port": 22,
+      "addresses": [
+        "169.254.219.18"
+      ],
+      "properties": {
+        "": "None"
+      }
+    },
+    {
+      "type": "_sftp-ssh._tcp.local.",
+      "name": "nao._sftp-ssh._tcp.local.",
+      "server": "nao.local.",
+      "port": 22,
+      "addresses": [
+        "169.254.219.18"
+      ],
+      "properties": {
+        "": "None"
+      }
+    }
+  ],
+  "laptop_adapters_at_capture": [
+    {
+      "IPAddress": "169.254.227.14",
+      "InterfaceAlias": "Ethernet 3",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.231.139",
+      "InterfaceAlias": "Ethernet 2",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.207.159",
+      "InterfaceAlias": "Bluetooth Network Connection",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.43.110",
+      "InterfaceAlias": "Local Area Connection* 4",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.233.193",
+      "InterfaceAlias": "Local Area Connection* 3",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "172.20.10.4",
+      "InterfaceAlias": "Wi-Fi",
+      "PrefixLength": 28
+    },
+    {
+      "IPAddress": "100.98.102.61",
+      "InterfaceAlias": "Tailscale",
+      "PrefixLength": 32
+    }
+  ],
+  "notes_to_fill_in_by_hand": {
+    "has_onboard_mic": null,
+    "has_onboard_speaker": null,
+    "needs_laptop_audio_device": null,
+    "existing_launcher_command": null,
+    "existing_ui_url": null,
+    "boot_time_seconds": null,
+    "static_or_dhcp": null,
+    "behaviour_on_wifi_drop": null
+  }
+}

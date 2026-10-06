@@ -1,0 +1,16 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+pydantic-settings>=2
+zeroconf>=0.149
+httpx>=0.27
+websockets>=13
+sounddevice>=0.5
+psutil>=6
+paramiko>=3
+tomli-w>=1.0
+# Windows only -- USB PnP detection for the Reachy Mini Lite
+wmi>=1.5; sys_platform == "win32"
+pywin32>=306; sys_platform == "win32"
+# Linux only -- the pyudev path for the same detector
+pyudev>=0.24; sys_platform == "linux"

@@ -1,0 +1,88 @@
+# Copy to config.toml and edit. Nothing here is required -- every robot
+# section is optional, and a robot you do not own is simply a dim card.
+
+auto_connect = false
+
+[server]
+host = "127.0.0.1"
+port = 8099
+
+[discovery]
+mdns = true
+usb = true
+netscan = true
+netscan_interval_s = 5.0
+# The hub refuses to sweep anything larger than a /24 without this raised.
+netscan_max_hosts = 256
+# Leave blank to infer from the active interface.
+expected_subnet = ""
+
+[ports]
+range_start = 9100
+range_end = 9199
+
+# ---------------------------------------------------------------- robots
+# `announce` is what the robot says out loud on connect. {name} is filled in.
+
+[robots.furhat]
+enabled = true
+display_name = "Furhat"
+announce = "I am Furhat, I am connected and ready to run."
+  [robots.furhat.settings]
+  # Studio's web UI login. Leave `password` blank and put it in .env as
+  # FURHAT_PASSWORD. The Realtime API key is per-install and also belongs in
+  # .env, as FURHAT_API_KEY -- never here.
+  username = "admin"
+  password = ""
+  # Set on every Connect -- Furhat boots on a Japanese voice. Blank = default
+  # ("Gregory-Neural (en-US) - Amazon Polly"); use the uniqueName Studio lists.
+  voice = ""
+
+[robots.reachy_wireless]
+enabled = true
+display_name = "Reachy-Mini"
+announce = "I am {name}, I am connected and ready to run."
+  # One entry per physical robot, keyed by its mDNS unit_id (== daemon
+  # hardware_id). tools/register_reachy.py writes these; a name is permanent.
+  # [robots.reachy_wireless.units."1bf3f0e96e9b0151"]
+  # display_name = "reachy2"
+  [robots.reachy_wireless.settings]
+  # Launch target: the reachy_chat checkout and the python inside its venv.
+  reachy_chat_path = "C:/path/to/job/reachy-mini/reachy_chat"
+  python = ""            # blank = <reachy_chat_path>/.venv/Scripts/python.exe
+  # "robot": reachy_chat runs ON the robot and hears through its built-in mic;
+  # Launch installs it onto a new robot first. "laptop": the old K11 path.
+  mic_mode = "robot"
+  volume = 100           # speaker volume set on every connect
+  # Which laptop capture device "laptop" mode takes. Leave both blank to match
+  # the K11 by its USB-audio class name; set mic_device to pin an exact one.
+  mic_device = ""
+  mic_match = "USBAudio"
+  daemon_port = 8000
+  # Used to clear leftovers on the robot itself before launching. A player
+  # surviving there sounds exactly like a broken microphone. The password may
+  # instead live in .env as REACHY_SSH_PASSWORD.
+  ssh_user = "pollen"
+  ssh_password = ""
+
+[robots.reachy_lite]
+enabled = true
+display_name = "Reachy-Mini-Lite"
+announce = "I am Reachy Mini Lite, I am connected and ready to run."
+  [robots.reachy_lite.settings]
+  # The Lite has no network stack: the desktop app IS its daemon host.
+  daemon_url = "http://127.0.0.1:8000"
+  control_app = "C:/Program Files/Reachy Mini Control/reachy-mini-control.exe"
+
+[robots.naoqi]
+enabled = true
+display_name = "NAOqi"
+announce = "I am NAO, I am connected and ready to run."
+  [robots.naoqi.settings]
+  # NAOqi is Python 2.7 only -- every call is a subprocess (2.7).
+  python2 = "C:/Python27/python.exe"
+  pynaoqi_sdk = "C:/path/to/job/naoqi/sdk/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649"
+  port = 9559
+  # Launch target is NAO_LLM (the Antagonistic Robot), not NAO_LLM_v2.
+  nao_llm_path = "C:/path/to/job/naoqi/NAO_LLM"
+  nao_llm_python = ""    # blank = <nao_llm_path>/venv/Scripts/python.exe

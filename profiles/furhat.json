@@ -1,0 +1,423 @@
+{
+  "name": "furhat",
+  "captured_at": "2026-09-14T07:24:04+00:00",
+  "ip": "172.20.10.10",
+  "mac": "14:F6:D8:07:5D:00",
+  "vendor_guess": "unknown (raw MAC recorded)",
+  "names": {
+    "reverse_dns": null
+  },
+  "mdns_hostname_resolves_to": null,
+  "latency": {
+    "replies": 10,
+    "sent": 10,
+    "loss_pct": 0,
+    "min_ms": 11,
+    "avg_ms": 20.4,
+    "max_ms": 35,
+    "raw_times_ms": [
+      35,
+      11,
+      30,
+      19,
+      24,
+      21,
+      23,
+      11,
+      11,
+      19
+    ]
+  },
+  "open_ports": [
+    22,
+    80,
+    1932,
+    3000,
+    3001,
+    5556,
+    5558,
+    5559,
+    5560,
+    5561,
+    5570,
+    5575,
+    5576,
+    5578,
+    8000,
+    8083,
+    9000,
+    9001,
+    9003
+  ],
+  "wide_scan": true,
+  "services": {
+    "22": {
+      "purpose_guess": "ssh",
+      "banner": "SSH-2.0-OpenSSH_7.2p2 Ubuntu-4ubuntu2.4"
+    },
+    "80": {
+      "purpose_guess": "http",
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://172.20.10.10:80",
+        "status": 200,
+        "final_url": "http://172.20.10.10:80/",
+        "server": null,
+        "content_type": "text/html; charset=UTF-8",
+        "title": "Furhat Studio",
+        "headers": {
+          "X-Powered-By": "Express",
+          "Accept-Ranges": "bytes",
+          "Cache-Control": "public, max-age=0",
+          "Last-Modified": "Mon, 22 Jun 2026 10:34:07 GMT",
+          "ETag": "W/\"209-19eeee50518\"",
+          "Content-Type": "text/html; charset=UTF-8",
+          "Content-Length": "521",
+          "Date": "Mon, 14 Sep 2026 07:22:15 GMT",
+          "Connection": "keep-alive"
+        },
+        "body_snippet": "<!DOCTYPE html>\r\n<html lang=\"en\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <title>Furhat Studio</title>\r\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"css/bootstrap.min.css\">\r\n    <script src=\"libs/request.min.js\" ></script>\r\n    <script src=\"libs/adapter.js\" ></script>\r\n    <!-- <script src=\"vf/Build/UnityLoader.js\"></script>  -->\r\n    <script>\r\n        var vfLoaded;\r\n        var vfIP;\r\n    </script>\r\n</head>\r\n<body>\r\n\r\n    <div id=\"root\"></div>\r\n    <script src=\"js/bundle.min.js\"></script>\r\n\r\n</body>\r\n</html>\r\n",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": "text/html; charset=utf-8",
+            "snippet": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /health</pre>\n</body>\n</html>\n"
+          },
+          "/status": {
+            "status": 404,
+            "content_type": "text/html; charset=utf-8",
+            "snippet": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /status</pre>\n</body>\n</html>\n"
+          },
+          "/info": {
+            "status": 404,
+            "content_type": "text/html; charset=utf-8",
+            "snippet": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /info</pre>\n</body>\n</html>\n"
+          },
+          "/api": {
+            "status": 404,
+            "content_type": "text/html; charset=utf-8",
+            "snippet": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /api</pre>\n</body>\n</html>\n"
+          },
+          "/docs": {
+            "status": 404,
+            "content_type": "text/html; charset=utf-8",
+            "snippet": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /docs</pre>\n</body>\n</html>\n"
+          },
+          "/openapi.json": {
+            "status": 404,
+            "content_type": "text/html; charset=utf-8",
+            "snippet": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /openapi.json</pre>\n</body>\n</html>\n"
+          }
+        }
+      }
+    },
+    "1932": {
+      "purpose_guess": null,
+      "banner": null
+    },
+    "3000": {
+      "purpose_guess": "node/dev-ui",
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "3001": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5556": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5558": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5559": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5560": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5561": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5570": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5575": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5576": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "5578": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    },
+    "8000": {
+      "purpose_guess": "uvicorn/fastapi",
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://172.20.10.10:8000",
+        "status": 404,
+        "final_url": "http://172.20.10.10:8000/",
+        "server": null,
+        "content_type": "text/plain; charset=utf-8",
+        "title": null,
+        "headers": {
+          "Cache-Control": "no-cache, no-store, must-revalidate, private, max-age=0",
+          "Expires": "0",
+          "Pragma": "no-cache",
+          "X-Frame-Options": "SAMEORIGIN",
+          "Content-Type": "text/plain; charset=utf-8",
+          "Date": "Mon, 14 Sep 2026 07:23:45 GMT",
+          "Connection": "close"
+        },
+        "body_snippet": "Error 404: Not Found\nNot found",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": "text/plain; charset=utf-8",
+            "snippet": "Error 404: Not Found\nNot found"
+          },
+          "/status": {
+            "status": 404,
+            "content_type": "text/plain; charset=utf-8",
+            "snippet": "Error 404: Not Found\nNot found"
+          },
+          "/info": {
+            "status": 404,
+            "content_type": "text/plain; charset=utf-8",
+            "snippet": "Error 404: Not Found\nNot found"
+          },
+          "/api": {
+            "status": 404,
+            "content_type": "text/plain; charset=utf-8",
+            "snippet": "Error 404: Not Found\nNot found"
+          },
+          "/docs": {
+            "status": 404,
+            "content_type": "text/plain; charset=utf-8",
+            "snippet": "Error 404: Not Found\nNot found"
+          },
+          "/openapi.json": {
+            "status": 404,
+            "content_type": "text/plain; charset=utf-8",
+            "snippet": "Error 404: Not Found\nNot found"
+          }
+        }
+      }
+    },
+    "8083": {
+      "purpose_guess": null,
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://172.20.10.10:8083",
+        "status": 404,
+        "final_url": "http://172.20.10.10:8083/",
+        "server": "Jetty(9.4.4.v20170414)",
+        "content_type": "text/html;charset=iso-8859-1",
+        "title": "Error 404 Not Found",
+        "headers": {
+          "Date": "Mon, 14 Sep 2026 07:23:47 GMT",
+          "Cache-Control": "must-revalidate,no-cache,no-store",
+          "Content-Type": "text/html;charset=iso-8859-1",
+          "Content-Length": "316",
+          "Server": "Jetty(9.4.4.v20170414)"
+        },
+        "body_snippet": "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\"/>\n<title>Error 404 Not Found</title>\n</head>\n<body><h2>HTTP ERROR 404</h2>\n<p>Problem accessing /. Reason:\n<pre>    Not Found</pre></p><hr><a href=\"http://eclipse.org/jetty\">Powered by Jetty:// 9.4.4.v20170414</a><hr/>\n\n</body>\n</html>\n",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": "text/html;charset=iso-8859-1",
+            "snippet": "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\"/>\n<title>Error 404 Not Found</title>\n</head>\n<body><h2>HTTP ERROR 404</h2>\n<p>Problem accessing /health. Reason:\n<pre>    Not Found</pre></p><hr><a href=\"http://eclipse.org/jetty\">Powered by Jetty:// 9.4.4.v20170414</a><"
+          },
+          "/status": {
+            "status": 404,
+            "content_type": "text/html;charset=iso-8859-1",
+            "snippet": "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\"/>\n<title>Error 404 Not Found</title>\n</head>\n<body><h2>HTTP ERROR 404</h2>\n<p>Problem accessing /status. Reason:\n<pre>    Not Found</pre></p><hr><a href=\"http://eclipse.org/jetty\">Powered by Jetty:// 9.4.4.v20170414</a><"
+          },
+          "/info": {
+            "status": 404,
+            "content_type": "text/html;charset=iso-8859-1",
+            "snippet": "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\"/>\n<title>Error 404 Not Found</title>\n</head>\n<body><h2>HTTP ERROR 404</h2>\n<p>Problem accessing /info. Reason:\n<pre>    Not Found</pre></p><hr><a href=\"http://eclipse.org/jetty\">Powered by Jetty:// 9.4.4.v20170414</a><hr"
+          },
+          "/api": {
+            "status": 404,
+            "content_type": "text/html;charset=iso-8859-1",
+            "snippet": "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\"/>\n<title>Error 404 Not Found</title>\n</head>\n<body><h2>HTTP ERROR 404</h2>\n<p>Problem accessing /api. Reason:\n<pre>    Not Found</pre></p><hr><a href=\"http://eclipse.org/jetty\">Powered by Jetty:// 9.4.4.v20170414</a><hr/"
+          },
+          "/docs": {
+            "status": 404,
+            "content_type": "text/html;charset=iso-8859-1",
+            "snippet": "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\"/>\n<title>Error 404 Not Found</title>\n</head>\n<body><h2>HTTP ERROR 404</h2>\n<p>Problem accessing /docs. Reason:\n<pre>    Not Found</pre></p><hr><a href=\"http://eclipse.org/jetty\">Powered by Jetty:// 9.4.4.v20170414</a><hr"
+          },
+          "/openapi.json": {
+            "status": 404,
+            "content_type": "text/html;charset=iso-8859-1",
+            "snippet": "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\"/>\n<title>Error 404 Not Found</title>\n</head>\n<body><h2>HTTP ERROR 404</h2>\n<p>Problem accessing /openapi.json. Reason:\n<pre>    Not Found</pre></p><hr><a href=\"http://eclipse.org/jetty\">Powered by Jetty:// 9.4.4.v2017041"
+          }
+        }
+      }
+    },
+    "9000": {
+      "purpose_guess": "http-alt",
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://172.20.10.10:9000",
+        "status": 200,
+        "final_url": "http://172.20.10.10:9000/v1/index.html",
+        "server": null,
+        "content_type": "text/html; charset=UTF-8",
+        "title": "Furhat Realtime API",
+        "headers": {
+          "Content-Length": "4346",
+          "Content-Type": "text/html; charset=UTF-8",
+          "Connection": "keep-alive"
+        },
+        "body_snippet": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Furhat Realtime API</title>\n    <link rel=\"stylesheet\" href=\"./styles.css\">\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"top-bar\">\n            <div class=\"connection-form\">\n                <div class=\"endpoint-selector\">\n                    <select id=\"category-select\">\n                        <!-- Populated dynamically with categories -->\n                    </select>\n                </div>\n                <div class=\"websoc",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": null,
+            "snippet": ""
+          },
+          "/status": {
+            "status": 404,
+            "content_type": null,
+            "snippet": ""
+          },
+          "/info": {
+            "status": 404,
+            "content_type": null,
+            "snippet": ""
+          },
+          "/api": {
+            "status": 404,
+            "content_type": null,
+            "snippet": ""
+          },
+          "/docs": {
+            "status": 404,
+            "content_type": null,
+            "snippet": ""
+          },
+          "/openapi.json": {
+            "status": 404,
+            "content_type": null,
+            "snippet": ""
+          }
+        }
+      }
+    },
+    "9001": {
+      "purpose_guess": null,
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://172.20.10.10:9001",
+        "status": 404,
+        "final_url": "http://172.20.10.10:9001/",
+        "server": "uvicorn",
+        "content_type": "application/json",
+        "title": null,
+        "headers": {
+          "date": "Mon, 14 Sep 2026 07:23:52 GMT",
+          "server": "uvicorn",
+          "content-length": "22",
+          "content-type": "application/json"
+        },
+        "body_snippet": "{\"detail\":\"Not Found\"}",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": "application/json",
+            "snippet": "{\"detail\":\"Not Found\"}"
+          },
+          "/status": {
+            "status": 404,
+            "content_type": "application/json",
+            "snippet": "{\"detail\":\"Not Found\"}"
+          },
+          "/info": {
+            "status": 404,
+            "content_type": "application/json",
+            "snippet": "{\"detail\":\"Not Found\"}"
+          },
+          "/api": {
+            "status": 404,
+            "content_type": "application/json",
+            "snippet": "{\"detail\":\"Not Found\"}"
+          },
+          "/docs": {
+            "status": 200,
+            "content_type": "text/html; charset=utf-8",
+            "snippet": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"https://fastapi.tiangolo.com/img/favicon.png\">\n    <title>FastAPI - Swagger UI</title>\n    </head>\n    <body"
+          },
+          "/openapi.json": {
+            "status": 200,
+            "content_type": "application/json",
+            "snippet": "{\"openapi\":\"3.1.0\",\"info\":{\"title\":\"FastAPI\",\"version\":\"0.1.0\"},\"paths\":{}}"
+          }
+        }
+      }
+    },
+    "9003": {
+      "purpose_guess": null,
+      "banner": "\ufffd\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u007f"
+    }
+  },
+  "mdns_records_for_this_ip": [],
+  "mdns_records_all": [],
+  "laptop_adapters_at_capture": [
+    {
+      "IPAddress": "169.254.231.139",
+      "InterfaceAlias": "Ethernet 2",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.207.159",
+      "InterfaceAlias": "Bluetooth Network Connection",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.43.110",
+      "InterfaceAlias": "Local Area Connection* 4",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.233.193",
+      "InterfaceAlias": "Local Area Connection* 3",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "172.20.10.4",
+      "InterfaceAlias": "Wi-Fi",
+      "PrefixLength": 28
+    },
+    {
+      "IPAddress": "100.98.102.61",
+      "InterfaceAlias": "Tailscale",
+      "PrefixLength": 32
+    }
+  ],
+  "notes_to_fill_in_by_hand": {
+    "has_onboard_mic": null,
+    "has_onboard_speaker": null,
+    "needs_laptop_audio_device": null,
+    "existing_launcher_command": null,
+    "existing_ui_url": null,
+    "boot_time_seconds": null,
+    "static_or_dhcp": null,
+    "behaviour_on_wifi_drop": null
+  }
+}

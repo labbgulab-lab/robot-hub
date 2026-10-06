@@ -1,0 +1,209 @@
+{
+  "name": "reachy-mini-wireless",
+  "captured_at": "2026-09-14T05:38:45+00:00",
+  "ip": "172.20.10.10",
+  "mac": "88:A2:9E:8C:E0:13",
+  "vendor_guess": "unknown (raw MAC recorded)",
+  "names": {
+    "reverse_dns": null
+  },
+  "mdns_hostname_resolves_to": "172.20.10.2",
+  "latency": {
+    "replies": 10,
+    "sent": 10,
+    "loss_pct": 0,
+    "min_ms": 28,
+    "avg_ms": 133.6,
+    "max_ms": 457,
+    "raw_times_ms": [
+      29,
+      38,
+      457,
+      214,
+      63,
+      64,
+      282,
+      114,
+      47,
+      28
+    ]
+  },
+  "open_ports": [
+    22,
+    8000,
+    8443
+  ],
+  "wide_scan": true,
+  "services": {
+    "22": {
+      "purpose_guess": "ssh",
+      "banner": "SSH-2.0-OpenSSH_10.0p2 Debian-7"
+    },
+    "8000": {
+      "purpose_guess": "uvicorn/fastapi",
+      "banner": null,
+      "http": {
+        "scheme": "http",
+        "url": "http://172.20.10.10:8000",
+        "status": 200,
+        "final_url": "http://172.20.10.10:8000/",
+        "server": "uvicorn",
+        "content_type": "text/html; charset=utf-8",
+        "title": "Reachy Mini Dashboard - Deprecated",
+        "headers": {
+          "date": "Mon, 14 Sep 2026 05:38:32 GMT",
+          "server": "uvicorn",
+          "content-length": "4112",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body_snippet": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Reachy Mini Dashboard - Deprecated</title>\n    <style>\n        * { margin: 0; padding: 0; box-sizing: border-box; }\n        body {\n            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n            background-color: #fffbeb;\n            min-height: 100vh;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            overflow: hidden;\n            position: relat",
+        "extra_paths": {
+          "/health": {
+            "status": 404,
+            "content_type": "application/json",
+            "snippet": "{\"detail\":\"Not Found\"}"
+          },
+          "/status": {
+            "status": 404,
+            "content_type": "application/json",
+            "snippet": "{\"detail\":\"Not Found\"}"
+          },
+          "/info": {
+            "status": 404,
+            "content_type": "application/json",
+            "snippet": "{\"detail\":\"Not Found\"}"
+          },
+          "/api": {
+            "status": 404,
+            "content_type": "application/json",
+            "snippet": "{\"detail\":\"Not Found\"}"
+          },
+          "/docs": {
+            "status": 200,
+            "content_type": "text/html; charset=utf-8",
+            "snippet": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"https://fastapi.tiangolo.com/img/"
+          },
+          "/openapi.json": {
+            "status": 200,
+            "content_type": "application/json",
+            "snippet": "{\"openapi\":\"3.1.0\",\"info\":{\"title\":\"FastAPI\",\"version\":\"0.1.0\"},\"paths\":{\"/cache/clear-hf\":{\"post\":{\"summary\":\"Clear Huggingface Cache\",\"description\":\"Clear HuggingFace cache directory.\",\"operationId\":\"clear_huggingface_cache_cache_clear_hf_post\",\"responses\":{\"200\":{\"description\":\"Successful Respons"
+          }
+        }
+      }
+    },
+    "8443": {
+      "purpose_guess": "https-alt",
+      "banner": null
+    }
+  },
+  "mdns_records_for_this_ip": [
+    {
+      "type": "_reachy-mini._tcp.local.",
+      "name": "reachy_mini._reachy-mini._tcp.local.",
+      "server": "reachy-mini.local.",
+      "port": 8000,
+      "addresses": [
+        "172.20.10.10"
+      ],
+      "properties": {
+        "version": "1.9.0",
+        "robot_name": "reachy_mini",
+        "ws_path": "/ws/sdk",
+        "address": "172.20.10.10",
+        "model": "Reachy Mini Wireless",
+        "manufacturer": "Pollen Robotics",
+        "caps": "camera,mic,speaker,motion,apps",
+        "api": "rest+ws",
+        "unit_id": "58b3b6a4bf81179a"
+      }
+    },
+    {
+      "type": "_workstation._tcp.local.",
+      "name": "reachy-mini [88:a2:9e:8c:e0:13]._workstation._tcp.local.",
+      "server": "reachy-mini.local.",
+      "port": 9,
+      "addresses": [
+        "172.20.10.10"
+      ],
+      "properties": {
+        "": "None"
+      }
+    }
+  ],
+  "mdns_records_all": [
+    {
+      "type": "_reachy-mini._tcp.local.",
+      "name": "reachy_mini._reachy-mini._tcp.local.",
+      "server": "reachy-mini.local.",
+      "port": 8000,
+      "addresses": [
+        "172.20.10.10"
+      ],
+      "properties": {
+        "version": "1.9.0",
+        "robot_name": "reachy_mini",
+        "ws_path": "/ws/sdk",
+        "address": "172.20.10.10",
+        "model": "Reachy Mini Wireless",
+        "manufacturer": "Pollen Robotics",
+        "caps": "camera,mic,speaker,motion,apps",
+        "api": "rest+ws",
+        "unit_id": "58b3b6a4bf81179a"
+      }
+    },
+    {
+      "type": "_workstation._tcp.local.",
+      "name": "reachy-mini [88:a2:9e:8c:e0:13]._workstation._tcp.local.",
+      "server": "reachy-mini.local.",
+      "port": 9,
+      "addresses": [
+        "172.20.10.10"
+      ],
+      "properties": {
+        "": "None"
+      }
+    }
+  ],
+  "laptop_adapters_at_capture": [
+    {
+      "IPAddress": "169.254.231.139",
+      "InterfaceAlias": "Ethernet 2",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.207.159",
+      "InterfaceAlias": "Bluetooth Network Connection",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.43.110",
+      "InterfaceAlias": "Local Area Connection* 4",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "169.254.233.193",
+      "InterfaceAlias": "Local Area Connection* 3",
+      "PrefixLength": 16
+    },
+    {
+      "IPAddress": "172.20.10.4",
+      "InterfaceAlias": "Wi-Fi",
+      "PrefixLength": 28
+    },
+    {
+      "IPAddress": "100.98.102.61",
+      "InterfaceAlias": "Tailscale",
+      "PrefixLength": 32
+    }
+  ],
+  "notes_to_fill_in_by_hand": {
+    "has_onboard_mic": null,
+    "has_onboard_speaker": null,
+    "needs_laptop_audio_device": null,
+    "existing_launcher_command": null,
+    "existing_ui_url": null,
+    "boot_time_seconds": null,
+    "static_or_dhcp": null,
+    "behaviour_on_wifi_drop": null
+  }
+}
