@@ -97,7 +97,7 @@ The hub launches each robot's own program. Clone the ones you need **next to
   1. In **Robot files**, choose Furhat.
   2. Download `OpenAIChat_1.3.0.skill` *with* your GPT key.
   3. Import it in Furhat Studio.
-- **Reachy Mini**: needs `reachy_chat` (ask Tomer for access):
+- **Reachy Mini**: needs `reachy_chat`:
 
   ```bash
   git clone -b multi-provider https://github.com/Tomer232/reachy-mini-conversation-app-bgu-lab.git reachy_chat
