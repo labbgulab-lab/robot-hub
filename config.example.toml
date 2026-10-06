@@ -44,12 +44,19 @@ display_name = "Reachy-Mini"
 announce = "I am {name}, I am connected and ready to run."
   # One entry per physical robot, keyed by its mDNS unit_id (== daemon
   # hardware_id). tools/register_reachy.py writes these; a name is permanent.
-  # [robots.reachy_wireless.units."1bf3f0e96e9b0151"]
-  # display_name = "reachy2"
+  # The lab's robots (2026-10): a new one is added with
+  # tools/register_reachy.py, then copied here so every laptop names it alike.
+  [robots.reachy_wireless.units."6563a10e4204345e"]
+  display_name = "reachy1"
+  [robots.reachy_wireless.units."1bf3f0e96e9b0151"]
+  display_name = "reachy2"
+  [robots.reachy_wireless.units."b967ec76e88a0fdd"]
+  display_name = "reachy3"
   [robots.reachy_wireless.settings]
   # Launch target: the reachy_chat checkout and the python inside its venv.
-  reachy_chat_path = "C:/path/to/job/reachy-mini/reachy_chat"
-  python = ""            # blank = <reachy_chat_path>/.venv/Scripts/python.exe
+  # Relative paths start at this folder: clone reachy_chat next to robot-hub.
+  reachy_chat_path = "../reachy_chat"
+  python = ""            # blank = <reachy_chat_path>/.venv/(Scripts|bin)/python
   # "robot": reachy_chat runs ON the robot and hears through its built-in mic;
   # Launch installs it onto a new robot first. "laptop": the old K11 path.
   mic_mode = "robot"
@@ -81,8 +88,10 @@ announce = "I am NAO, I am connected and ready to run."
   [robots.naoqi.settings]
   # NAOqi is Python 2.7 only -- every call is a subprocess (2.7).
   python2 = "C:/Python27/python.exe"
-  pynaoqi_sdk = "C:/path/to/job/naoqi/sdk/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649"
+  # Download pynaoqi 2.8.6 (Python 2.7) from Aldebaran and point at the inner folder.
+  pynaoqi_sdk = "C:/path/to/naoqi/sdk/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649"
   port = 9559
   # Launch target is NAO_LLM (the Antagonistic Robot), not NAO_LLM_v2.
-  nao_llm_path = "C:/path/to/job/naoqi/NAO_LLM"
-  nao_llm_python = ""    # blank = <nao_llm_path>/venv/Scripts/python.exe
+  # Clone NAO_LLM next to robot-hub.
+  nao_llm_path = "../NAO_LLM"
+  nao_llm_python = ""    # blank = <nao_llm_path>/venv/(Scripts|bin)/python

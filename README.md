@@ -24,20 +24,105 @@ you do not own is a dim card and costs you nothing.
 └──────────────────────────┘
 ```
 
-## Quickstart
+## Set up on your own laptop
+
+For lab members. Windows and macOS. About 15 minutes, most of it downloads.
+
+### 1. Install once
+
+- **Git**: <https://git-scm.com/downloads>. On a Mac, `git` installs on first use.
+- **Python 3.11 or newer**: <https://www.python.org/downloads/>.
+  - Windows: tick *Add python.exe to PATH* during install.
+  - Mac: the built-in `python3` is too old. Install it from python.org or with `brew install python@3.12`.
+
+### 2. Get the hub
+
+Put everything in one folder, side by side.
+
+Windows (PowerShell):
 
 ```powershell
-git clone <this repo> && cd robot-hub
-cp config.example.toml config.toml     # edit the paths for your machine
-cp .env.example .env                   # your keys; never committed
+mkdir $HOME\robot-lab; cd $HOME\robot-lab
+git clone https://github.com/labbgulab-lab/robot-hub.git
+cd robot-hub
 .\run.ps1
 ```
 
-Linux/macOS: `./run.sh`. The page opens at <http://127.0.0.1:8099/>.
+If Windows says running scripts is disabled, use
+`powershell -ExecutionPolicy Bypass -File .\run.ps1` instead.
 
-Not sure your machine is set up? `.\run.ps1 -Doctor` (or
-`python -m hub.doctor`) checks every prerequisite and prints the exact remedy
-for each one it cannot find. The same report is in the UI at `/api/doctor`.
+macOS (Terminal):
+
+```bash
+mkdir -p ~/robot-lab && cd ~/robot-lab
+git clone https://github.com/labbgulab-lab/robot-hub.git
+cd robot-hub
+./run.sh
+```
+
+The first run builds its own Python environment (a minute or two). Then the
+hub opens at <http://127.0.0.1:8099/>. Start it the same way every time;
+stop it with Ctrl+C. Get updates with `git pull` inside `robot-hub`.
+
+### 3. Your phone's hotspot
+
+Every robot joins **your phone's hotspot**, and your laptop joins it too. The
+**Network setup** panel at the top of the hub page checks this for you. It
+opens by itself the first time and whenever something is wrong.
+
+- **2.4 GHz is required.** The robots can't see a 5 GHz hotspot.
+  - iPhone: *Maximize Compatibility* on.
+  - Android: AP band 2.4 GHz.
+- **Name the hotspot simply**: letters, digits and spaces only. An iPhone's
+  default "Name’s iPhone" has a curly apostrophe the Reachy app can't read.
+- **Each robot learns your hotspot once**, then rejoins it by itself. The panel
+  has the steps for Reachy Mini, NAO, Furhat and Pepper. Robots remember a
+  network by name *and* password, so lab members who use the same hotspot
+  name and password share every robot's memory.
+- Turn the hotspot on **before** powering a robot.
+
+### 4. Speaking keys
+
+Open **Speaking keys** on the page and add the API keys you were given
+(Gemini / GPT / ElevenLabs). They stay on your laptop. A robot gets one only
+while it runs. For Furhat, also put its Studio password in a file called
+`.env` inside `robot-hub` (copy `.env.example`): `FURHAT_PASSWORD=...`.
+
+### 5. Each robot's own system
+
+The hub launches each robot's own program. Clone the ones you need **next to
+`robot-hub`**, in the same `robot-lab` folder; the hub looks there by default.
+
+- **Furhat**: nothing to install.
+  1. In **Robot files**, choose Furhat.
+  2. Download `OpenAIChat_1.3.0.skill` *with* your GPT key.
+  3. Import it in Furhat Studio.
+- **Reachy Mini**: needs `reachy_chat` (ask Tomer for access):
+
+  ```bash
+  git clone -b multi-provider https://github.com/Tomer232/reachy-mini-conversation-app-bgu-lab.git reachy_chat
+  cd reachy_chat
+  python -m venv .venv
+  # Windows: .venv\Scripts\python -m pip install -r requirements.txt
+  # Mac:     .venv/bin/python -m pip install -r requirements.txt
+  ```
+
+  The first Launch on a robot installs it onto the robot (a few minutes).
+- **NAO** (Windows recommended): needs `NAO_LLM`. Follow its
+  [Quick Start](https://github.com/Tomer232/antagonistic-robot#quick-start):
+
+  ```bash
+  git clone https://github.com/Tomer232/antagonistic-robot.git NAO_LLM
+  ```
+
+  The NAO card also needs Python 2.7 and the pynaoqi 2.8.6 SDK. Set both paths in
+  `config.toml` (copy `config.example.toml`); see `docs/SETUP.md`.
+
+### 6. Something wrong?
+
+Run `.\run.ps1 -Doctor` (Mac: `./run.sh --doctor`). It checks everything and
+prints the fix for each problem. A card that stays dim is almost always the
+network: press **Check again** in Network setup, then **Scan now**.
 
 ## What it does and does not do
 
@@ -90,6 +175,7 @@ hub/
   supervisor.py  child processes: start, stop, verify-zero
   doctor.py      environment preflight
   library.py     Robot files: the shared GitHub-release library
+  wifi.py        Network setup: which WiFi, which band, is it a hotspot
   keyscrub.py    keeps keys out of it (remove on upload, refill on download)
 web/             index.html + app.js + style.css, no build step
 docs/            SETUP.md, ADAPTERS.md, and the measured robot profiles

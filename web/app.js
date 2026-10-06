@@ -468,6 +468,66 @@ keyForm.addEventListener('submit', async (event) => {
   }
 });
 
+/* ---------------------------------------------------------- network setup */
+// Each lab member brings their own phone hotspot. The panel says whether this
+// laptop is on one the robots can join (2.4 GHz), and opens by itself on a
+// first visit or when something is wrong.
+
+const setupDetails = document.getElementById('setup-details');
+const setupBadge = document.getElementById('setup-badge');
+const setupStatus = document.getElementById('setup-status');
+const setupCheck = document.getElementById('setup-check');
+
+const HOTSPOT_KIND = { iphone: 'iPhone hotspot', android: 'Android hotspot', phone: 'phone hotspot' };
+
+function firstVisit() {
+  try {
+    if (localStorage.getItem('hub.setupSeen')) return false;
+    localStorage.setItem('hub.setupSeen', '1');
+  } catch (err) { /* no storage: treat as seen, the badge still shows */ return false; }
+  return true;
+}
+const showSetupFirst = firstVisit();
+
+async function checkWifi() {
+  setupCheck.disabled = true;
+  setupCheck.querySelector('svg').classList.add('spinning');
+  let info = null;
+  try {
+    const res = await fetch('/api/wifi');
+    info = await res.json();
+  } catch (err) {
+    info = { ok: false, problem: `Could not ask the hub (${err}).` };
+  }
+  setupCheck.disabled = false;
+  setupCheck.querySelector('svg').classList.remove('spinning');
+
+  const parts = [];
+  if (info.ssid) parts.push(`“${info.ssid}”`);
+  if (HOTSPOT_KIND[info.hotspot]) parts.push(HOTSPOT_KIND[info.hotspot]);
+  if (info.band) parts.push(info.band);
+  const where = parts.length ? `This laptop is on ${parts.join(' · ')}.` : '';
+
+  setupStatus.className = `setup-status ${info.ok ? 'ok' : 'problem'}`;
+  setupStatus.textContent = '';
+  setupStatus.insertAdjacentHTML('beforeend',
+    `<svg aria-hidden="true"><use href="#${info.ok ? 'radar' : 'alert'}"/></svg>`);
+  const text = document.createElement('span');
+  text.textContent = info.ok
+    ? `${where} Robots can join it.`
+    : `${where} ${info.problem || ''}`.trim();
+  setupStatus.append(text);
+
+  setupBadge.className = `setup-badge ${info.ok ? 'ok' : 'problem'}`;
+  setupBadge.textContent = info.ok
+    ? (info.band ? `${info.ssid || 'hotspot'} · ${info.band}` : 'ready')
+    : 'needs attention';
+  if (!info.ok || showSetupFirst) setupDetails.open = true;
+}
+
+setupCheck.addEventListener('click', checkWifi);
+checkWifi();
+
 /* ------------------------------------------------------------- files */
 // The lab's shared robot files (hub/library.py). Loaded when the panel is
 // first opened, and again after every change -- GitHub is the only copy.
@@ -956,7 +1016,7 @@ function handle(msg) {
       if (msg.level === 'error') announce(msg.text);
       stamp(`last update ${new Date().toLocaleTimeString([], { hour12: false })}`);
       break;
-    case 'network': renderNetwork(msg); break;
+    case 'network': renderNetwork(msg); checkWifi(); break;
     case 'conflict': showConflict(msg.key, msg.message); announce(msg.message); break;
     case 'settings': autoConnect.checked = !!msg.auto_connect; break;
     case 'keys': renderKeys(msg); break;

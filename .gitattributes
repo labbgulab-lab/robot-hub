@@ -1,0 +1,2 @@
+# Scripts keep LF so a Mac or Linux clone can run them.
+*.sh text eol=lf

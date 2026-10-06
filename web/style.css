@@ -310,25 +310,31 @@ h2 { margin: 0; font-size: 16px; font-weight: 650; }
 
 /* -------------------------------------------------------------------- log */
 .log-section, .keys-section, .files-section { margin-top: 26px; }
-.log-section details, .keys-section details, .files-section details {
+.setup-section { margin: 0 0 22px; }
+.log-section details, .keys-section details, .files-section details,
+.setup-section > details {
   background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--radius);
   padding: 4px 18px 6px;
 }
-.log-section summary, .keys-section summary, .files-section summary {
+.log-section summary, .keys-section summary, .files-section summary,
+.setup-section > details > summary {
   list-style: none; cursor: pointer;
   padding: 12px 0; display: flex; align-items: center; gap: 8px;
 }
 .log-section summary::-webkit-details-marker, .keys-section summary::-webkit-details-marker,
-.files-section summary::-webkit-details-marker { display: none; }
-.log-section summary::after, .keys-section summary::after, .files-section summary::after {
+.files-section summary::-webkit-details-marker,
+.setup-section > details > summary::-webkit-details-marker { display: none; }
+.log-section summary::after, .keys-section summary::after, .files-section summary::after,
+.setup-section > details > summary::after {
   content: ""; width: 7px; height: 7px; margin-left: 4px;
   border-right: 1.7px solid var(--muted); border-bottom: 1.7px solid var(--muted);
   transform: rotate(45deg) translate(-2px, -2px);
   transition: transform .2s;
 }
 .log-section details[open] summary::after, .keys-section details[open] summary::after,
-.files-section details[open] summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+.files-section details[open] summary::after,
+.setup-section > details[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
 
 /* Sits in the summary row; `order` keeps the open/close chevron by the title. */
 /* Same look as "Scan now", a little shorter to fit the header row. */
@@ -465,3 +471,29 @@ footer svg { width: 14px; height: 14px; }
 .files-status.error { color: var(--red); }
 .files-status.ok { color: var(--green); }
 .files-status svg { width: 16px; height: 16px; flex: none; }
+
+/* ---------------------------------------------------------- network setup */
+.setup-section > details > summary .setup-badge {
+  font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px;
+  background: var(--grey-light); color: var(--grey-ink);
+}
+.setup-badge.ok { background: var(--green-light); color: var(--green); }
+.setup-badge.problem { background: var(--amber-light); color: var(--amber); }
+.setup-status {
+  display: flex; align-items: flex-start; gap: 10px; margin: 0 0 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--grey-light); color: var(--ink); font-size: 14px; line-height: 1.45;
+}
+.setup-status svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.setup-status.ok { background: var(--green-light); }
+.setup-status.ok svg { color: var(--green); }
+.setup-status.problem { background: var(--amber-light); }
+.setup-status.problem svg { color: var(--amber); }
+.setup-check { margin-bottom: 6px; }
+.setup-h { font-size: 15px; margin: 18px 0 6px; }
+.setup-list, .setup-robot ol { margin: 0 0 8px; padding-left: 20px; font-size: 14px; line-height: 1.55; }
+.setup-list li, .setup-robot li { margin: 3px 0; }
+.setup-robot { border-top: 1px solid var(--border-soft); padding: 6px 0; }
+.setup-robot summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 4px 0; }
+.setup-robot ol { margin-top: 6px; }
+.setup-section code { font-family: Consolas, monospace; font-size: 13px; background: var(--grey-light); padding: 1px 5px; border-radius: 4px; }

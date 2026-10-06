@@ -23,6 +23,8 @@ from pydantic import BaseModel
 from .config import REPO_ROOT, load_config
 from .core import Hub
 from .library import MAX_BYTES, Library, LibraryError
+from . import wifi
+from .discovery.selfnet import local_ipv4
 
 logging.basicConfig(
     level=logging.INFO,
@@ -195,6 +197,17 @@ async def get_doctor() -> dict[str, Any]:
     from .doctor import run_checks
     return {"checks": await asyncio.get_running_loop().run_in_executor(
         None, run_checks, hub.config)}
+
+
+
+# ------------------------------------------------------------------- wifi
+# Which WiFi this laptop is on and whether the robots can join it (2.4 GHz,
+# a phone hotspot). Asked by the Network setup panel; never cached, because
+# the answer is what someone just changed on their phone.
+@app.get("/api/wifi")
+async def get_wifi() -> dict[str, Any]:
+    addresses = [str(n) for n in await asyncio.to_thread(local_ipv4)]
+    return await asyncio.to_thread(wifi.status, addresses)
 
 
 # ------------------------------------------------------------------ files
