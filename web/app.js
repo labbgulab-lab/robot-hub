@@ -120,6 +120,7 @@ function renderRobot(r) {
 
   renderLaunch(el, r);
   renderPosture(el, r);
+  renderWifi(el, r);
   renderCardKey(el, r.key);
   if (fresh) reorder();
   updateSummary();
@@ -171,6 +172,59 @@ function renderLaunch(el, r) {
   note.textContent = busy
     ? 'Starting its system — this can take a couple of minutes.'
     : (r.launch_error ? `Launch failed: ${r.launch_error}` : '');
+}
+
+/* ------------------------------------------------------------ add wifi */
+
+// NAO and Pepper: teach the robot a lab member's hotspot (hub join_wifi). It
+// joins at once and remembers it, so on success the card goes dim until this
+// laptop moves to that hotspot too.
+const WIFI_TYPES = ['naoqi', 'pepper'];
+
+function renderWifi(el, r) {
+  const box = el.querySelector('.card-wifi');
+  const show = WIFI_TYPES.includes(r.type_id) && PRESENT.includes(r.state);
+  box.classList.toggle('hidden', !show && !box.dataset.busy);
+  const form = box.querySelector('.wifi-form');
+  if (form.dataset.wired) return;
+  form.dataset.wired = '1';
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const ssid = form.querySelector('.wifi-ssid').value.trim();
+    const pass = form.querySelector('.wifi-pass');
+    const note = box.querySelector('.wifi-note');
+    const join = form.querySelector('.wifi-join');
+    const say = (text, kind) => {
+      note.textContent = text;
+      note.className = 'wifi-note' + (kind ? ' ' + kind : '');
+    };
+    if (!ssid) { say('Type the hotspot name.', 'error'); return; }
+    if (pass.value.length < 8) { say('A WiFi password has at least 8 characters.', 'error'); return; }
+    join.disabled = true;
+    box.dataset.busy = '1';
+    say(`Joining “${ssid}”… up to a minute. Keep that hotspot on.`);
+    try {
+      const res = await fetch(`/api/robots/${encodeURIComponent(el.dataset.key)}/wifi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ssid, password: pass.value }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (body.ok) {
+        pass.value = '';
+        form.classList.add('hidden');
+        say(body.message, 'ok');
+        announce(body.message);
+      } else {
+        say(body.error || `Failed (${res.status}).`, 'error');
+      }
+    } catch (err) {
+      say(`Could not ask the hub: ${err}`, 'error');
+    } finally {
+      join.disabled = false;
+      delete box.dataset.busy;
+    }
+  });
 }
 
 /* ---------------------------------------------------------------- posture */
@@ -919,6 +973,12 @@ function onCardClick(event) {
   }
   if (action === 'posture') {
     onPosture(key, btn.dataset.posture);
+    return;
+  }
+  if (action === 'wifi-toggle') {
+    const form = el.querySelector('.wifi-form');
+    form.classList.toggle('hidden');
+    if (!form.classList.contains('hidden')) form.querySelector('.wifi-ssid').focus();
     return;
   }
   // Already running: just reopen the tab, do not restart the system.

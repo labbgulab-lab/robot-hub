@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -138,6 +139,120 @@ def heat_refusal(joint: str, temp_c: float, limit_c: float, name: str) -> str:
                 "below {} first".format(where, _degrees(limit_c)))
     return "{} — let it cool below {} before moving it".format(
         where, _degrees(limit_c))
+
+
+# --- Teaching NAO / Pepper a new WiFi (the card's "Add WiFi...") -------------
+# Each lab member brings their own phone hotspot. connman on the robot keeps
+# every network it has joined (NAO knew nine on 2026-10-06), but the `nao`
+# user cannot write connman's settings without joining: /var/lib/connman is
+# root's and `nao` has no sudo. So unlike Reachy this joins at once, and the
+# new hotspot must be on and in range. connmanctl is driven interactively
+# because its passphrase prompt only exists in agent mode -- the route that
+# worked by hand on NAO and Pepper (profiles/naoqi.md; ALConnectionManager did
+# not, PEPPER-FIRST-CONNECTION.md).
+WIFI_JOIN_TIMEOUT_S = 90.0
+DEFAULT_NAO_SSH_USER = "nao"
+DEFAULT_NAO_SSH_PASSWORD = "nao"
+
+
+def _connman_service(text: str, ssid: str) -> Optional[tuple[str, str]]:
+    """(service id, security) for `ssid` in `connmanctl services` output.
+
+    Matched on the id, which carries the SSID in hex
+    (wifi_<mac>_<hex ssid>_managed_<security>), never on the printed name:
+    names are padded columns and may contain spaces.
+    """
+    want = ssid.encode("utf-8").hex()
+    for m in re.finditer(r"(wifi_[0-9a-f]+_([0-9a-f]+)_managed_([a-z0-9]+))", text):
+        if m.group(2) == want:
+            return m.group(1), m.group(3)
+    return None
+
+
+def _connman_join(host: str, user: str, login: str, ssid: str, passphrase: str,
+                  timeout_s: float = WIFI_JOIN_TIMEOUT_S) -> str:
+    """Blocking; call through a thread. Returns "joined" when connman said
+    so, "moved" when the session dropped right after the passphrase (the robot
+    left this network, as it should), and raises RuntimeError otherwise."""
+    import time
+
+    import paramiko
+
+    deadline = time.monotonic() + timeout_s
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(host, username=user, password=login, timeout=10,
+                   look_for_keys=False, allow_agent=False)
+    buf = {"text": ""}
+    try:
+        chan = client.invoke_shell(width=300)
+
+        def read_until(marks: tuple[str, ...], wait_s: float) -> Optional[str]:
+            end = min(deadline, time.monotonic() + wait_s)
+            while time.monotonic() < end:
+                if chan.recv_ready():
+                    buf["text"] += chan.recv(65536).decode("utf-8", "replace")
+                    for mark in marks:
+                        if mark in buf["text"]:
+                            return mark
+                elif chan.closed or chan.exit_status_ready():
+                    return None
+                else:
+                    time.sleep(0.1)
+            return None
+
+        chan.send("connmanctl\n")
+        if read_until(("connmanctl>",), 15) is None:
+            raise RuntimeError("connmanctl did not start on the robot")
+        chan.send("agent on\n")
+        read_until(("Agent registered", "already registered"), 10)
+
+        found = None
+        for _ in range(2):                  # a phone hotspot can miss one scan
+            buf["text"] = ""
+            chan.send("scan wifi\n")
+            read_until(("Scan completed",), 25)
+            buf["text"] = ""
+            chan.send("services\n")
+            read_until(("\n",), 5)
+            time.sleep(1.5)                 # the list arrives in pieces
+            read_until(("\x00",), 0.5)
+            found = _connman_service(buf["text"], ssid)
+            if found:
+                break
+        if found is None:
+            raise RuntimeError(
+                "the robot cannot see “{}” -- is the hotspot on, on 2.4 GHz "
+                "(iPhone: Maximize Compatibility), with its settings screen "
+                "open, and is the name typed exactly?".format(ssid))
+        service, security = found
+        if security not in ("psk", "none"):
+            raise RuntimeError("“{}” uses {} security; only a normal "
+                               "password (WPA2) hotspot works".format(ssid, security))
+
+        buf["text"] = ""
+        chan.send("connect {}\n".format(service))
+        mark = read_until(("Passphrase?", "Connected", "Already connected",
+                           "Error", "Input/output error"), 30)
+        if mark == "Passphrase?":
+            buf["text"] = ""
+            chan.send(passphrase + "\n")
+            mark = read_until(("Connected", "Retry", "Error", "Invalid",
+                               "Input/output error"), 45)
+        if mark in ("Connected", "Already connected"):
+            return "joined"
+        if mark is None:
+            return "moved"                  # the session dropped: it left us
+        if mark == "Retry":
+            chan.send("no\n")
+            raise RuntimeError("wrong password for “{}”".format(ssid))
+        raise RuntimeError("connman refused: {}".format(
+            buf["text"].strip().splitlines()[-1][:200] if buf["text"].strip() else mark))
+    finally:
+        try:
+            client.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 _ID_META_KEYS = ("head_id", "body_id", "robot_id", "serial", "unit_id")
@@ -343,7 +458,46 @@ class NaoqiAdapter(RobotAdapter):
             "mic": "Windows default input (NAO_LLM captures with no device=)",
         }
 
-    # ------------------------------------------------------------- posture
+    # ------------------------------------------------------------- WiFi
+    async def join_wifi(self, ssid: str, passphrase: str) -> str:
+        """Teach the robot another hotspot: it joins now and keeps it.
+
+        Returns a sentence for the card. The robot leaves this laptop's
+        network on success, so its card goes dim until the laptop follows.
+        """
+        ssid = (ssid or "").strip()
+        if not ssid or len(ssid.encode("utf-8")) > 32:
+            raise RuntimeError("a WiFi name has 1 to 32 characters")
+        if not 8 <= len(passphrase or "") <= 63:
+            raise RuntimeError("a WiFi password has 8 to 63 characters")
+        user = str(self.settings.get("ssh_user") or DEFAULT_NAO_SSH_USER)
+        login = str(self.settings.get("ssh_password")
+                    or self.config.secret("NAO_SSH_PASSWORD")
+                    or DEFAULT_NAO_SSH_PASSWORD)
+        host = self.found.address
+        how = await asyncio.wait_for(
+            asyncio.to_thread(_connman_join, host, user, login, ssid, passphrase),
+            WIFI_JOIN_TIMEOUT_S + 15)
+        if how == "moved":
+            # The session dropped. Still answering here means it never left.
+            await asyncio.sleep(4)
+            if await self._still_here():
+                raise RuntimeError(
+                    "the robot is still on this network -- it could not join "
+                    "“{}” (check the password)".format(ssid))
+        return ("{} joined “{}” and will remember it. Connect this laptop to "
+                "“{}” to see it again.".format(self.display_name, ssid, ssid))
+
+    async def _still_here(self) -> bool:
+        try:
+            _r, w = await asyncio.wait_for(
+                asyncio.open_connection(self.found.address, self._broker_port()), 3.0)
+        except (OSError, asyncio.TimeoutError):
+            return False
+        w.close()
+        return True
+
+    # ----------------------------------------------------------- posture
     async def posture(self, name: str) -> str:
         """Sit / lie / stand from the card. Returns a sentence for the card.
 

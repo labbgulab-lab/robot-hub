@@ -122,6 +122,17 @@ async def post_posture(key: str, body: PostureRequest) -> JSONResponse:
     return JSONResponse(result, status_code=200 if result.get("ok") else 409)
 
 
+class WifiJoin(BaseModel):
+    ssid: str
+    password: str
+
+
+@app.post("/api/robots/{key}/wifi")
+async def post_wifi(key: str, body: WifiJoin) -> JSONResponse:
+    result = await hub.join_wifi(key, body.ssid, body.password)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 409)
+
+
 @app.post("/api/rescan")
 async def post_rescan() -> dict[str, Any]:
     """Ask the detectors to sweep again now. Discovery never stops; this only

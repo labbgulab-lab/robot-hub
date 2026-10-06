@@ -558,6 +558,44 @@ class Hub:
             self.bus.emit_log("error", "{}: launch failed - {}".format(r.name, reason))
             return {"ok": False, "error": reason}
 
+    async def join_wifi(self, key: str, ssid: str, password: str) -> dict[str, Any]:
+        """The card's "Add WiFi...": teach NAO / Pepper a lab member's hotspot.
+
+        The robot joins it now and keeps it, so it leaves this laptop's
+        network on success and its card goes dim until the laptop follows.
+        The password is passed on and never logged.
+        """
+        adapter = self.adapters.get(key)
+        r = self.registry.get(key)
+        if adapter is None or r is None:
+            return {"ok": False, "error": "unknown robot"}
+        if not hasattr(adapter, "join_wifi"):
+            return {"ok": False, "error": "{} has no Add WiFi".format(r.name)}
+        if r.state not in (R.DETECTED, R.CONNECTED, R.RUNNING, R.DEGRADED):
+            return {"ok": False, "error": "{} is not on the network".format(r.name)}
+        task = self._launches.get(key)
+        if (task is not None and not task.done()) or r.launching_since:
+            return {"ok": False, "error": "{} is launching — wait for it "
+                                          "first".format(r.name)}
+        if key in self._busy or key in self._postures:
+            return {"ok": False, "error": "{} is busy — try again when it "
+                                          "settles".format(r.name)}
+        ssid = (ssid or "").strip()
+        self._busy.add(key)
+        self.bus.emit_log("info", "{}: joining the WiFi “{}” (up to "
+                                  "a minute)".format(r.name, ssid))
+        try:
+            message = await adapter.join_wifi(ssid, password)
+        except Exception as exc:  # noqa: BLE001
+            reason = str(exc) or type(exc).__name__
+            self.bus.emit_log("error", "{}: could not join “{}” - {}".format(
+                r.name, ssid, reason))
+            return {"ok": False, "error": reason}
+        finally:
+            self._busy.discard(key)
+        self.bus.emit_log("ok", "{}: {}".format(r.name, message))
+        return {"ok": True, "message": message}
+
     async def posture(self, key: str, name: str) -> dict[str, Any]:
         """An operator posture button (NAO: sit / lie / stand).
 

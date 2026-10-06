@@ -155,3 +155,103 @@ def test_pepper_launch_starts_the_dashboard_on_the_robot(monkeypatch, tmp_path):
 def test_a_dashboard_started_by_hand_is_reused(monkeypatch, tmp_path):
     url, sup = _pepper_launch(monkeypatch, tmp_path, up_before=True)
     assert url == "http://127.0.0.1:8780/" and sup.started is None
+
+
+# ------------------------------------------------------------- Add WiFi
+SERVICES = ("*AO Tomer Iphone         wifi_2824ff461d28_546f6d6572204970686f6e65_managed_psk\r\n"
+            "    Dani Robots          wifi_2824ff461d28_44616e6920526f626f7473_managed_psk\r\n"
+            "    eduroam              wifi_2824ff461d28_656475726f616d_managed_ieee8021x\r\n")
+
+
+def test_the_service_is_found_by_the_hex_name_not_the_column():
+    assert N._connman_service(SERVICES, "Dani Robots") == (
+        "wifi_2824ff461d28_44616e6920526f626f7473_managed_psk", "psk")
+    assert N._connman_service(SERVICES, "Dani") is None
+    assert N._connman_service(SERVICES, "eduroam")[1] == "ieee8021x"
+
+
+class _Chan:
+    """connmanctl as the robot would answer, keyed on what was sent."""
+
+    def __init__(self, script):
+        self.script, self.out, self.closed = script, [], False
+
+    def send(self, text):
+        for prefix, reply in self.script:
+            if text.startswith(prefix):
+                if reply is None:
+                    self.closed = True          # the robot left the network
+                else:
+                    self.out.append(reply)
+                return
+
+    def recv_ready(self):
+        return bool(self.out)
+
+    def recv(self, _n):
+        return self.out.pop(0).encode()
+
+    def exit_status_ready(self):
+        return False
+
+
+def _fake_paramiko(monkeypatch, script):
+    chan = _Chan(script)
+
+    class Client:
+        def set_missing_host_key_policy(self, _p): pass
+        def connect(self, *a, **k): pass
+        def invoke_shell(self, **k): return chan
+        def close(self): pass
+
+    fake = type(sys)("paramiko")
+    fake.SSHClient = Client
+    fake.AutoAddPolicy = lambda: None
+    monkeypatch.setitem(sys.modules, "paramiko", fake)
+    return chan
+
+
+BASE = [("connmanctl", "connmanctl> "), ("agent on", "Agent registered\r\n"),
+        ("scan wifi", "Scan completed for wifi\r\n"), ("services", SERVICES)]
+
+
+def test_join_with_a_password(monkeypatch):
+    _fake_paramiko(monkeypatch, BASE + [("connect wifi_", "Agent RequestInput\r\n  Passphrase? "),
+                                        ("goodpass1", "Connected wifi_2824ff461d28_44616e69\r\n")])
+    assert N._connman_join("h", "nao", "nao", "Dani Robots", "goodpass1", 20) == "joined"
+
+
+def test_the_session_dropping_after_the_password_means_it_moved(monkeypatch):
+    _fake_paramiko(monkeypatch, BASE + [("connect wifi_", "Passphrase? "), ("goodpass1", None)])
+    assert N._connman_join("h", "nao", "nao", "Dani Robots", "goodpass1", 20) == "moved"
+
+
+def test_a_wrong_password_says_so(monkeypatch):
+    import pytest
+    _fake_paramiko(monkeypatch, BASE + [("connect wifi_", "Passphrase? "),
+                                        ("badpass99", "Retry (yes/no)? ")])
+    with pytest.raises(RuntimeError, match="wrong password"):
+        N._connman_join("h", "nao", "nao", "Dani Robots", "badpass99", 20)
+
+
+def test_a_hotspot_out_of_range_is_named(monkeypatch):
+    import pytest
+    _fake_paramiko(monkeypatch, BASE)
+    with pytest.raises(RuntimeError, match="cannot see “Other Phone”"):
+        N._connman_join("h", "nao", "nao", "Other Phone", "goodpass1", 20)
+
+
+def test_moved_but_still_answering_is_a_failure(monkeypatch):
+    import asyncio
+    import pytest
+    p = _pepper()
+    p.settings, p.config = {}, type("C", (), {"secret": lambda self, k: ""})()
+    monkeypatch.setattr(N, "_connman_join", lambda *a, **k: "moved")
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(N.asyncio, "sleep", lambda s: real_sleep(0))
+
+    async def here():
+        return True
+    p._still_here = here
+    with pytest.raises(RuntimeError, match="still on this network"):
+        asyncio.run(p.join_wifi("Dani Robots", "goodpass1"))

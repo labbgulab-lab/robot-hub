@@ -6,7 +6,7 @@
 <meta name="description" content="Find the lab's robots, connect to them, and launch their systems.">
 <title>Robot Hub</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232563eb'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='white'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/style.css?v=2026-10-06b">
+<link rel="stylesheet" href="/style.css?v=2026-10-06c">
 </head>
 <body>
 
@@ -106,7 +106,8 @@
       <details class="setup-robot">
         <summary>Reachy Mini</summary>
         <ol>
-          <li>Power it on. If it knows no network nearby, it opens its own WiFi called <code>reachy-mini-ap</code>.</li>
+          <li><strong>Already on a hotspot it knows?</strong> Launch it, then on its dashboard press <em>Add WiFi…</em>, type your hotspot's name and password, and Save. It stays where it is; turn the old hotspot off and yours on, and it moves over by itself.</li>
+          <li>Otherwise power it on. If it knows no network nearby, it opens its own WiFi called <code>reachy-mini-ap</code>.</li>
           <li>Open the <strong>Reachy Mini Control</strong> desktop app. It joins <code>reachy-mini-ap</code> (or uses Bluetooth) and asks for the WiFi to use. Pick your hotspot and type its password.</li>
           <li>The robot restarts its WiFi and appears on your hotspot within a minute. Its card here lights up. If the app offers a software update, let it finish.</li>
         </ol>
@@ -114,6 +115,8 @@
       <details class="setup-robot">
         <summary>NAO</summary>
         <ol>
+          <li><strong>Already on a hotspot it knows?</strong> Turn your hotspot on next to it, then on NAO's card press <em>Add WiFi…</em>, type its name and password, and Join. NAO moves to it now and remembers it. Connect this laptop to your hotspot to see NAO again.</li>
+          <li>Otherwise:</li>
           <li>Connect NAO with an Ethernet cable to the laptop (or to a network it already knows), and power it on.</li>
           <li>Press the chest button once: NAO says its address. Open <code>http://nao.local/</code> (or that address) and sign in as <code>nao</code> / <code>nao</code>.</li>
           <li>Network settings → WiFi → choose your hotspot → enter the password → <strong>Connect</strong>. NAO saves it and rejoins on every boot. Unplug the cable.</li>
@@ -131,7 +134,8 @@
       <details class="setup-robot">
         <summary>Pepper</summary>
         <ol>
-          <li>On Pepper's tablet: six-dot menu → Settings → <strong>Wi-Fi</strong> → choose your hotspot → password.
+          <li><strong>Already on a hotspot it knows?</strong> Same as NAO: <em>Add WiFi…</em> on Pepper's card, with your hotspot on.</li>
+          <li>Otherwise, on Pepper's tablet: six-dot menu → Settings → <strong>Wi-Fi</strong> → choose your hotspot → password.
             Don't use “Advanced Settings” for WiFi, or the head and the tablet end up on different networks.</li>
         </ol>
       </details>
@@ -259,6 +263,19 @@
     </div>
     <p class="posture-note hidden" role="status"></p>
 
+    <!-- NAO and Pepper: teach the robot another hotspot. It joins at once
+         (it cannot save one without joining) and remembers it. -->
+    <div class="card-wifi hidden">
+      <button type="button" class="wifi-toggle" data-action="wifi-toggle">Add WiFi…</button>
+      <form class="wifi-form hidden" autocomplete="off">
+        <input class="wifi-ssid" type="text" placeholder="Hotspot name" aria-label="Hotspot name">
+        <input class="wifi-pass" type="password" placeholder="Password" aria-label="Hotspot password">
+        <button type="submit" class="pill pill-connect wifi-join"><span>Join</span></button>
+        <p class="wifi-hint">Turn that hotspot on first (2.4 GHz). The robot moves to it now and remembers it.</p>
+      </form>
+      <p class="wifi-note hidden" role="status"></p>
+    </div>
+
     <button class="launch-button" data-action="launch">
       <svg aria-hidden="true"><use href="#launch"/></svg><span>Launch</span>
     </button>
@@ -276,6 +293,6 @@
 </template>
 
 <noscript><p class="noscript">Enable JavaScript to see the robots.</p></noscript>
-<script src="/app.js?v=2026-10-06b"></script>
+<script src="/app.js?v=2026-10-06c"></script>
 </body>
 </html>
