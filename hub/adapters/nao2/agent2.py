@@ -32,6 +32,8 @@ ID_KEYS = (
     ("head_id", "RobotConfig/Head/FullHeadId"),
     ("body_id", "RobotConfig/Body/FullBodyId"),
     ("base_version", "RobotConfig/Body/BaseVersion"),
+    # "Juliette" on Pepper: how the network sweep tells it from a NAO.
+    ("body_type", "RobotConfig/Body/Type"),
 )
 
 

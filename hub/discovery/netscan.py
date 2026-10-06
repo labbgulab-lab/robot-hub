@@ -34,6 +34,11 @@ log = logging.getLogger("hub.discovery.netscan")
 
 STUDIO_TITLE = re.compile(r"<title>\s*Furhat\s+Studio\s*</title>", re.I)
 STUDIO_PORT = 80
+REACHY_PORT = 8000
+NAOQI_PORT = 9559
+# A NAOqi identity costs a Python 2.7 start (seconds), so it is asked rarely.
+NAOQI_ID_TTL_S = 300.0
+NAOQI_MISS_TTL_S = 60.0
 MAX_CONCURRENCY = 64
 PING_TIMEOUT_S = 2.0
 HTTP_TIMEOUT_S = 2.5
@@ -127,6 +132,11 @@ class NetscanDetector:
         pages = await asyncio.gather(*(self._studio_page(client, ip) for ip in alive))
         hits = [(ip, body) for ip, body in zip(alive, pages) if body is not None]
         self._studio_seen = {ip for ip, _body in hits}
+        studio = {ip for ip, _body in hits}
+        try:
+            await self._other_robots(client, [ip for ip in alive if ip not in studio])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("sweep for Reachy / NAOqi failed this round: %s", exc)
         if not hits:
             return
 
@@ -154,6 +164,96 @@ class NetscanDetector:
             ))
 
     _studio_seen: set = frozenset()
+
+    # ------------------------------------------------- Reachy, NAO, Pepper
+    # They announce themselves over mDNS, and on the iPhone hotspot that is
+    # enough. A lab member's Android hotspot did not pass mDNS between devices
+    # (2026-10-06): NAO and Reachy had joined it, Furhat -- found here, by
+    # address -- showed up, they did not. So the sweep asks every live address
+    # too, and keys each robot exactly as its mDNS sighting would, so a robot
+    # seen both ways is one card: Reachy by the daemon's hardware_id (== its
+    # mDNS unit_id), NAO / Pepper by "<robot name>.local" (== its mDNS server).
+
+    async def _other_robots(self, client: Any, ips: list[str]) -> None:
+        if not ips:
+            return
+        reachy_on = self.config.robot("reachy_wireless").enabled
+        naoqi_on = (self.config.robot("naoqi").enabled
+                    or self.config.robot("pepper").enabled)
+        reachy_ips: set[str] = set()
+        if reachy_on:
+            statuses = await asyncio.gather(*(self._reachy_status(client, ip) for ip in ips))
+            for ip, status in zip(ips, statuses):
+                hardware_id = (status or {}).get("hardware_id")
+                if not hardware_id:
+                    continue            # the Lite reports none; it is USB anyway
+                reachy_ips.add(ip)
+                self._emit(Found(type_id="reachy_wireless", address=ip, port=REACHY_PORT,
+                                 meta={"unit_id": str(hardware_id), "source": "netscan"}))
+        if not naoqi_on:
+            return
+        rest = [ip for ip in ips if ip not in reachy_ips]
+        open_ = await asyncio.gather(*(self._port_open(ip, NAOQI_PORT) for ip in rest))
+        for ip in [ip for ip, ok in zip(rest, open_) if ok]:
+            ident = await self._naoqi_identity(ip)
+            if not ident or not ident.get("robot_name"):
+                continue
+            name = str(ident["robot_name"]).strip()
+            pepper = (str(ident.get("body_type", "")).lower() == "juliette"
+                      or name.lower().startswith("pepper"))
+            type_id = "pepper" if pepper else "naoqi"
+            if not self.config.robot(type_id).enabled:
+                continue
+            self._emit(Found(type_id=type_id, address=ip, port=NAOQI_PORT,
+                             meta={"server": "{}.local".format(name), "source": "netscan"}))
+
+    async def _reachy_status(self, client: Any, ip: str) -> Optional[dict]:
+        async with self._sem:
+            try:
+                response = await client.get(
+                    "http://{}:{}/api/daemon/status".format(ip, REACHY_PORT))
+                data = response.json() if response.status_code == 200 else None
+            except Exception:  # noqa: BLE001
+                return None
+        return data if isinstance(data, dict) else None
+
+    async def _port_open(self, ip: str, port: int) -> bool:
+        async with self._sem:
+            try:
+                _r, w = await asyncio.wait_for(asyncio.open_connection(ip, port), 1.5)
+            except (OSError, asyncio.TimeoutError):
+                return False
+            w.close()
+            return True
+
+    _naoqi_ids: dict = {}
+    _naoqi_unavailable_said = False
+
+    async def _naoqi_identity(self, ip: str) -> Optional[dict]:
+        """robot_name + body_type through the NAO adapter's own Python 2.7
+        helper; cached, because each ask starts Python 2.7 and the SDK."""
+        loop = asyncio.get_running_loop()
+        cached = self._naoqi_ids.get(ip)
+        if cached and cached[0] > loop.time():
+            return cached[1]
+        from ..adapters.base import AdapterUnavailable
+        from ..adapters.naoqi import NaoqiAdapter
+        try:
+            probe = NaoqiAdapter(Found(type_id="naoqi", address=ip, port=NAOQI_PORT,
+                                       meta={}), self.config)
+            ident = await probe._call("identity", retries=1)
+        except AdapterUnavailable as exc:
+            if not self._naoqi_unavailable_said:
+                self._naoqi_unavailable_said = True
+                self.bus.emit_log("warn", "A NAOqi robot answers at {}, but this laptop "
+                                          "cannot talk to it: {}".format(ip, exc))
+            ident = None
+        except Exception as exc:  # noqa: BLE001
+            log.debug("no NAOqi identity from %s: %s", ip, exc)
+            ident = None
+        ttl = NAOQI_ID_TTL_S if ident else NAOQI_MISS_TTL_S
+        self._naoqi_ids = {**self._naoqi_ids, ip: (loop.time() + ttl, ident)}
+        return ident
 
     def _refuse(self, network: Any, hosts: int) -> None:
         text = str(network)

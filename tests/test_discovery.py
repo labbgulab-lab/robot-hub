@@ -193,3 +193,37 @@ def test_the_robots_own_txt_address_beats_a_shared_hostname():
     assert _pick_address({}, ["172.20.10.2"]) == "172.20.10.2"
     # link-local still loses to routable, wherever it came from
     assert _pick_address({"address": "169.254.4.4"}, ["172.20.10.14"]) == "172.20.10.14"
+
+
+# ------------------------------------------- sweep: Reachy, NAO, Pepper
+def test_the_sweep_finds_robots_mdns_cannot_reach(monkeypatch):
+    # 2026-10-06, a Galaxy hotspot: NAO and reachy2 had joined, but no mDNS
+    # reached the laptop. The sweep keys them as mDNS would, so it is one card.
+    import asyncio
+    from hub.config import load_config
+    from hub.discovery import netscan as NS
+
+    found = []
+    d = NS.NetscanDetector(load_config(), type("B", (), {"emit_log": lambda *a: None})(),
+                           found.append)
+
+    async def status(client, ip):
+        return {"hardware_id": "1bf3f0e96e9b0151"} if ip == "10.0.0.100" else None
+
+    async def port_open(ip, port):
+        return ip in ("10.0.0.214", "10.0.0.2")
+
+    async def identity(ip):
+        return ({"robot_name": "nao", "body_type": "Nao"} if ip == "10.0.0.214"
+                else {"robot_name": "Pepper", "body_type": "Juliette"})
+
+    monkeypatch.setattr(d, "_reachy_status", status)
+    monkeypatch.setattr(d, "_port_open", port_open)
+    monkeypatch.setattr(d, "_naoqi_identity", identity)
+    asyncio.run(d._other_robots(None, ["10.0.0.100", "10.0.0.214", "10.0.0.2", "10.0.0.9"]))
+
+    got = {(f.type_id, f.address): f.meta for f in found}
+    assert got[("reachy_wireless", "10.0.0.100")]["unit_id"] == "1bf3f0e96e9b0151"
+    assert got[("naoqi", "10.0.0.214")]["server"] == "nao.local"
+    assert got[("pepper", "10.0.0.2")]["server"] == "Pepper.local"
+    assert len(found) == 3
