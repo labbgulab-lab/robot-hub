@@ -19,16 +19,18 @@ _MODULES = {
     "reachy_wireless": ("reachy_wireless", "ReachyWirelessAdapter"),
     "reachy_lite": ("reachy_lite", "ReachyLiteAdapter"),
     "naoqi": ("naoqi", "NaoqiAdapter"),
+    "pepper": ("naoqi", "PepperAdapter"),
 }
 
 # The four cards the page renders even when nothing is powered on (10, Phase 0).
-KNOWN_TYPES = ("furhat", "reachy_wireless", "reachy_lite", "naoqi")
+KNOWN_TYPES = ("furhat", "reachy_wireless", "reachy_lite", "naoqi", "pepper")
 
 DISPLAY_NAMES = {
     "furhat": "Furhat",
     "reachy_wireless": "Reachy-Mini",
     "reachy_lite": "Reachy-Mini-Lite",
     "naoqi": "NAOqi",
+    "pepper": "Pepper",
 }
 
 _cache: dict[str, Optional[Type[RobotAdapter]]] = {}

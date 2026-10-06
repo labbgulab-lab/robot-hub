@@ -95,3 +95,11 @@ announce = "I am NAO, I am connected and ready to run."
   # Clone NAO_LLM next to robot-hub.
   nao_llm_path = "../NAO_LLM"
   nao_llm_python = ""    # blank = <nao_llm_path>/venv/(Scripts|bin)/python
+
+[robots.pepper]
+enabled = true
+display_name = "Pepper"
+announce = "I am Pepper, I am connected and ready to run."
+  [robots.pepper.settings]
+  # Python 2.7 and the pynaoqi SDK come from [robots.naoqi.settings]; set
+  # them here only to use different ones. Pepper listens on its own mics.

@@ -73,7 +73,7 @@ class DiscoveryManager:
         discovery = self.config.discovery
 
         wants_mdns = any(self.config.robot(t).enabled
-                         for t in ("reachy_wireless", "reachy_lite", "naoqi"))
+                         for t in ("reachy_wireless", "reachy_lite", "naoqi", "pepper"))
         if discovery.mdns and wants_mdns:
             self._spawn(MdnsDetector(self.config, self.bus, self._sighting))
         if discovery.netscan and self.config.robot("furhat").enabled:

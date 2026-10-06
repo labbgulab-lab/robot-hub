@@ -43,6 +43,8 @@ log = logging.getLogger("hub.discovery.mdns")
 REACHY_SERVICE = "_reachy-mini._tcp.local."
 NAOQI_SERVICE = "_naoqi._tcp.local."
 SERVICES = (REACHY_SERVICE, NAOQI_SERVICE)
+# RobotType in the _naoqi._tcp TXT record -> hub type.
+NAOQI_TYPES = {"nao": "naoqi", "pepper": "pepper"}
 
 MODEL_TYPES = {
     "reachy mini wireless": "reachy_wireless",
@@ -217,14 +219,17 @@ class MdnsDetector:
 
         if service_type == NAOQI_SERVICE:
             robot_type = str(txt.get("RobotType", "") or txt.get("robottype", ""))
-            if robot_type and robot_type.strip().lower() != "nao":
+            # Pepper advertises RobotType=Pepper (exact case) on the same
+            # service; a blank type is an older NAO.
+            type_id = NAOQI_TYPES.get(robot_type.strip().lower() or "nao")
+            if type_id is None:
                 log.info("ignoring %s on %s: RobotType=%s", instance,
                          service_type, robot_type)
                 return None
             address = _pick_address(txt, meta["advertised_addresses"])
             if address is None:
                 return None
-            return Found(type_id="naoqi", address=address,
+            return Found(type_id=type_id, address=address,
                          port=getattr(info, "port", None), meta=meta)
 
         return None

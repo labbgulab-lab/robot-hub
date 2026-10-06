@@ -21,7 +21,7 @@ const rangeText = document.getElementById('range-text');
 const toast = document.getElementById('toast');
 const template = document.getElementById('card-template');
 
-const ORDER = ['furhat', 'reachy_wireless', 'reachy_lite', 'naoqi'];
+const ORDER = ['furhat', 'reachy_wireless', 'reachy_lite', 'naoqi', 'pepper'];
 const PRESENT = ['DETECTED', 'CONNECTING', 'CONNECTED', 'RUNNING', 'DEGRADED', 'ERROR'];
 const CONNECTED = ['CONNECTED', 'RUNNING', 'DEGRADED'];
 

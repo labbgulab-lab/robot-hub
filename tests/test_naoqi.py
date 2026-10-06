@@ -87,3 +87,34 @@ def test_a_server_that_never_answers_fails_with_the_deploy_output(monkeypatch):
         assert "did not come up" in str(exc)
     else:
         raise AssertionError("a silent speaker server must fail the launch")
+
+
+# ------------------------------------------------------------------ Pepper
+def _pepper(hostname="Pepper.local."):
+    from hub.adapters.base import Found
+    p = object.__new__(N.PepperAdapter)
+    p.found = Found(type_id="pepper", address="172.20.10.2", port=9559,
+                    meta={"hostname": hostname})
+    return p
+
+
+def test_pepper_is_keyed_apart_from_nao():
+    p = _pepper()
+    assert p.stable_key(p.found) == "pepper:pepper.local"
+
+
+def test_pepper_claims_no_laptop_mic_and_offers_no_postures():
+    # Its own four mics; and it has no Sit or Lying posture to offer.
+    p = _pepper()
+    assert p.claims() == [] and p.postures == ()
+
+
+def test_pepper_launch_never_touches_nao_llm():
+    # The NAO clean-up kills NAO_LLM's interpreter -- a NAO beside Pepper
+    # would lose its running session.
+    import asyncio
+    import pytest
+    p = _pepper()
+    assert asyncio.run(p.ensure_zero_instances()) == []
+    with pytest.raises(N.AdapterUnavailable, match="no conversation system"):
+        asyncio.run(p.launch())

@@ -156,7 +156,10 @@ class NaoqiAdapter(RobotAdapter):
     def __init__(self, found: Found, config: Any, *,
                  port_allocator: Any = None, port: Optional[int] = None) -> None:
         super().__init__(found, config)
-        self.settings = config.robot(self.type_id).settings
+        # Pepper shares NAO's Python 2.7 and SDK: its own section only needs
+        # what differs, the rest falls back to [robots.naoqi].
+        self.settings = {**config.robot("naoqi").settings,
+                         **config.robot(self.type_id).settings}
         self.port_allocator = port_allocator
         self._ui_port = port
         self._child_name = ""
@@ -168,8 +171,11 @@ class NaoqiAdapter(RobotAdapter):
         self._sdk = self._require_sdk()
 
     # ------------------------------------------------------- prerequisites
+    def _setting_path(self, key: str) -> Optional[Path]:
+        return self.config.path(self.type_id, key) or self.config.path("naoqi", key)
+
     def _require_python2(self) -> Path:
-        path = self.config.path(self.type_id, "python2")
+        path = self._setting_path("python2")
         if path is None or not path.is_file():
             raise AdapterUnavailable(
                 "NAO needs Python 2.7: install it and set python2 in "
@@ -177,7 +183,7 @@ class NaoqiAdapter(RobotAdapter):
         return path
 
     def _require_sdk(self) -> Path:
-        path = self.config.path(self.type_id, "pynaoqi_sdk")
+        path = self._setting_path("pynaoqi_sdk")
         if path is None or not (path / "lib").is_dir():
             raise AdapterUnavailable(
                 "the pynaoqi 2.8 SDK was not found: download it and set "
@@ -577,3 +583,40 @@ class NaoqiAdapter(RobotAdapter):
         notes = await get_supervisor().stop(self._child_name)
         self._child_name = ""
         return notes
+
+
+class PepperAdapter(NaoqiAdapter):
+    """Pepper: a NAOqi 2.5 robot, reached exactly like NAO (Python 2.7 +
+    pynaoqi, ALProxy on 9559, no login -- profiles/pepper.md).
+
+    What differs is what it must *not* do. It has no Sit or Lying postures,
+    so no posture buttons. It listens on its own four microphones, so it
+    claims nothing on this laptop. And it has no system of ours to launch
+    yet, so Launch says so instead of touching NAO_LLM: the inherited
+    clean-up would kill a NAO's NAO_LLM running beside it.
+    """
+
+    type_id = "pepper"
+    display_name = "Pepper"
+    postures = ()
+
+    def stable_key(self, found: Found) -> str:
+        key = super().stable_key(found)
+        return "pepper:" + key[len("naoqi:"):] if key.startswith("naoqi:") else key
+
+    def claims(self) -> list[Claim]:
+        return []
+
+    async def ensure_zero_instances(self) -> list[str]:
+        return []
+
+    async def launch(self) -> str:
+        raise AdapterUnavailable(
+            "Pepper has no conversation system to launch yet -- Connect, "
+            "speech and battery work; the Pepper app is the next step")
+
+    async def system_status(self) -> dict[str, Any]:
+        status = await super().system_status()
+        if status:
+            status["mic"] = "Pepper's own four microphones"
+        return status

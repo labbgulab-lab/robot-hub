@@ -91,11 +91,20 @@ def test_identity_survives_the_instance_name_swapping(detector):
     assert after_reboot.address != first.address
 
 
-def test_a_pepper_on_the_naoqi_service_is_not_a_nao(detector):
+def test_a_pepper_on_the_naoqi_service_is_a_pepper_not_a_nao(detector):
+    # 2026-10-06: Pepper.local advertises RobotType=Pepper (exact case). It
+    # used to be dropped; now it gets its own card, never a NAO's.
     pepper = detector._to_found(
-        M.NAOQI_SERVICE, "P._naoqi._tcp.local.",
-        FakeInfo({b"RobotType": b"Pepper"}, ["10.0.0.6"], port=9559))
-    assert pepper is None
+        M.NAOQI_SERVICE, "Pepper._naoqi._tcp.local.",
+        FakeInfo({b"RobotType": b"Pepper"}, ["172.20.10.2"], port=9559))
+    assert pepper is not None and pepper.type_id == "pepper"
+    assert pepper.address == "172.20.10.2"
+
+
+def test_an_unknown_naoqi_robot_type_is_ignored(detector):
+    assert detector._to_found(
+        M.NAOQI_SERVICE, "R._naoqi._tcp.local.",
+        FakeInfo({b"RobotType": b"Romeo"}, ["10.0.0.7"], port=9559)) is None
 
 
 def test_unknown_reachy_model_is_ignored(detector):

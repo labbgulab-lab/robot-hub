@@ -31,12 +31,12 @@ def config():
 
 
 # ------------------------------------------------------------------ phase 0
-def test_four_dim_cards_before_any_robot(config):
+def test_five_dim_cards_before_any_robot(config):
     hub = Hub(config)
     snap = hub.snapshot()
-    assert len(snap["robots"]) == 4
+    assert len(snap["robots"]) == 5
     assert {r["type_id"] for r in snap["robots"]} == {
-        "furhat", "reachy_wireless", "reachy_lite", "naoqi"}
+        "furhat", "reachy_wireless", "reachy_lite", "naoqi", "pepper"}
     assert all(r["state"] == ABSENT for r in snap["robots"])
 
 
@@ -50,7 +50,7 @@ def test_page_and_websocket(config):
         with client.websocket_connect("/ws") as ws:
             first = ws.receive_json()
             assert first["type"] == "snapshot"
-            assert len(first["robots"]) == 4
+            assert len(first["robots"]) == 5
 
 
 # ------------------------------------------------------------------ registry
