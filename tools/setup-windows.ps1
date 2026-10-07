@@ -3,11 +3,12 @@
 #   powershell -ExecutionPolicy Bypass -File setup-windows.ps1 -Kit D:\robot-lab-kit
 #
 # -Kit is the folder handed over on a USB stick. It holds what is not on
-# GitHub: the pynaoqi SDK zip (NAO + Pepper) and pepper\dashboard.
+# GitHub: the pynaoqi SDK zip (NAO + Pepper) and the Python 2.7 installer.
+# Pepper's dashboard is in robot-hub\pepper_dashboard since 2026-10-07.
 #
 # Installs (only what is missing): Git, Python 3.12, Python 2.7.
 # Puts everything side by side in $HOME\robot-lab:
-#   robot-hub\  reachy_chat\  NAO_LLM\  pepper\dashboard\  naoqi-sdk\
+#   robot-hub\  reachy_chat\  NAO_LLM\  naoqi-sdk\
 # Safe to run again: finished steps are skipped.
 
 param(
@@ -37,9 +38,6 @@ function Ensure-Winget($id, $test, $label) {
 $Kit = (Resolve-Path $Kit).Path
 $sdkZip = Get-ChildItem $Kit -Filter "pynaoqi-python2.7-*win64*.zip" | Select-Object -First 1
 if (-not $sdkZip) { throw "No pynaoqi-python2.7-...-win64....zip in $Kit" }
-if (-not (Test-Path (Join-Path $Kit "pepper\dashboard\pepper_dashboard.py"))) {
-    throw "No pepper\dashboard\pepper_dashboard.py in $Kit"
-}
 
 # ---------------------------------------------------------------- programs
 Step "Programs"
@@ -82,7 +80,7 @@ foreach ($r in $repos) {
 }
 
 # ------------------------------------------------------------------- kit
-Step "Kit: NAOqi SDK and Pepper dashboard"
+Step "Kit: NAOqi SDK"
 $sdkDir = Join-Path $Root "naoqi-sdk"
 # The SDK root is the folder whose lib\ holds naoqi.py.
 function Find-Sdk {
@@ -98,10 +96,6 @@ if (-not $naoqiPy) {
 }
 $sdk = $naoqiPy.Directory.Parent.FullName
 Done "SDK at $sdk"
-$dash = Join-Path $Root "pepper\dashboard"
-New-Item -ItemType Directory -Force $dash | Out-Null
-Copy-Item (Join-Path $Kit "pepper\dashboard\*") $dash -Recurse -Force
-Done "Pepper dashboard at $dash"
 
 & $py2 -c "import sys; sys.path.insert(0, r'$sdk\lib'); import os; os.environ['PATH'] = r'$sdk\bin;' + os.environ['PATH']; import naoqi; print('naoqi ok')"
 if ($LASTEXITCODE -ne 0) { throw "Python 2.7 cannot import naoqi from $sdk" }
@@ -122,6 +116,13 @@ foreach ($e in $envs) {
     if ($LASTEXITCODE -ne 0) { throw "pip failed in $($e.dir)" }
     Done "$($e.dir) ready"
 }
+
+# NAO_LLM loads its speech model before its page opens; on a new laptop that
+# is a 141 MB download, which outlasted the hub's Launch wait (2026-10-06).
+Step "NAO_LLM speech model (about 140 MB, once)"
+$naoPython = Join-Path $Root "NAO_LLM\venv\Scripts\python.exe"
+& $naoPython -c "from faster_whisper import download_model; download_model('base.en', use_auth_token=False); print('speech model ready')"
+if ($LASTEXITCODE -ne 0) { throw "could not download NAO_LLM's speech model - check the internet and run this again" }
 
 # ----------------------------------------------------------------- config
 Step "Hub configuration"

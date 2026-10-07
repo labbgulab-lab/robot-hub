@@ -9,3 +9,6 @@ logs/
 .DS_Store
 keys.local.json
 .keys-*
+
+# Pepper dashboard: addresses it found Pepper at (per laptop)
+pepper_dashboard/known_addresses.json

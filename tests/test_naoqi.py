@@ -255,3 +255,45 @@ def test_moved_but_still_answering_is_a_failure(monkeypatch):
     p._still_here = here
     with pytest.raises(RuntimeError, match="still on this network"):
         asyncio.run(p.join_wifi("Dani Robots", "goodpass1"))
+
+
+# ------------------------------------------------- dashboard + first-run ASR
+def _pepper_with_repo(repo):
+    p = _pepper()
+    p.config = type("C", (), {"path": lambda self, t, k: None, "repo_root": repo})()
+    return p
+
+
+def test_pepper_dashboard_comes_from_the_hub_repo_first(tmp_path):
+    repo = tmp_path / "robot-hub"
+    for d in (repo / "pepper_dashboard", tmp_path / "pepper" / "dashboard"):
+        d.mkdir(parents=True)
+        (d / "pepper_dashboard.py").write_text("# dashboard")
+    assert _pepper_with_repo(repo)._dashboard().parent == repo / "pepper_dashboard"
+
+
+def test_pepper_dashboard_falls_back_to_the_usb_kit_copy(tmp_path):
+    repo = tmp_path / "robot-hub"
+    repo.mkdir()
+    kit = tmp_path / "pepper" / "dashboard"
+    kit.mkdir(parents=True)
+    (kit / "pepper_dashboard.py").write_text("# dashboard")
+    assert _pepper_with_repo(repo)._dashboard().parent == kit.resolve()
+
+
+def test_asr_model_size_is_read_from_nao_llm_config(tmp_path):
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text('asr:\n  model_size: "small.en"   # English\n  device: "auto"\n')
+    assert N._asr_model_size(cfg) == "small.en"
+    assert N._asr_model_size(tmp_path / "missing.yaml") == "base.en"
+
+
+def test_whisper_cache_check(monkeypatch, tmp_path):
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
+    assert not N._whisper_cached("base.en")
+    snap = tmp_path / "models--Systran--faster-whisper-base.en" / "snapshots" / "abc"
+    snap.mkdir(parents=True)
+    assert not N._whisper_cached("base.en")     # a half-finished download
+    (snap / "model.bin").write_bytes(b"x")
+    assert N._whisper_cached("base.en")
+    assert N._whisper_cached(str(tmp_path))     # a local model folder

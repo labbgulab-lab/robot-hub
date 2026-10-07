@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -65,6 +66,12 @@ CALL_BACKOFF_S = 0.8
 
 # NAO_LLM loads faster-whisper before uvicorn binds, so first start is slow.
 WEB_UI_WAIT_S = 110.0
+# On a laptop that never ran NAO_LLM that load is a download first: 141 MB for
+# base.en, ~12 min at a phone hotspot's ~200 KB/s, so a 110 s wait stops it
+# mid-download (the likely cause of a fresh laptop's failed NAO Launch,
+# 2026-10-06). The wait still ends the moment NAO_LLM exits, so the long
+# bound only costs time while it is working.
+WEB_UI_FIRST_RUN_WAIT_S = 20 * 60.0
 
 # NAO_LLM reads its web-UI port from a YAML config only -- there is no flag.
 GENERATED_CONFIG = "config.hub-generated.yaml"
@@ -266,7 +273,8 @@ class NaoqiAdapter(RobotAdapter):
     postures = tuple(POSTURE_DONE)
     posture_timeout_s = POSTURE_TIMEOUT_S
     # Speaker-server deploy (up to ~3.5 min) plus NAO_LLM's own start-up.
-    launch_timeout_s = SPEAKER_DEPLOY_TIMEOUT_S + SPEAKER_UP_WAIT_S + WEB_UI_WAIT_S + 30
+    launch_timeout_s = (SPEAKER_DEPLOY_TIMEOUT_S + SPEAKER_UP_WAIT_S
+                        + WEB_UI_FIRST_RUN_WAIT_S + 30)
 
     def __init__(self, found: Found, config: Any, *,
                  port_allocator: Any = None, port: Optional[int] = None) -> None:
@@ -684,14 +692,22 @@ class NaoqiAdapter(RobotAdapter):
                                port=port, owner=self.stable_key(self.found),
                                log_prefix="NAO_LLM")
         url = "http://127.0.0.1:{}/".format(port)
-        if not await supervisor.wait_for_http(url, WEB_UI_WAIT_S,
+        wait_s = WEB_UI_WAIT_S
+        model = _asr_model_size(root / "config.yaml")
+        if not _whisper_cached(model):
+            wait_s = WEB_UI_FIRST_RUN_WAIT_S
+            self.notes.append(
+                "first Launch on this laptop: NAO_LLM is downloading its speech "
+                "model ({}, about 140 MB) before its page opens -- several "
+                "minutes on a phone hotspot".format(model))
+        if not await supervisor.wait_for_http(url, wait_s,
                                               name=self._child_name):
             await supervisor.stop(self._child_name)
             self._child_name = ""
             raise RuntimeError(
                 "NAO_LLM never opened its control panel on port {} within "
                 "{:.0f} s -- its own output is in the log above".format(
-                    port, WEB_UI_WAIT_S))
+                    port, wait_s))
         return url
 
     async def _speaker_answering(self, port: int) -> bool:
@@ -739,7 +755,33 @@ class NaoqiAdapter(RobotAdapter):
         return notes
 
 
-# Pepper's Say-It dashboard (job/pepper/dashboard): Python 2.7 + pynaoqi,
+def _asr_model_size(config_yaml: Path) -> str:
+    """NAO_LLM's `asr.model_size`, read without importing yaml here."""
+    try:
+        text = config_yaml.read_text(encoding="utf-8")
+    except OSError:
+        return "base.en"
+    m = re.search(r"^\s*model_size:\s*[\"']?([^\"'\s#]+)", text, re.M)
+    return m.group(1) if m else "base.en"
+
+
+def _whisper_cached(model: str) -> bool:
+    """True when faster-whisper will load `model` without downloading it.
+
+    A size ("base.en") lives under Systran/faster-whisper-<size> in the
+    Hugging Face cache; a local folder is never downloaded at all.
+    """
+    if Path(model).is_dir():
+        return True
+    repo = model if "/" in model else "Systran/faster-whisper-" + model
+    cache = os.environ.get("HF_HUB_CACHE") or os.path.join(
+        os.environ.get("HF_HOME") or os.path.join(str(Path.home()), ".cache",
+                                                  "huggingface"), "hub")
+    snapshots = Path(cache) / ("models--" + repo.replace("/", "--")) / "snapshots"
+    return any(snapshots.glob("*/model.bin"))
+
+
+# Pepper's Say-It dashboard (robot-hub/pepper_dashboard): Python 2.7 + pynaoqi,
 # standard library only, fixed on 127.0.0.1:8780, robot address as argv[1].
 PEPPER_DASHBOARD_PORT = 8780
 PEPPER_DASHBOARD_WAIT_S = 30.0
@@ -756,7 +798,8 @@ class PepperAdapter(NaoqiAdapter):
     NAO's NAO_LLM running beside it.
 
     Settings, in [robots.pepper.settings]:
-        dashboard_path  the dashboard folder; default ../pepper/dashboard
+        dashboard_path  the dashboard folder; default robot-hub/pepper_dashboard
+                        (then ../pepper/dashboard, where the USB kit put it)
     """
 
     type_id = "pepper"
@@ -775,8 +818,14 @@ class PepperAdapter(NaoqiAdapter):
         return []
 
     def _dashboard(self) -> Path:
-        folder = self.config.path(self.type_id, "dashboard_path") or (
-            self.config.repo_root / ".." / "pepper" / "dashboard").resolve()
+        folder = self.config.path(self.type_id, "dashboard_path")
+        if folder is None:
+            # In this repo since 2026-10-07, so a clone has it; before that it
+            # only existed on the USB kit, copied next to robot-hub.
+            candidates = [self.config.repo_root / "pepper_dashboard",
+                          (self.config.repo_root / ".." / "pepper" / "dashboard").resolve()]
+            folder = next((c for c in candidates
+                           if (c / "pepper_dashboard.py").is_file()), candidates[0])
         script = folder / "pepper_dashboard.py"
         if not script.is_file():
             raise AdapterUnavailable(

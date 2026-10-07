@@ -119,15 +119,19 @@ The hub launches each robot's own program. Clone the ones you need **next to
   `config.toml` (copy `config.example.toml`); see `docs/SETUP.md`.
 
 **All four robots on Windows in one go:** get the *robot-lab kit* from Tomer
-(USB: the NAOqi SDK and the Pepper dashboard, which are not on GitHub) and run
-`tools/setup-windows.ps1 -Kit <kit folder>`. It installs Git and Pythons 3.12 +
-2.7, clones everything into `%USERPROFILE%obot-lab`, and writes `config.toml`.
+(USB: the NAOqi SDK and the Python 2.7 installer, which are not on GitHub) and
+run `tools/setup-windows.ps1 -Kit <kit folder>`. It installs Git and Pythons
+3.12 + 2.7, clones everything into `%USERPROFILE%\robot-lab`, downloads NAO's
+speech model and writes `config.toml`. Pepper's Say-It dashboard is part of
+this repo (`pepper_dashboard/`).
 
 ### 6. Something wrong?
 
 Run `.\run.ps1 -Doctor` (Mac: `./run.sh --doctor`). It checks everything and
-prints the fix for each problem. A card that stays dim is almost always the
-network: press **Check again** in Network setup, then **Scan now**.
+prints the fix for each problem. Everything the Activity panel showed,
+including each robot program's own output, is also saved in
+`logs\hub-<date>.log`: send that file when asking for help. A card that
+stays dim is almost always the network: press **Check again** in Network setup, then **Scan now**.
 
 ## What it does and does not do
 

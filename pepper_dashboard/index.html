@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pepper Say-It</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --mute:#6b7280; --line:#e3e6eb;
+          --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151b; --card:#1b1f27; --ink:#e7e9ee; --mute:#9aa3b2; --line:#2b313c;
+            --accent:#5b8cff; --ok:#22c55e; --bad:#f87171; --warn:#fbbf24; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 system-ui, sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:20px 16px 40px; }
+  h1 { font-size:22px; margin:0 0 14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; }
+  .status { display:flex; gap:18px; flex-wrap:wrap; align-items:center; font-size:15px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:var(--bad); }
+  .dot.on { background:var(--ok); }
+  .mute { color:var(--mute); }
+  textarea { width:100%; min-height:90px; resize:vertical; font:inherit; padding:10px; border-radius:8px;
+             border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  button { font:inherit; padding:9px 16px; border-radius:8px; border:1px solid var(--line);
+           background:var(--card); color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.danger { color:var(--bad); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .chips button { padding:6px 12px; font-size:14px; }
+  label { display:flex; align-items:center; gap:6px; }
+  input[type=range] { width:160px; }
+  ul { list-style:none; padding:0; margin:0; max-height:220px; overflow:auto; }
+  li { padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; display:flex; gap:10px; }
+  li .t { color:var(--mute); flex:none; }
+  li.err { color:var(--bad); }
+  input { font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  #known li { align-items:center; }
+  #known li .ip { font-family:ui-monospace, monospace; font-weight:600; min-width:120px; }
+  #known li .meta { color:var(--mute); flex:1; }
+  #known li.cur .ip::after { content:" ● connected"; color:var(--ok); font-family:system-ui; font-weight:400; font-size:13px; }
+  #known button { padding:4px 10px; font-size:13px; }
+  #known li .name { font-weight:700; min-width:70px; }
+  #wifi li { align-items:center; }
+  #wifi li .ssid { font-weight:600; min-width:150px; }
+  #wifi li .meta { color:var(--mute); flex:1; }
+  .tag { font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--mute); }
+  .tag.on { color:var(--ok); border-color:var(--ok); }
+  .tag.saved { color:var(--accent); border-color:var(--accent); }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--mute); font-weight:600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pepper Say-It</h1>
+
+  <div class="card status">
+    <span><span id="dot" class="dot"></span><b id="conn">connecting…</b></span>
+    <span class="mute">IP <span id="ip">–</span></span>
+    <span class="mute">Battery <span id="bat">–</span></span>
+    <span class="mute">Laptop WiFi <span id="net">–</span></span>
+  </div>
+
+  <div class="card" id="conncard">
+    <h2>Connection</h2>
+    <div class="row" style="margin-top:0">
+      <button id="scan">🔍 Scan this network</button>
+      <span class="mute" id="scanres"></span>
+    </div>
+    <div class="row">
+      <input id="addip" placeholder="Add an IP by hand, e.g. 192.168.1.23" style="flex:1;min-width:200px">
+      <button id="addbtn">Add</button>
+      <button id="autobtn" title="Stop using a chosen address and search automatically">Auto</button>
+    </div>
+    <ul id="known" style="margin-top:10px"></ul>
+    <p class="mute" style="font-size:13px;margin:10px 0 0">The laptop and Pepper must be on the same WiFi. Pepper only joins networks it already knows, which today is just “Tomer Iphone”. See the help note in <code>pepper/dashboard/README.md</code>.</p>
+  </div>
+
+  <div class="card">
+    <textarea id="text" placeholder="Type what Pepper should say, then press Enter (Shift+Enter for a new line). English only."></textarea>
+    <div class="row">
+      <button id="say" class="primary">Speak</button>
+      <button id="stop" class="danger">Stop talking</button>
+      <label><input type="checkbox" id="gestures" checked> Gestures while talking</label>
+    </div>
+    <div class="row chips" id="chips"></div>
+  </div>
+
+  <div class="card">
+    <h2>Body</h2>
+    <div class="row" style="margin-top:0">
+      <button data-act="wave">👋 Wave</button>
+      <button data-act="yes">Nod yes</button>
+      <button data-act="no">Shake no</button>
+      <label style="margin-left:auto">Volume <input type="range" id="vol" min="0" max="100" step="5"> <span id="volv">–</span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Pepper's WiFi networks</h2>
+    <ul id="wifi"><li class="mute">Connect to Pepper to see its networks.</li></ul>
+    <p class="mute" style="font-size:13px;margin:10px 0 0"><span class="tag saved">saved</span> = Pepper remembers it and joins it by itself. Networks out of Pepper's range aren't listed, even when saved.</p>
+  </div>
+
+  <div class="card">
+    <h2>History</h2>
+    <ul id="log"></ul>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const QUICK = ["Hello! I am Pepper.", "Welcome to our lab!", "Nice to meet you.",
+               "Can you please wait a moment?", "Thank you very much!", "Goodbye, see you soon!"];
+let connected = false;
+
+function addLog(msg, err) {
+  const li = document.createElement('li');
+  if (err) li.className = 'err';
+  li.innerHTML = '<span class="t">' + new Date().toLocaleTimeString() + '</span><span></span>';
+  li.lastChild.textContent = msg;
+  $('log').prepend(li);
+}
+
+async function post(path, body) {
+  try {
+    const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body||{})});
+    const j = await r.json();
+    if (!j.ok) addLog('Failed: ' + (j.error || r.status), true);
+    return j.ok;
+  } catch (e) { addLog('Dashboard server not reachable', true); return false; }
+}
+
+async function say(text) {
+  text = (text || '').trim();
+  if (!text) return;
+  if (await post('/api/say', {text, gestures:$('gestures').checked})) addLog('🗣 ' + text);
+}
+
+$('say').onclick = () => { say($('text').value); $('text').value = ''; $('text').focus(); };
+$('text').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('say').click(); }
+});
+$('stop').onclick = async () => { if (await post('/api/stop')) addLog('■ stopped'); };
+QUICK.forEach(q => { const b = document.createElement('button'); b.textContent = q; b.onclick = () => say(q); $('chips').append(b); });
+document.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+  const a = b.dataset.act;
+  const ok = a === 'wave' ? await post('/api/wave') : await post('/api/head', {kind:a});
+  if (ok) addLog(b.textContent.trim());
+});
+let volTimer;
+$('vol').oninput = () => { $('volv').textContent = $('vol').value;
+  clearTimeout(volTimer); volTimer = setTimeout(() => post('/api/volume', {volume:+$('vol').value}), 250); };
+
+async function poll() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    connected = s.connected;
+    $('dot').className = 'dot' + (s.connected ? ' on' : '');
+    $('conn').textContent = s.connected ? 'Pepper connected' : (s.note || 'not connected');
+    $('ip').textContent = s.ip || '–';
+    $('bat').textContent = s.battery == null ? '–' : s.battery + '%' + (s.charging ? ' ⚡ charging' : '');
+    if (s.volume != null && document.activeElement !== $('vol')) { $('vol').value = s.volume; $('volv').textContent = s.volume; }
+    $('net').textContent = s.network || '–';
+    renderKnown(s);
+    serverUp = true;
+  } catch (e) {
+    connected = false; serverUp = false; $('dot').className = 'dot'; $('conn').textContent = 'dashboard server stopped';
+  }
+  document.querySelectorAll('button').forEach(b => {
+    b.disabled = b.closest('#conncard') ? !serverUp : !connected;
+  });
+  if (scanning) $('scan').disabled = true;
+}
+
+let serverUp = false, scanning = false;
+function renderKnown(s) {
+  scanning = s.scan && s.scan.running;
+  $('scan').textContent = scanning ? '⏳ Scanning…' : '🔍 Scan this network';
+  if (s.scan && s.scan.when && !scanning)
+    $('scanres').textContent = 'Last scan ' + s.scan.when + ': ' + s.scan.swept + ' addresses, ' +
+      (s.scan.found.length ? 'Pepper at ' + s.scan.found.join(', ') : 'no Pepper found');
+  $('autobtn').style.display = s.pinned ? '' : 'none';
+  const ul = $('known'); ul.innerHTML = '';
+  if (!s.known.length) { ul.innerHTML = '<li class="mute">No saved addresses yet.</li>'; return; }
+  s.known.forEach(k => {
+    const li = document.createElement('li');
+    if (s.connected && s.ip === k.ip) li.className = 'cur';
+    li.innerHTML = '<span class="name"></span><span class="ip"></span><span class="meta"></span>';
+    li.querySelector('.name').textContent = k.robot || '(unknown)';
+    li.querySelector('.ip').textContent = k.ip;
+    li.querySelector('.meta').textContent = [k.network ? 'WiFi: ' + k.network : '', k.last_seen ? 'seen ' + k.last_seen : 'never seen', k.note].filter(Boolean).join(' · ');
+    const c = document.createElement('button'); c.textContent = 'Connect';
+    c.onclick = async () => { if (await post('/api/connect', {ip:k.ip})) addLog('Connecting to ' + k.ip); poll(); };
+    const f = document.createElement('button'); f.textContent = 'Forget';
+    f.onclick = async () => { if (await post('/api/known/forget', {ip:k.ip})) addLog('Forgot ' + k.ip); poll(); };
+    li.append(c, f); ul.append(li);
+  });
+}
+let lastWifi = 0;
+async function loadWifi(force) {
+  if (!connected) { $('wifi').innerHTML = '<li class="mute">Connect to Pepper to see its networks.</li>'; return; }
+  if (!force && Date.now() - lastWifi < 15000) return;
+  lastWifi = Date.now();
+  try {
+    const j = await (await fetch('/api/wifi')).json();
+    if (!j.ok) throw new Error(j.error);
+    const ul = $('wifi'); ul.innerHTML = '';
+    j.networks.forEach(n => {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="ssid"></span><span class="meta"></span>';
+      li.querySelector('.ssid').textContent = n.name;
+      const live = n.state === 'online' || n.state === 'ready';
+      li.querySelector('.meta').textContent = [n.strength != null ? 'signal ' + n.strength + '%' : '',
+        n.ip ? 'Pepper\'s IP here: ' + n.ip : '', n.security ? [].concat(n.security).join('/') : ''].filter(Boolean).join(' · ');
+      if (live) { const t = document.createElement('span'); t.className = 'tag on'; t.textContent = 'connected'; li.append(t); }
+      if (n.saved) { const t = document.createElement('span'); t.className = 'tag saved'; t.textContent = 'saved'; li.append(t); }
+      ul.append(li);
+    });
+    if (!j.networks.length) ul.innerHTML = '<li class="mute">No WiFi networks in range.</li>';
+  } catch (e) { $('wifi').innerHTML = '<li class="err"></li>'; $('wifi').firstChild.textContent = 'Could not read networks: ' + e.message; }
+}
+setInterval(() => loadWifi(false), 3000);
+$('scan').onclick = async () => { if (await post('/api/scan')) { addLog('Scanning network…'); scanning = true; poll(); } };
+$('addbtn').onclick = async () => { const ip = $('addip').value.trim(); if (!ip) return;
+  if (await post('/api/known/add', {ip})) { addLog('Added ' + ip); $('addip').value = ''; poll(); } };
+$('autobtn').onclick = async () => { if (await post('/api/auto')) addLog('Back to automatic search'); poll(); };
+poll(); setInterval(poll, 3000);
+$('text').focus();
+</script>
+</body>
+</html>

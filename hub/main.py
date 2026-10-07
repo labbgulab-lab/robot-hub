@@ -13,6 +13,7 @@ from typing import Any
 
 import shutil
 import tempfile
+import time
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
@@ -32,6 +33,25 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("hub.main")
+
+
+def _log_to_file() -> None:
+    """The Activity panel lives in memory, so a failed Launch on someone
+    else's laptop left no trace once the window closed (2026-10-06). The same
+    lines go to logs/hub-<date>.log (git-ignored); keys are never logged, only
+    labels. Called from main() only, so tests never write to it."""
+    try:
+        (REPO_ROOT / "logs").mkdir(exist_ok=True)
+        handler = logging.FileHandler(
+            REPO_ROOT / "logs" / time.strftime("hub-%Y-%m-%d.log"), encoding="utf-8")
+    except OSError as exc:
+        log.warning("could not open the hub's log file: %s", exc)
+        return
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s  %(levelname)-7s %(name)-18s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(handler)
+    log.info("hub starting; this log is %s", handler.baseFilename)
 
 # The Furhat detector fingerprints every host on the subnet every few seconds,
 # so httpx at INFO would drown the hub's own log in one line per probe. The
@@ -321,6 +341,7 @@ if WEB_DIR.exists():
 
 def main() -> None:
     import uvicorn
+    _log_to_file()
     uvicorn.run("hub.main:app", host=config.server.host, port=config.server.port,
                 reload=False, log_level="info")
 
