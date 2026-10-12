@@ -35,6 +35,9 @@ log = logging.getLogger("pepper.app")
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "static"
 LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+# Said right before the Walking move (Tomer, 2026-10-12).
+WALK_LINES = {"he": "אני צריך למתוח קצת את הרגליים, יוצא להליכה.",
+              "en": "I need to stretch my legs, going for a walk."}
 TABLET_RESHOW_S = 20.0
 # A fresh laptop gets the setup tested on the robot on 2026-10-12: the scripted
 # demo, Hebrew, ElevenLabs ears and voice ("Laura", a premade ElevenLabs voice).
@@ -463,11 +466,30 @@ class PepperApp:
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(503, "Pepper could not say it: {}".format(exc)) from exc
 
+    async def say_before_walk(self) -> None:
+        """Pepper announces its walk in the conversation's voice (Pepper's own
+        voice has no Hebrew), then walks. Nothing is said while it is charging:
+        the agent refuses the walk then."""
+        if (self.robot.status or {}).get("charging"):
+            raise HTTPException(409, "Pepper is charging: unplug the charger and close the flap, "
+                                     "then press Walking again")
+        text = WALK_LINES["en" if self.cfg.get("language") == "en" else "he"]
+        try:
+            provider, voice = self.voice_now()
+            pcm = await self.speech.synth(text, voice, provider)
+        except Exception as exc:  # noqa: BLE001
+            self.log("WARNING", "motion: could not say the walk line ({}); walking anyway".format(exc))
+            return
+        self.router.play(pcm)
+        self.add_chat("woz", text)
+        await asyncio.sleep(len(pcm) / (24000 * 2))      # walk once the line is said
+
     async def warm_phrases(self) -> None:
         provider, voice = self.voice_now()
         if not (self.eleven_key if provider == "eleven" else self.key):
             return
         self.phrases_ready = await self.speech.warm(voice, QUICK_PHRASES, provider)
+        await self.speech.warm(voice, list(WALK_LINES.values()), provider)
         self.log("INFO", "woz: {} of {} quick phrases ready offline ({}: {})".format(
             self.phrases_ready, len(QUICK_PHRASES), provider, self._voice_name(voice)))
 
@@ -656,6 +678,8 @@ def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> Fas
     @app.post("/api/move")
     async def move(request: Request):
         name = str((await body(request)).get("name", ""))
+        if name == "walk":
+            await P.say_before_walk()
         res = await robot_call("move", name=name)
         P.add_chat("event", "Gesture: {}".format(name))
         P.log("INFO", "motion: {} ({})".format(name, res.get("did", "")))
