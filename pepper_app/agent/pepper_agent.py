@@ -370,6 +370,9 @@ class Agent(object):
             try:
                 mot.wakeUp()
                 mot.moveInit()
+                # Face tracking is paused for the walk, which froze the head wherever it
+                # was looking (up and to the side, 2026-10-12): look straight ahead first.
+                mot.angleInterpolation(["HeadYaw", "HeadPitch"], [0.0, 0.0], [1.0, 1.0], True)
                 for i, (x, y, theta) in enumerate(WALK_LEGS):
                     if self.walk_stop:
                         log("walk: stopped by the operator before leg %d" % (i + 1))
