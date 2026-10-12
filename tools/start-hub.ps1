@@ -31,10 +31,14 @@ try {
 $parent = Split-Path $hub -Parent
 $pointer = Join-Path $parent "CLAUDE.md"
 $labLayout = (Test-Path (Join-Path $parent "reachy_chat")) -or (Test-Path (Join-Path $parent "NAO_LLM"))
-if ($labLayout -and -not (Test-Path $pointer)) {
-    Set-Content -Path $pointer -Encoding UTF8 -Value ('To open the Robot Hub for someone, follow ' +
-        'robot-hub/CLAUDE.md: run robot-hub/tools/start-hub.ps1 in the background, then give ' +
-        'them the link http://127.0.0.1:8099/')
+$pointerText = ('To open the Robot Hub for someone, follow robot-hub/CLAUDE.md: give them the ' +
+    'command "%USERPROFILE%\robot-lab\robot-hub\Start Robot Hub.cmd" to run in their own CMD ' +
+    'window (never run the hub inside Claude: closing Claude would stop it), then give them ' +
+    'the link http://127.0.0.1:8099/')
+# Write it, or replace our own older wording; never touch a CLAUDE.md someone else wrote.
+$ours = (-not (Test-Path $pointer)) -or ((Get-Content $pointer -Raw) -like "To open the Robot Hub*")
+if ($labLayout -and $ours) {
+    Set-Content -Path $pointer -Encoding UTF8 -Value $pointerText
 }
 
 $lnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "Robot Hub.lnk"
