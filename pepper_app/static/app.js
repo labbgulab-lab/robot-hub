@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 // Only movements tested on this Pepper (agent/pepper_agent.py has the exact values).
 const MOVES = [['wave', 'Wave'], ['yes', 'Nod yes'], ['no', 'Shake no'],
                ['arms_up', 'Both arms up'], ['arms_wide', 'Arms wide'], ['right_arm_up', 'Right arm up'],
-               ['left_arm_up', 'Left arm up'], ['hands', 'Open/close hands']];
+               ['left_arm_up', 'Left arm up'], ['hands', 'Open/close hands'], ['walk', 'Walking']];
 const STATE = {
   off: ['IDLE', 'bg-slate-100 text-slate-600'], waiting: ['WAITING FOR ANSWER', 'bg-blue-100 text-blue-700'],
   thinking: ['THINKING', 'bg-amber-100 text-amber-700'],
@@ -348,7 +348,8 @@ $('woz-stop').onclick = () => api('/api/stop_speech');
 
 MOVES.forEach(([name, label]) => {
   const b = document.createElement('button');
-  b.className = 'move'; b.textContent = label;
+  b.className = name === 'walk' ? 'move move-walk' : 'move'; b.textContent = label;
+  if (name === 'walk') b.title = '1 m forward, turn around, 1 m forward, turn around. Unplug the charger first; keep 1.5 m clear.';
   b.onclick = () => api('/api/move', { name });
   $('moves').append(b);
 });

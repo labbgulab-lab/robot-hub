@@ -295,7 +295,7 @@ def test_only_movements_tested_on_this_pepper_are_offered(monkeypatch):
     agent = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(agent)
     assert set(agent.MOVES) == {"wave", "yes", "no", "arms_up", "arms_wide",
-                                "right_arm_up", "left_arm_up", "hands"}
+                                "right_arm_up", "left_arm_up", "hands", "walk"}
     assert agent.ANIMATIONS == {"wave": "animations/Stand/Gestures/Hey_1"}
     from pepper_app.brain import MOVES as AI_MOVES
     assert set(AI_MOVES) <= set(agent.MOVES)

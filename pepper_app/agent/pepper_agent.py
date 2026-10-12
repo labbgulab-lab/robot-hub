@@ -52,7 +52,7 @@ HFOV, VFOV = 1.0367, 0.8063
 # ---------------------------------------------------------------- moves
 # ONLY movements that ran on this Pepper on 2026-10-06, with the exact values
 # that ran (session transcript; profiles/pepper.md C). Nothing else is offered:
-# no other stock animation names, no tags, no Rest, no wheels.
+# no other stock animation names, no tags, no Rest. Wheels only as "walk" (below).
 #   wave       ALAnimationPlayer.run(Hey_1)                       4.4 s
 # explain (Explain_1) and cheer were removed 2026-10-12: Tomer does not like them;
 # explain was also the talking gesture played every 4 s while Pepper spoke.
@@ -76,7 +76,14 @@ ARM_HOLD_S = 1.0
 HEAD_YAW = {"left": 0.5, "center": 0.0, "right": -0.5}
 YES_PITCH = [-0.40, 0.50] * 3 + [0.0]
 NO_YAW = [0.9, -0.9] * 3 + [0.0]
-MOVES = sorted(list(ANIMATIONS) + list(ARM_POSES) + ["yes", "no", "hands"])
+# "walk": a short demo of the wheels (Tomer, 2026-10-12): 1 m forward, turn 180
+# degrees, 1 m forward, turn 180 degrees -- back where it started, facing the
+# same way. Slow, as tested on 2026-10-06 (profiles/pepper.md C, Base/wheels):
+# Pepper keeps 0.40 m from obstacles and stops by itself; it will not drive
+# while charging; basic awareness is paused so it does not turn the base.
+WALK_LEGS = [(1.0, 0.0, 0.0), (0.0, 0.0, 3.14159), (1.0, 0.0, 0.0), (0.0, 0.0, 3.14159)]
+WALK_CONFIG = [["MaxVelXY", 0.2], ["MaxAccXY", 0.2], ["MaxVelTheta", 0.6]]
+MOVES = sorted(list(ANIMATIONS) + list(ARM_POSES) + ["yes", "no", "hands", "walk"])
 
 def log(msg):
     print(time.strftime("%H:%M:%S"), msg)
@@ -303,6 +310,8 @@ class Agent(object):
         self.cam_fps = 2.0
         self.vendor_topics = None
         self.vendor_idle_err = None
+        self.walking = False
+        self.walk_stop = False
         self.webview_url = None
 
     # ---- helpers
@@ -339,6 +348,48 @@ class Agent(object):
                 mot.angleInterpolation("HeadYaw", NO_YAW,
                                        [0.5] + [0.5 + 0.6 * (i + 1) for i in range(len(NO_YAW) - 1)], True)
         self._in_thread(lambda: self._with_awareness_paused(run))
+
+    def _walk(self):
+        """Drive the walk legs in a thread. Refuses while charging; stops the
+        whole walk when a leg fails (an obstacle) or Stop is pressed."""
+        p = self.p
+        try:
+            charging = p["ALMemory"].getData("Device/SubDeviceList/Battery/Current/Sensor/Value") > 0.5
+        except Exception:
+            charging = False
+        if charging:
+            raise RuntimeError("Pepper is charging: unplug the charger and close the flap, "
+                               "then press Walking again")
+        if self.walking:
+            raise RuntimeError("Pepper is already walking")
+        mot = p["ALMotion"]
+        self.walking, self.walk_stop = True, False
+        self.motion_busy_until = time.time() + 60.0
+
+        def run():
+            try:
+                mot.wakeUp()
+                mot.moveInit()
+                for i, (x, y, theta) in enumerate(WALK_LEGS):
+                    if self.walk_stop:
+                        log("walk: stopped by the operator before leg %d" % (i + 1))
+                        return
+                    if not mot.moveTo(x, y, theta, WALK_CONFIG):
+                        try:
+                            why = p["ALMemory"].getData("ALMotion/MoveFailed")
+                        except Exception:
+                            why = "?"
+                        log("walk: leg %d of %d did not finish (%s); stopping the walk"
+                            % (i + 1, len(WALK_LEGS), why))
+                        return
+                log("walk: done")
+            except Exception as e:
+                log("walk: %s" % last_line(e))
+            finally:
+                self.walking = False
+                self.motion_busy_until = time.time() + 1.0
+        self._in_thread(lambda: self._with_awareness_paused(run))
+        return "walk (1 m, turn, 1 m, turn)"
 
     def _arms(self, name):
         mot, pos = self.p["ALMotion"], self.p["ALRobotPosture"]
@@ -394,6 +445,8 @@ class Agent(object):
         name = m.get("name")
         if name not in MOVES:
             raise RuntimeError("%r is not one of the movements tested on this robot" % name)
+        if name == "walk":
+            return {"did": self._walk()}
         self.motion_busy_until = time.time() + 5.0
         if name in ANIMATIONS:
             return {"did": self._anim(name)}
@@ -423,6 +476,7 @@ class Agent(object):
         self.p["ALRobotPosture"].post.goToPosture("StandInit", 0.4)
 
     def cmd_stop_motion(self, m):
+        self.walk_stop = True
         if self.anim_id is not None:
             try:
                 self.p["ALAnimationPlayer"].stop(self.anim_id)
