@@ -22,7 +22,7 @@ var PepperScreen = (function () {
     '.ps-cell span{font-size:6em;line-height:1.6}' +
     '.ps-sub{font-size:2.4em;opacity:.7;margin-top:.4em}' +
     '.ps-msg{font-size:4.2em;font-weight:600;line-height:1.25;margin-top:.3em;max-width:90%}' +
-    '.ps-choice{position:absolute;top:0;left:0;right:0;bottom:0;padding:2.5em 2.5em 8em;display:-webkit-box;display:-webkit-flex;display:flex;' +
+    '.ps-choice{position:absolute;top:0;left:0;right:0;bottom:0;padding:2.5em 2.5em 12em;display:-webkit-box;display:-webkit-flex;display:flex;' +
     '-webkit-flex-direction:column;flex-direction:column}' +
     '.ps-q{text-align:center;font-weight:700;font-size:3.8em;margin-bottom:.5em}' +
     '.ps-opts{-webkit-box-flex:1;-webkit-flex:1;flex:1;display:-webkit-box;display:-webkit-flex;display:flex}' +
@@ -44,7 +44,7 @@ var PepperScreen = (function () {
     // (Tomer chose it from data/logo-preview/preview.html, 2026-10-12). Taps pass through.
     '.ps-logo{position:absolute;left:50%;bottom:.9em;-webkit-transform:translateX(-50%);transform:translateX(-50%);' +
     'background:#fff;border-radius:1em;padding:.4em .9em;box-shadow:0 .1em .5em rgba(0,0,0,.15);pointer-events:none}' +
-    '.ps-logo img{display:block;height:5.2em;width:auto}';
+    '.ps-logo img{display:block;height:9.1em;width:auto}';   // 75% bigger than 5.2em (Tomer, 2026-10-12)
   var LOGO = '<div class="ps-logo"><img src="/screen/logo.png" alt=""></div>';
 
   function addCss() {
