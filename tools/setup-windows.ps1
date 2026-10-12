@@ -145,8 +145,8 @@ Write-Host @"
    Now put the keys in (see API-KEYS.md in the kit):
      $hub\.env            FURHAT_PASSWORD=...
      $Root\NAO_LLM\.env   GROK_API_KEY=...  OPENAI_API_KEY=...
-   Start the hub:
-     cd $hub ; .\run.ps1
+   Start the hub: double-click "Start Robot Hub.cmd" in $hub
+   (its first run also puts a "Robot Hub" shortcut on the desktop).
    Then, on the page: Speaking keys -> add the Gemini / OpenAI / ElevenLabs keys,
    and Network setup -> check the hotspot.
 "@ -ForegroundColor Green

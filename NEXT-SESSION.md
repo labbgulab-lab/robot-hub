@@ -73,6 +73,12 @@ On 2026-10-05 neither NAO nor Furhat had it saved.
 
 ## Run it
 
+Double-click **`Start Robot Hub.cmd`** (or the "Robot Hub" desktop shortcut it
+makes on its first run). It pulls the latest code (robot-hub, plus reachy_chat
+and NAO_LLM beside it), installs packages only when requirements.txt changed,
+starts the hub and opens the page. If the hub is already running it only opens
+the page. A Claude session opening the hub for someone: see CLAUDE.md.
+
 ```powershell
 cd $HOME\Desktop\job\robot-hub
 .\run.ps1              # venv, deps, server, opens http://127.0.0.1:8099/

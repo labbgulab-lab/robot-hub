@@ -18,6 +18,18 @@ if (-not (Test-Path $py)) {
     & $py -m pip install -r requirements.txt
 }
 
+# After a `git pull` that changed requirements.txt, install what it added; this
+# runs once per change, so a pull alone keeps the hub working (2026-10-12).
+$req   = Join-Path $PSScriptRoot "requirements.txt"
+$stamp = Join-Path $venv ".requirements.sha256"
+$hash  = (Get-FileHash $req -Algorithm SHA256).Hash
+if (-not (Test-Path $stamp) -or (Get-Content $stamp -Raw).Trim() -ne $hash) {
+    Write-Host "Checking the hub's Python packages ..." -ForegroundColor Cyan
+    & $py -m pip install -r $req --quiet --disable-pip-version-check
+    if ($LASTEXITCODE -eq 0) { Set-Content -Path $stamp -Value $hash }
+    else { Write-Host "Could not install the packages (internet?) - starting anyway." -ForegroundColor Yellow }
+}
+
 if (-not (Test-Path (Join-Path $PSScriptRoot "config.toml"))) {
     Write-Host "No config.toml - using config.example.toml. Copy and edit it to set your paths." -ForegroundColor Yellow
 }
