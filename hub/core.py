@@ -302,12 +302,13 @@ class Hub:
                 return
             if r.state in (R.ABSENT, R.DISABLED, R.CONNECTING) or key in self._busy:
                 continue
+            bound = getattr(adapter, "probe_timeout_s", PROBE_TIMEOUT_S)
             try:
                 health = await asyncio.wait_for(
-                    adapter.probe(self.found.get(key, adapter.found)), PROBE_TIMEOUT_S)
+                    adapter.probe(self.found.get(key, adapter.found)), bound)
             except asyncio.TimeoutError:
                 health = {"online": False, "degraded": True,
-                          "detail": "no answer within {:.0f} s".format(PROBE_TIMEOUT_S),
+                          "detail": "no answer within {:.0f} s".format(bound),
                           "battery": None}
             except Exception as exc:  # noqa: BLE001
                 health = {"online": False, "degraded": True,
@@ -422,8 +423,13 @@ class Hub:
             self._flush_notes(r.name, adapter)
 
             # The announcement is proof the link is real -- but its failure
-            # must never fail the connection (8).
+            # must never fail the connection (8). An auto-reconnect stays
+            # silent: on 2026-10-12 Pepper said its line mid-demo after a
+            # slow probe.
             text = self.config.robot(r.type_id).announcement(r.name)
+            if reason == "auto-reconnect":
+                self._backoff.pop(key, None)
+                return {"ok": True}
             try:
                 await asyncio.wait_for(adapter.announce(text), ANNOUNCE_TIMEOUT_S)
                 self.registry.upsert(key, can_speak=True)

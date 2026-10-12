@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pepper Operator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- From 1280px wide the page is exactly one screen: only the chat, the log
+     and the phrase list scroll, each inside its own card. -->
+<style>
+  .card { background:#fff; border:1px solid rgb(226 232 240); border-radius:8px;
+          box-shadow:0 1px 2px rgba(0,0,0,.04); padding:.55rem .75rem; }
+  .card-title { font-size:.68rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:rgb(100 116 139); }
+  .dot { width:.6rem; height:.6rem; border-radius:9999px; display:inline-block; flex:0 0 auto; background:rgb(148 163 184); }
+  .dot.ok { background:rgb(22 163 74); box-shadow:0 0 0 3px rgb(22 163 74 / .15); }
+  .dot.bad { background:rgb(220 38 38); box-shadow:0 0 0 3px rgb(220 38 38 / .15); }
+  .dot.warn { background:rgb(217 119 6); box-shadow:0 0 0 3px rgb(217 119 6 / .15); }
+  .btn { font-size:.8rem; padding:.3rem .6rem; border-radius:6px; font-weight:500; white-space:nowrap;
+         transition:background-color 120ms, opacity 120ms; }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-slate { background:rgb(241 245 249); border:1px solid rgb(203 213 225); color:rgb(51 65 85); }
+  .btn-slate:not(:disabled):hover { background:rgb(226 232 240); }
+  .btn-primary { background:rgb(37 99 235); color:#fff; }
+  .btn-primary:not(:disabled):hover { background:rgb(29 78 216); }
+  .btn-danger { background:rgb(220 38 38); color:#fff; }
+  .btn-danger:not(:disabled):hover { background:rgb(185 28 28); }
+  .btn-woz { background:rgb(124 58 237); color:#fff; }
+  .btn-woz:not(:disabled):hover { background:rgb(109 40 217); }
+  .btn-xs { font-size:.72rem; padding:.15rem .45rem; }
+  .field { border:1px solid rgb(203 213 225); border-radius:6px; padding:.25rem .4rem; font-size:.8rem; background:#fff; min-width:0; }
+  .pill { display:flex; align-items:center; gap:.45rem; font-size:.78rem; padding:.25rem .65rem; border-radius:9999px;
+          border:1px solid rgb(226 232 240); background:rgb(248 250 252); white-space:nowrap; }
+  .pill.bad { border-color:rgb(252 165 165); background:rgb(254 242 242); color:rgb(153 27 27); }
+  .pill.warn { border-color:rgb(252 211 77); background:rgb(255 251 235); color:rgb(146 64 14); }
+  .pill .sub { color:rgb(100 116 139); max-width:15rem; overflow:hidden; text-overflow:ellipsis; }
+  .pill.bad .sub { color:rgb(185 28 28); }
+  .tog { font-size:.75rem; padding:.2rem .5rem; border-radius:9999px; border:1px solid rgb(203 213 225); color:rgb(100 116 139); background:#fff; }
+  .tog.on { border-color:rgb(134 239 172); background:rgb(240 253 244); color:rgb(21 128 61); }
+  .chip { font-size:.76rem; padding:.22rem .5rem; border-radius:6px; border:1px solid rgb(221 214 254);
+          background:rgb(245 243 255); color:rgb(76 29 149); text-align:start;
+          white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .chip:hover { background:rgb(237 233 254); }
+  .chip .lang { font-size:.58rem; font-weight:700; color:rgb(139 92 246); margin-inline-end:.3rem; }
+  .move { display:flex; align-items:center; justify-content:center; font-size:.72rem; padding:.45rem .1rem;
+          border-radius:6px; border:1px solid rgb(203 213 225); background:rgb(248 250 252); color:rgb(51 65 85); min-width:0; }
+  .move:not(:disabled):hover { background:rgb(226 232 240); }
+  .move:disabled { opacity:.45; cursor:not-allowed; }
+  .pad button { width:1.6rem; height:1.6rem; border-radius:5px; border:1px solid rgb(203 213 225); background:rgb(248 250 252); font-size:.65rem; }
+  .pad button:not(:disabled):hover { background:rgb(226 232 240); }
+  .pad button:disabled { opacity:.45; }
+  .bubble { max-width:85%; padding:.4rem .65rem; border-radius:10px; font-size:.86rem; line-height:1.35; animation:pop 180ms ease-out; white-space:pre-wrap; }
+  .bubble .who { font-size:.6rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; opacity:.65; }
+  .b-pepper { background:rgb(241 245 249); align-self:flex-start; border-top-left-radius:3px; }
+  .b-pepper.partial { opacity:.75; }
+  .b-user { background:rgb(37 99 235); color:#fff; align-self:flex-end; border-top-right-radius:3px; }
+  .b-woz { background:rgb(245 243 255); border:1px dashed rgb(167 139 250); align-self:flex-start; border-top-left-radius:3px; }
+  .b-event { align-self:center; font-size:.72rem; padding:.15rem .6rem; border-radius:9999px; background:rgb(254 243 199); color:rgb(146 64 14); animation:pop 180ms ease-out; }
+  .b-event.tap { background:rgb(220 252 231); color:rgb(22 101 52); }
+  .b-heard { align-self:flex-end; font-size:.75rem; padding:.2rem .5rem; border-radius:8px; border:1px dashed rgb(203 213 225);
+             color:rgb(100 116 139); display:flex; align-items:center; gap:.4rem; max-width:85%; }
+  .b-heard .t { font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @keyframes pop { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+  .log-INFO { color:rgb(51 65 85); } .log-WARNING { color:rgb(217 119 6); } .log-ERROR, .log-CRITICAL { color:rgb(220 38 38); }
+  .fit { container-type:size; flex:1 1 0; min-height:0; display:flex; align-items:center; justify-content:center; }
+  .cam { position:relative; width:min(100cqw, 133.33cqh); aspect-ratio:4/3; border-radius:6px; overflow:hidden; background:#0f172a; }
+  .tablet { background:#111827; border-radius:10px; padding:6px; box-shadow:inset 0 0 0 2px #374151;
+            width:min(100cqw, calc((100cqh - 12px) * 1.6 + 12px)); }
+  .tablet-screen { aspect-ratio:1280/800; border-radius:3px; overflow:hidden; position:relative; background:#fff; }
+  .thumb { flex:0 0 auto; width:4.6rem; aspect-ratio:1280/800; border-radius:4px; border:2px solid rgb(226 232 240); overflow:hidden; cursor:pointer;
+           background:#000; position:relative; }
+  .thumb.on { border-color:rgb(37 99 235); }
+  .thumb img { width:100%; height:100%; object-fit:contain; }
+  .thumb .n { position:absolute; left:2px; top:0; font-size:.55rem; color:#fff; text-shadow:0 0 2px #000; }
+  .dropping { outline:3px dashed rgb(37 99 235); outline-offset:-3px; background:rgb(239 246 255); }
+  .flash { animation:flash 1.2s ease-out 2; }
+  @keyframes flash { 0%,100% { box-shadow:0 1px 2px rgba(0,0,0,.04); } 40% { box-shadow:0 0 0 4px rgb(167 139 250 / .55); } }
+  .live { animation:blink 1.6s infinite; }
+  @keyframes blink { 50% { opacity:.35; } }
+  .wave span { display:inline-block; width:3px; margin:0 1px; background:currentColor; border-radius:2px; animation:wave 900ms ease-in-out infinite; }
+  @keyframes wave { 0%,100% { height:4px; } 50% { height:12px; } }
+  .scroll-thin::-webkit-scrollbar { width:6px; height:6px; } .scroll-thin::-webkit-scrollbar-thumb { background:rgb(203 213 225); border-radius:3px; }
+  #toast { transition:opacity 200ms; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 xl:h-screen flex flex-col xl:overflow-hidden">
+
+<!-- ===== Title bar: both connection points, volume, emergency stop ===== -->
+<header class="px-4 py-2 bg-white border-b border-slate-200 shadow-sm flex flex-wrap items-center gap-x-3 gap-y-1.5 shrink-0">
+  <h1 class="text-base font-semibold tracking-tight whitespace-nowrap">Pepper <span class="text-slate-400 font-normal">Operator</span></h1>
+  <span id="robot-pill" class="pill"><span id="robot-dot" class="dot"></span><b>Robot</b><span id="robot-sub" class="sub">connecting…</span></span>
+  <span id="screen-pill" class="pill" title="Pepper's chest tablet: the only thing the people in front of Pepper see">
+    <span id="screen-dot" class="dot"></span><b>Screen</b><span id="screen-sub" class="sub">waiting for the tablet…</span>
+    <button id="screen-fix" class="hidden btn btn-slate btn-xs needs-robot">Reload</button>
+  </span>
+  <label class="flex items-center gap-1.5 text-xs text-slate-500" title="Pepper's speaker volume">
+    Volume <input id="vol" type="range" min="0" max="100" step="5" value="50" class="w-20 accent-blue-600 needs-robot">
+    <span id="volv" class="font-mono w-7 text-slate-700">–</span>
+  </label>
+  <span id="nokey" class="hidden text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5">
+    No OpenAI key · add a GPT key in the hub</span>
+  <button id="estop" class="btn btn-danger ml-auto" title="Stops speech, motion and the AI at once">Stop everything</button>
+</header>
+
+<!-- AI failure banner: floats over the page so it never pushes the layout -->
+<div id="ai-banner" class="hidden fixed z-30 left-1/2 -translate-x-1/2 top-14 px-4 py-2 rounded-lg bg-red-50 border border-red-300 shadow-lg text-red-800 text-sm flex items-center gap-3">
+  <span class="dot bad"></span>
+  <span><b>The AI stopped answering.</b> Speak for Pepper from <b>Wizard of Oz</b>.</span>
+  <button id="ai-restart" class="btn btn-slate btn-xs">Restart AI</button>
+</div>
+<div id="toast" class="hidden fixed z-40 right-4 bottom-4 max-w-md px-3 py-2 rounded-lg shadow-lg text-sm bg-slate-800 text-white"></div>
+
+<main class="flex-1 min-h-0 p-3 grid gap-3 grid-cols-1 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_minmax(0,1.1fr)]">
+
+  <!-- ================= COLUMN 1: run the session ================= -->
+  <section class="flex flex-col gap-3 min-h-0 min-w-0">
+
+    <div class="card shrink-0">
+      <div class="flex items-center gap-2">
+        <div class="card-title">Conversation</div>
+        <span id="state" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">IDLE</span>
+        <span id="model" class="text-[11px] text-slate-400">GPT Realtime 2.1</span>
+        <span class="ml-auto text-[11px] text-slate-500">Step <b id="step" class="text-slate-700">–</b></span>
+      </div>
+      <select id="exp" class="field w-full mt-1.5" title="Experience"></select>
+      <div class="flex gap-1.5 mt-1.5">
+        <select id="engine" class="field flex-1" title="How Pepper hears and speaks. ElevenLabs: Hebrew-strong ears and voice, GPT still decides what to say."></select>
+        <select id="lang" class="field" title="Language">
+          <option value="auto">Auto lang</option><option value="en">English</option><option value="he">Hebrew</option>
+        </select>
+      </div>
+      <div class="flex gap-1.5 mt-1.5">
+        <select id="voice" class="field flex-1" title="Pepper's voice (the AI and Wizard of Oz)"></select>
+      </div>
+      <div class="flex flex-wrap gap-1.5 mt-1.5">
+        <button class="tog" data-opt="vision" title="The AI sees what Pepper's camera sees">Vision</button>
+        <button class="tog" data-opt="ai_screen" title="The AI shows choices and slides on the screen by itself">AI drives screen</button>
+        <button class="tog" data-opt="gestures" title="The AI may wave and nod while it talks">Gestures</button>
+      </div>
+      <div class="flex items-center gap-2 mt-2">
+        <button id="convbtn" class="btn btn-primary flex-1 !py-1.5 !text-sm">Start conversation</button>
+        <button id="resume" class="hidden btn btn-woz !py-1.5" title="Hand the conversation back to the AI">Resume AI</button>
+        <span class="text-[11px] text-slate-500 leading-4 text-right">
+          <b id="turns" class="text-slate-700">0</b> turns · <b id="clock" class="font-mono text-slate-700">00:00</b><br><span id="latency">–</span>
+        </span>
+      </div>
+      <!-- Strict turns: Pepper waits for an answer; the operator can nudge it. -->
+      <div id="turnrow" class="hidden mt-2 pt-2 border-t border-slate-200 flex items-center gap-1.5">
+        <span id="turninfo" class="text-[11px] text-slate-600 flex-1 truncate"></span>
+        <button id="t-repeat" class="btn btn-slate btn-xs" title="Pepper asks its question again">Repeat question</button>
+        <button id="t-skip" class="btn btn-slate btn-xs" title="Pepper says it is fine and moves to the next step">Skip</button>
+      </div>
+    </div>
+
+    <div id="woz-speech" class="card flex flex-col flex-1 min-h-[170px]">
+      <div class="flex items-center gap-2 shrink-0">
+        <div class="card-title">Wizard of Oz · Say</div>
+        <span id="phrases-ready" class="text-[10px] text-slate-400"></span>
+        <label class="ml-auto flex items-center gap-1 text-[11px] text-slate-600" title="The AI stops and waits until you press Resume AI">
+          <input id="pause-ai" type="checkbox" class="accent-violet-600"> pause AI</label>
+        <label class="flex items-center gap-1 text-[11px] text-slate-600" title="So the AI knows what Pepper said when it comes back">
+          <input id="tell-ai" type="checkbox" class="accent-violet-600"> tell AI</label>
+      </div>
+      <div id="phrases" class="mt-1.5 flex-1 min-h-0 overflow-y-auto scroll-thin grid grid-cols-2 auto-rows-max gap-1 content-start pr-0.5"></div>
+      <div class="mt-1.5 flex gap-1.5 shrink-0">
+        <textarea id="woz-text" rows="2" dir="auto" class="field flex-1 resize-none"
+          placeholder="English or Hebrew… Enter = talk, Shift+Enter = new line"></textarea>
+        <div class="flex flex-col gap-1">
+          <button id="woz-say" class="btn btn-woz flex-1">Talk</button>
+          <button id="woz-stop" class="btn btn-slate btn-xs">Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="woz-move" class="card shrink-0">
+      <div class="flex items-center gap-2">
+        <div class="card-title">Wizard of Oz · Move</div>
+        <button id="stop-motion" class="btn btn-slate btn-xs ml-auto needs-robot">Stop motion</button>
+      </div>
+      <!-- Only movements that ran on this Pepper on 2026-10-06 (agent/pepper_agent.py). -->
+      <div id="moves" class="mt-1.5 grid grid-cols-5 gap-1"></div>
+      <div class="mt-1.5 flex flex-wrap items-center gap-1">
+        <span class="text-[11px] text-slate-500 mr-0.5">Head</span>
+        <button class="btn btn-slate btn-xs needs-robot" data-head="left" title="Look left (0.5 rad)"><svg viewBox="0 0 10 10" class="w-2.5 h-2.5 inline -mt-0.5"><path d="M7 1 3 5 7 9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg> Left</button>
+        <button class="btn btn-slate btn-xs needs-robot" data-head="center" title="Look straight ahead">Center</button>
+        <button class="btn btn-slate btn-xs needs-robot" data-head="right" title="Look right (0.5 rad)">Right <svg viewBox="0 0 10 10" class="w-2.5 h-2.5 inline -mt-0.5"><path d="M3 1 7 5 3 9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+        <span class="w-2"></span>
+        <button class="btn btn-slate btn-xs needs-robot" data-posture="stand" title="Back to the standing pose (StandInit)">Stand</button>
+        <button id="tracking" class="btn btn-slate btn-xs needs-robot" title="Pepper turns its head toward faces">Face tracking: on</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= COLUMN 2: what is happening ================= -->
+  <section class="flex flex-col gap-3 min-h-0 min-w-0 max-xl:h-[720px]">
+    <div class="card flex flex-col flex-[3] min-h-0">
+      <div class="flex items-center justify-between shrink-0">
+        <div class="card-title">Live conversation</div>
+        <span id="mic" class="text-xs text-slate-400 flex items-center gap-2"></span>
+      </div>
+      <div id="chat" class="mt-2 flex-1 min-h-0 overflow-y-auto scroll-thin flex flex-col gap-2 pr-1"></div>
+    </div>
+    <div class="card flex flex-col flex-[2] min-h-0">
+      <div class="flex items-center justify-between shrink-0">
+        <div class="card-title">Event log</div>
+        <div class="flex items-center gap-2">
+          <span id="copied" class="text-xs text-slate-400"></span>
+          <button id="copy" class="btn btn-slate btn-xs">Copy logs</button>
+        </div>
+      </div>
+      <div id="log" class="mt-1.5 flex-1 min-h-0 overflow-y-auto scroll-thin font-mono text-[11px] leading-[18px] bg-slate-50 rounded p-2 whitespace-pre-wrap break-words"></div>
+    </div>
+  </section>
+
+  <!-- ================= COLUMN 3: what Pepper sees and shows ================= -->
+  <section class="flex flex-col gap-3 min-h-0 min-w-0 lg:col-span-2 xl:col-span-1 max-xl:h-[760px]">
+
+    <div class="card flex flex-col flex-[4] min-h-0">
+      <div class="flex items-center gap-2 shrink-0">
+        <div class="card-title">Pepper's camera</div>
+        <span id="vision-tag" class="text-[11px] text-slate-400 truncate"></span>
+        <select id="camsel" class="field ml-auto !py-0 !text-[11px] needs-robot"><option value="0">Top</option><option value="1">Bottom</option></select>
+        <label class="flex items-center gap-1 text-[11px] text-slate-600"><input id="ovl" type="checkbox" checked class="accent-blue-600"> faces</label>
+        <button id="snap" class="btn btn-slate btn-xs" title="Save this frame">Save</button>
+      </div>
+      <div class="fit mt-1.5">
+        <div class="cam">
+          <img id="camimg" class="absolute inset-0 w-full h-full object-contain hidden" alt="">
+          <svg id="faces" class="absolute inset-0 w-full h-full" viewBox="0 0 320 240" preserveAspectRatio="xMidYMid meet"></svg>
+          <div id="camnone" class="absolute inset-0 flex items-center justify-center text-slate-400 text-xs text-center p-3">No camera picture yet</div>
+          <div id="camlive" class="hidden absolute left-1.5 top-1.5 flex items-center gap-1 text-[10px] font-semibold text-white bg-black/50 rounded px-1.5 py-0.5">
+            <span class="dot bad live !w-1.5 !h-1.5"></span> <span id="caminfo">LIVE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="screen-card" class="card flex flex-col flex-[6] min-h-0">
+      <div class="flex items-center gap-2 shrink-0">
+        <div class="card-title whitespace-nowrap">On Pepper's screen</div>
+        <span id="shown-by" class="text-[11px] text-slate-400 whitespace-nowrap"></span>
+        <span id="lasttap" class="ml-auto text-[11px] text-slate-500 truncate">click an option = tap for them</span>
+        <button id="emoji-test" class="btn btn-slate btn-xs" title="Show every candidate emoji on Pepper's screen, numbered, to see which ones the tablet can draw">Emoji test</button>
+        <button id="emoji-mark" class="hidden btn btn-slate btn-xs" title="Type the numbers that show as empty boxes on the tablet">Mark broken</button>
+      </div>
+      <div class="fit mt-1.5">
+        <div class="tablet relative">
+          <div id="screen" class="tablet-screen"></div>
+          <div id="screen-off" class="hidden absolute inset-0 rounded-[10px] bg-slate-900/75 text-white text-sm flex flex-col items-center justify-center text-center p-3">
+            <b>Screen not connected</b><span class="text-xs opacity-80">People in front of Pepper see nothing</span>
+          </div>
+        </div>
+      </div>
+      <div class="mt-1.5 flex items-center gap-1.5 shrink-0">
+        <select id="deck" class="field flex-1" title="Presentation"></select>
+        <button id="deck-del" class="btn btn-slate btn-xs" title="Delete this presentation">Delete</button>
+        <button id="prev" class="btn btn-slate btn-xs" title="Previous slide"><svg viewBox="0 0 10 10" class="w-2.5 h-2.5 mx-auto"><path d="M7 1 3 5 7 9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+        <span id="slide-n" class="text-[11px] text-slate-500 w-8 text-center">–</span>
+        <button id="next" class="btn btn-slate btn-xs" title="Next slide"><svg viewBox="0 0 10 10" class="w-2.5 h-2.5 mx-auto"><path d="M3 1 7 5 3 9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+        <button id="welcome" class="btn btn-slate btn-xs" title="Pepper's welcome screen">Home</button>
+        <button id="blank" class="btn btn-slate btn-xs" title="Black screen">Clear</button>
+        <label class="btn btn-slate btn-xs cursor-pointer" title="Images or a PDF; each becomes a slide. You can also drop files on this card.">
+          Upload<input id="file" type="file" accept="image/*,.pdf" multiple class="hidden"></label>
+      </div>
+      <div id="thumbs" class="mt-1.5 flex gap-1.5 overflow-x-auto scroll-thin shrink-0 pb-0.5 min-h-[3rem]"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/screen-render.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

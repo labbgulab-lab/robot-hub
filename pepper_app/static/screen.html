@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Pepper</title>
+<style>
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#fff; }
+  #box { position:absolute; top:0; left:0; right:0; bottom:0; }
+  /* Only a small dot: the people in front of Pepper should not read errors. */
+  #lost { position:absolute; right:10px; bottom:10px; width:14px; height:14px; border-radius:7px;
+          background:#dc2626; display:none; }
+</style>
+</head>
+<body>
+<div id="box"></div>
+<div id="lost"></div>
+<script src="/screen/render.js"></script>
+<script>
+/* Pepper's chest tablet. ES5 only (old Android WebView). Every poll is also
+   the heartbeat the operator dashboard uses to show "Screen connected". */
+(function () {
+  var box = document.getElementById('box'), lost = document.getElementById('lost');
+  var state = null, failSince = 0;
+
+  function get(url, cb) {
+    var x = new XMLHttpRequest();
+    x.open('GET', url, true);
+    x.timeout = 3000;
+    x.onload = function () { try { cb(null, JSON.parse(x.responseText)); } catch (e) { cb(e); } };
+    x.onerror = x.ontimeout = function () { cb(new Error('net')); };
+    x.send();
+  }
+
+  function draw() { PepperScreen.render(box, state, tap); }
+
+  function tap(i) {
+    if (!state || state.picked) return;
+    var o = state.item && state.item.options && state.item.options[i];
+    if (!o) return;
+    state.picked = o.label;            // show it at once; the server confirms
+    draw();
+    var x = new XMLHttpRequest();
+    x.open('POST', '/screen/tap', true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.send(JSON.stringify({v: state.v, i: i}));
+  }
+
+  function poll() {
+    get('/screen/state?tablet=1&t=' + Date.now(), function (err, s) {
+      if (err) {
+        if (!failSince) failSince = Date.now();
+        lost.style.display = Date.now() - failSince > 3000 ? 'block' : 'none';
+      } else {
+        failSince = 0;
+        lost.style.display = 'none';
+        if (!state || s.v !== state.v) { state = s; draw(); }
+      }
+      setTimeout(poll, 500);
+    });
+  }
+
+  window.onresize = function () { if (state) draw(); };
+  state = {v: 0, item: {kind: 'welcome'}};
+  draw();
+  poll();
+})();
+</script>
+</body>
+</html>

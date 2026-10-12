@@ -103,3 +103,7 @@ announce = "I am Pepper, I am connected and ready to run."
   [robots.pepper.settings]
   # Python 2.7 and the pynaoqi SDK come from [robots.naoqi.settings]; set
   # them here only to use different ones. Pepper listens on its own mics.
+  # Launch opens pepper_app (GPT Realtime 2.1 + Wizard of Oz + chest screen)
+  # and starts its agent on the robot over SSH; the login is nao/nao unless set:
+  # ssh_user = "nao"
+  # ssh_password = "nao"

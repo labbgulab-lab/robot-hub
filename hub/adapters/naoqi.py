@@ -268,6 +268,9 @@ _HOST_META_KEYS = ("hostname", "server", "instance", "name")
 
 class NaoqiAdapter(RobotAdapter):
     type_id = "naoqi"
+    # Each probe starts a Python 2.7 helper and a new broker session; 6 s was
+    # missed now and then with pepper_app running (2026-10-12).
+    probe_timeout_s = 15.0
     display_name = "NAOqi"
     reports_battery = True      # the only robot of the four that reports one
     postures = tuple(POSTURE_DONE)
@@ -781,10 +784,12 @@ def _whisper_cached(model: str) -> bool:
     return any(snapshots.glob("*/model.bin"))
 
 
-# Pepper's Say-It dashboard (robot-hub/pepper_dashboard): Python 2.7 + pynaoqi,
-# standard library only, fixed on 127.0.0.1:8780, robot address as argv[1].
+# Pepper's operator dashboard (robot-hub/pepper_app): Python 3 under the hub's
+# own interpreter, on 0.0.0.0:8780 (the chest tablet loads its page from there;
+# the controls answer this laptop only). It starts its own agent on the robot.
 PEPPER_DASHBOARD_PORT = 8780
 PEPPER_DASHBOARD_WAIT_S = 30.0
+PEPPER_SHUTDOWN_WAIT_S = 20.0
 
 
 class PepperAdapter(NaoqiAdapter):
@@ -793,19 +798,22 @@ class PepperAdapter(NaoqiAdapter):
 
     What differs is what it must *not* do. It has no Sit or Lying postures,
     so no posture buttons. It listens on its own four microphones, so it
-    claims nothing on this laptop. Its Launch is the Say-It dashboard, under
-    the same Python 2.7 and SDK, and never NAO's clean-up, which would kill a
-    NAO's NAO_LLM running beside it.
+    claims nothing on this laptop. Its Launch is pepper_app -- GPT Realtime
+    conversation, Wizard of Oz, camera, chest screen -- and never NAO's
+    clean-up, which would kill a NAO's NAO_LLM running beside it.
 
     Settings, in [robots.pepper.settings]:
-        dashboard_path  the dashboard folder; default robot-hub/pepper_dashboard
-                        (then ../pepper/dashboard, where the USB kit put it)
+        ssh_user / ssh_password   for starting the agent on the robot (nao/nao)
     """
 
     type_id = "pepper"
     display_name = "Pepper"
     postures = ()
     launch_timeout_s = PEPPER_DASHBOARD_WAIT_S + 30
+    # The hub hands over its GPT key at Launch (hub/core.py).
+    uses_speech_key = True
+    credential: Optional[dict] = None
+    provider_env: Optional[dict] = None
 
     def stable_key(self, found: Found) -> str:
         key = super().stable_key(found)
@@ -817,34 +825,36 @@ class PepperAdapter(NaoqiAdapter):
     async def ensure_zero_instances(self) -> list[str]:
         return []
 
-    def _dashboard(self) -> Path:
-        folder = self.config.path(self.type_id, "dashboard_path")
-        if folder is None:
-            # In this repo since 2026-10-07, so a clone has it; before that it
-            # only existed on the USB kit, copied next to robot-hub.
-            candidates = [self.config.repo_root / "pepper_dashboard",
-                          (self.config.repo_root / ".." / "pepper" / "dashboard").resolve()]
-            folder = next((c for c in candidates
-                           if (c / "pepper_dashboard.py").is_file()), candidates[0])
-        script = folder / "pepper_dashboard.py"
-        if not script.is_file():
-            raise AdapterUnavailable(
-                "Pepper's dashboard is not at {} -- set dashboard_path in "
-                "[robots.pepper.settings]".format(folder))
-        return script
+    def _app_env(self) -> dict[str, str]:
+        overrides = {"PYTHONIOENCODING": "utf-8",
+                     "PYTHONPATH": str(self.config.repo_root)}
+        overrides.update(self.provider_env or {})
+        user = self.settings.get("ssh_user")
+        password = (self.settings.get("ssh_password")
+                    or self.config.secret("NAO_SSH_PASSWORD"))
+        if user:
+            overrides["PEPPER_SSH_USER"] = str(user)
+        if password:
+            overrides["PEPPER_SSH_PASSWORD"] = str(password)
+        return child_env(overrides=overrides)
 
     async def launch(self) -> str:
-        script = self._dashboard()
+        app = self.config.repo_root / "pepper_app" / "__main__.py"
+        if not app.is_file():
+            raise AdapterUnavailable("pepper_app is missing from this checkout ({})".format(app.parent))
+        if not (self.provider_env or {}).get("OPENAI_API_KEY"):
+            self.notes.append("no GPT key in the hub: Pepper's dashboard opens, but the AI "
+                              "conversation and the AI voice need one (Keys panel)")
         url = "http://127.0.0.1:{}/".format(PEPPER_DASHBOARD_PORT)
         supervisor = get_supervisor()
-        # Started by hand (start.sh) or by an earlier hub: use it as it is.
+        # Started by hand, or by an earlier hub: use it as it is.
         if await supervisor.wait_for_http(url + "api/status", 1.5):
             self.notes.append("Pepper's dashboard was already running")
             return url
-        self._child_name = "pepper_dashboard:{}".format(self.stable_key(self.found))
+        self._child_name = "pepper_app:{}".format(self.stable_key(self.found))
         await supervisor.start(
-            self._child_name, [str(self._python2), str(script), self.found.address],
-            cwd=script.parent, env=self._env(), port=PEPPER_DASHBOARD_PORT,
+            self._child_name, [sys.executable, "-m", "pepper_app", self.found.address],
+            cwd=self.config.repo_root, env=self._app_env(), port=PEPPER_DASHBOARD_PORT,
             owner=self.stable_key(self.found), log_prefix="Pepper")
         if not await supervisor.wait_for_http(url + "api/status", PEPPER_DASHBOARD_WAIT_S,
                                               name=self._child_name):
@@ -855,6 +865,18 @@ class PepperAdapter(NaoqiAdapter):
                 "-- its own output is in the log above".format(
                     PEPPER_DASHBOARD_PORT, PEPPER_DASHBOARD_WAIT_S))
         return url
+
+    async def stop_system(self) -> list[str]:
+        """Give Pepper back first (tablet page hidden, vendor dialog restored,
+        agent stopped): stopping the process on Windows is a hard kill."""
+        if self._child_name:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=PEPPER_SHUTDOWN_WAIT_S) as client:
+                    await client.post("http://127.0.0.1:{}/api/shutdown".format(PEPPER_DASHBOARD_PORT))
+            except Exception as exc:  # noqa: BLE001
+                self.notes.append("Pepper's dashboard did not shut down cleanly ({})".format(exc))
+        return await super().stop_system()
 
     async def system_status(self) -> dict[str, Any]:
         status = await super().system_status()

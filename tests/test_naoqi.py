@@ -131,30 +131,43 @@ class _Sup:
         pass
 
 
-def _pepper_launch(monkeypatch, tmp_path, up_before):
+def _pepper_launch(monkeypatch, tmp_path, up_before, env=None):
     import asyncio
-    (tmp_path / "pepper_dashboard.py").write_text("# dashboard")
+    (tmp_path / "pepper_app").mkdir()
+    (tmp_path / "pepper_app" / "__main__.py").write_text("# app")
     p = _pepper()
-    p.config = type("C", (), {"path": lambda self, t, k: tmp_path, "repo_root": tmp_path})()
-    p.notes, p._child_name = [], ""
-    p._python2, p._sdk = Path("C:/Python27/python.exe"), tmp_path
-    p._env = lambda: {}
+    p.config = type("C", (), {"path": lambda self, t, k: None, "repo_root": tmp_path,
+                              "secret": lambda self, k: ""})()
+    p.settings, p.notes, p._child_name = {}, [], ""
+    p.provider_env = env if env is not None else {"OPENAI_API_KEY": "sk-test"}
     sup = _Sup(up_before)
     monkeypatch.setattr(N, "get_supervisor", lambda: sup)
-    return asyncio.run(p.launch()), sup
+    return asyncio.run(p.launch()), sup, p
 
 
-def test_pepper_launch_starts_the_dashboard_on_the_robot(monkeypatch, tmp_path):
-    url, sup = _pepper_launch(monkeypatch, tmp_path, up_before=False)
+def test_pepper_launch_starts_pepper_app_with_the_gpt_key(monkeypatch, tmp_path):
+    import sys
+    url, sup, _ = _pepper_launch(monkeypatch, tmp_path, up_before=False)
     assert url == "http://127.0.0.1:8780/"
     name, argv, kw = sup.started
-    assert argv[1].endswith("pepper_dashboard.py") and argv[2] == "172.20.10.2"
-    assert kw["port"] == 8780
+    assert argv == [sys.executable, "-m", "pepper_app", "172.20.10.2"]
+    assert kw["port"] == 8780 and kw["cwd"] == tmp_path
+    assert kw["env"]["OPENAI_API_KEY"] == "sk-test"
+
+
+def test_pepper_launch_without_a_gpt_key_still_opens_and_says_so(monkeypatch, tmp_path):
+    url, sup, p = _pepper_launch(monkeypatch, tmp_path, up_before=False, env={})
+    assert sup.started is not None
+    assert any("no GPT key" in n for n in p.notes)
 
 
 def test_a_dashboard_started_by_hand_is_reused(monkeypatch, tmp_path):
-    url, sup = _pepper_launch(monkeypatch, tmp_path, up_before=True)
+    url, sup, _ = _pepper_launch(monkeypatch, tmp_path, up_before=True)
     assert url == "http://127.0.0.1:8780/" and sup.started is None
+
+
+def test_pepper_asks_for_the_gpt_key():
+    assert N.PepperAdapter.uses_speech_key is True
 
 
 # ------------------------------------------------------------- Add WiFi
@@ -258,29 +271,6 @@ def test_moved_but_still_answering_is_a_failure(monkeypatch):
 
 
 # ------------------------------------------------- dashboard + first-run ASR
-def _pepper_with_repo(repo):
-    p = _pepper()
-    p.config = type("C", (), {"path": lambda self, t, k: None, "repo_root": repo})()
-    return p
-
-
-def test_pepper_dashboard_comes_from_the_hub_repo_first(tmp_path):
-    repo = tmp_path / "robot-hub"
-    for d in (repo / "pepper_dashboard", tmp_path / "pepper" / "dashboard"):
-        d.mkdir(parents=True)
-        (d / "pepper_dashboard.py").write_text("# dashboard")
-    assert _pepper_with_repo(repo)._dashboard().parent == repo / "pepper_dashboard"
-
-
-def test_pepper_dashboard_falls_back_to_the_usb_kit_copy(tmp_path):
-    repo = tmp_path / "robot-hub"
-    repo.mkdir()
-    kit = tmp_path / "pepper" / "dashboard"
-    kit.mkdir(parents=True)
-    (kit / "pepper_dashboard.py").write_text("# dashboard")
-    assert _pepper_with_repo(repo)._dashboard().parent == kit.resolve()
-
-
 def test_asr_model_size_is_read_from_nao_llm_config(tmp_path):
     cfg = tmp_path / "config.yaml"
     cfg.write_text('asr:\n  model_size: "small.en"   # English\n  device: "auto"\n')

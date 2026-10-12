@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pepper Simulator</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+          --blue:#2563eb; --green:#16a34a; --amber:#d97706; --red:#dc2626; --you:#eef2ff; --pep:#f0fdf4; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, "Segoe UI", Arial, sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; }
+  header .note { color:var(--muted); font-size:13px; }
+  header a { margin-left:auto; color:var(--blue); }
+  main { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(320px,1fr); gap:14px; padding:14px 16px; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 8px; }
+  #tabletWrap { position:relative; width:100%; aspect-ratio:1280/800; border:10px solid #222; border-radius:14px; overflow:hidden; background:#fff; }
+  #tablet { position:absolute; top:0; left:0; width:1280px; height:800px; border:0; transform-origin:0 0; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+  select, input[type=text] { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); }
+  input[type=text] { flex:1; min-width:0; }
+  button { font:inherit; padding:7px 12px; border-radius:6px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--blue); border-color:var(--blue); color:#fff; }
+  button.danger { color:var(--red); }
+  button:disabled { opacity:.5; cursor:default; }
+  #state { font-size:16px; font-weight:600; padding:8px 10px; border-radius:6px; background:#f3f4f6; }
+  #state.waiting { background:#dcfce7; color:#166534; }
+  #state.speaking, #state.thinking { background:#fef3c7; color:#92400e; }
+  #state.stuck { background:#fee2e2; color:#991b1b; }
+  #step { color:var(--muted); margin:6px 0 0; }
+  #chat { height:46vh; min-height:260px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:4px; }
+  .b { padding:7px 10px; border-radius:8px; max-width:88%; white-space:pre-wrap; }
+  .b.pepper { background:var(--pep); align-self:flex-start; }
+  .b.user { background:var(--you); align-self:flex-end; }
+  .b.woz { background:#fff7ed; align-self:flex-start; border:1px dashed var(--amber); }
+  .b .who { display:block; font-size:11px; color:var(--muted); }
+  .ev { color:var(--muted); font-size:12px; align-self:center; }
+  .ev.heard { color:var(--amber); }
+  #moves { font-size:13px; color:var(--muted); min-height:20px; }
+  #err { color:var(--red); min-height:18px; font-size:13px; }
+  .hint { color:var(--muted); font-size:12px; margin:6px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pepper simulator</h1>
+  <span class="note">No robot. Type what the visitor says; tap the tablet like a visitor would.</span>
+  <a href="/" target="_blank">Operator dashboard</a>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <h2>Pepper's chest tablet</h2>
+      <div id="tabletWrap"><iframe id="tablet" src="/screen"></iframe></div>
+      <p class="hint">This is the same page Pepper's tablet loads. Taps here count as the visitor's answer.</p>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>Pepper's body</h2>
+      <div id="moves">No movements yet.</div>
+    </div>
+  </section>
+  <section>
+    <div class="card">
+      <h2>Session</h2>
+      <div class="row">
+        <select id="experience" title="Experience"></select>
+      </div>
+      <div class="row">
+        <select id="engine" title="Engine"></select>
+        <select id="language" title="Language">
+          <option value="auto">Auto (English, Hebrew if spoken to)</option>
+          <option value="en">English</option>
+          <option value="he">Hebrew</option>
+        </select>
+      </div>
+      <div class="row">
+        <button class="primary" id="start">Start conversation</button>
+        <button class="danger" id="stop">Stop</button>
+        <button id="repeat" title="Pepper asks again">Repeat question</button>
+        <button id="skip" title="Pepper moves on">Skip</button>
+      </div>
+      <div id="state">Off</div>
+      <div id="step"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>Conversation</h2>
+      <div id="chat"></div>
+      <form class="row" id="sayForm" style="margin:8px 0 0">
+        <input type="text" id="say" placeholder="The visitor says..." autocomplete="off" dir="auto">
+        <button class="primary" type="submit">Say</button>
+      </form>
+      <div id="held" style="color:var(--amber);font-size:13px;min-height:18px"></div>
+      <div id="err"></div>
+      <p class="hint">Typed text counts as a finished spoken sentence ("hmm" is ignored). On the robot the mic is shut while Pepper talks, so here text typed early waits until Pepper finishes.</p>
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let ai = { state: 'off' }, cfg = {};
+const pepperBubbles = new Map();
+
+function fitTablet() {
+  const w = $('tabletWrap').clientWidth;
+  $('tablet').style.transform = `scale(${w / 1280})`;
+}
+window.addEventListener('resize', fitTablet); fitTablet();
+
+async function api(path, body) {
+  $('err').textContent = '';
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(body || {}) });
+  let d = {};
+  try { d = await r.json(); } catch (e) {}
+  if (!r.ok) $('err').textContent = d.detail || d.error || ('error ' + r.status);
+  return d;
+}
+
+function scrollChat() { const c = $('chat'); c.scrollTop = c.scrollHeight; }
+
+function addChat(e) {
+  const c = $('chat');
+  if (e.role === 'event' || e.role === 'tap' || e.role === 'heard') {
+    const d = document.createElement('div');
+    d.className = 'ev' + (e.role === 'heard' ? ' heard' : '');
+    d.textContent = e.role === 'heard' ? `Heard, not used: "${e.text}" (${e.why || ''})`
+                  : e.role === 'tap' ? `Tapped: ${e.text}` : e.text;
+    c.appendChild(d); scrollChat(); return;
+  }
+  let b = e.role === 'pepper' && e.id ? pepperBubbles.get(e.id) : null;
+  if (!b) {
+    b = document.createElement('div');
+    b.className = 'b ' + (e.role === 'user' ? 'user' : e.role === 'woz' ? 'woz' : 'pepper');
+    b.dir = 'auto';
+    c.appendChild(b);
+    if (e.role === 'pepper' && e.id) pepperBubbles.set(e.id, b);
+  }
+  const who = e.role === 'user' ? 'Visitor' : e.role === 'woz' ? 'Pepper (operator)' : 'Pepper';
+  b.innerHTML = '';
+  const w = document.createElement('span'); w.className = 'who'; w.textContent = who;
+  b.appendChild(w); b.appendChild(document.createTextNode(e.text));
+  scrollChat();
+}
+
+function renderAi() {
+  const s = $('state');
+  const st = ai.state || 'off';
+  s.className = st;
+  let text = { off: 'Off', paused: 'AI paused', stuck: 'AI is stuck (see the dashboard log)',
+               thinking: 'Pepper is thinking...', speaking: 'Pepper is talking' }[st];
+  if (st === 'waiting') {
+    const secs = ai.waiting_t ? Math.max(0, Math.round(Date.now() / 1000 - ai.waiting_t)) : 0;
+    text = `Waiting for the visitor's answer · ${secs} s` + (ai.reasked ? ' (asked again once)' : '');
+  }
+  s.textContent = text || st;
+  $('step').textContent = ai.running && ai.steps
+    ? `Step ${ai.step || '?'} of ${ai.steps}${ai.step_title ? ': ' + ai.step_title : ''} · turns ${ai.turns || 0}` : '';
+  $('start').disabled = !!ai.running;
+  $('stop').disabled = $('repeat').disabled = $('skip').disabled = !ai.running;
+}
+setInterval(renderAi, 1000);
+
+function fillSelect(sel, items, value) {
+  sel.innerHTML = '';
+  for (const [k, v] of Object.entries(items)) {
+    const o = document.createElement('option'); o.value = k; o.textContent = v; sel.appendChild(o);
+  }
+  if (value) sel.value = value;
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/api/ws`);
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === 'snapshot') {
+      const d = m.data; cfg = d.cfg; ai = d.ai || ai;
+      fillSelect($('experience'), d.experiences, cfg.experience);
+      fillSelect($('engine'), d.engines, cfg.engine);
+      $('language').value = cfg.language;
+      $('chat').innerHTML = ''; pepperBubbles.clear();
+      (d.chat || []).forEach(addChat);
+      renderAi();
+    } else if (m.type === 'chat') addChat(m.data);
+    else if (m.type === 'ai') { ai = m.data; renderAi(); }
+    else if (m.type === 'cfg') { cfg = m.data; $('experience').value = cfg.experience;
+                                 $('engine').value = cfg.engine; $('language').value = cfg.language; }
+    else if (m.type === 'log' && m.data.level === 'ERROR') $('err').textContent = m.data.msg;
+  };
+  ws.onclose = () => setTimeout(connect, 1500);
+}
+connect();
+
+for (const k of ['experience', 'engine', 'language'])
+  $(k).onchange = () => api('/api/options', { [k]: $(k).value });
+$('start').onclick = () => api('/api/conversation/start');
+$('stop').onclick = () => api('/api/conversation/stop');
+$('repeat').onclick = () => api('/api/turn/repeat');
+$('skip').onclick = () => api('/api/turn/skip');
+// Pepper's mic is shut while it talks (no barge-in), so text typed early is
+// held here and sent the moment Pepper starts waiting -- not dropped.
+let held = null;
+function showHeld() {
+  $('held').textContent = held ? `Held until Pepper finishes talking: "${held}"` : '';
+}
+async function sendHeld() {
+  if (!held || ai.state !== 'waiting') return;
+  const t = held; held = null; showHeld();
+  await api('/sim/say', { text: t });
+}
+setInterval(sendHeld, 300);
+$('sayForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const t = $('say').value.trim();
+  if (!t) return;
+  $('say').value = '';
+  if (!ai.running) { $('err').textContent = 'Start a conversation first'; return; }
+  held = t; showHeld(); sendHeld();
+};
+
+async function pollMoves() {
+  try {
+    const d = await (await fetch('/sim/state')).json();
+    const m = d.moves || [];
+    $('moves').textContent = m.length
+      ? m.slice(-6).reverse().map(x => new Date(x.t * 1000).toLocaleTimeString() + '  ' + x.text).join('\n')
+      : 'No movements yet.';
+    $('moves').style.whiteSpace = 'pre-line';
+  } catch (e) {}
+}
+setInterval(pollMoves, 1000);
+</script>
+</body>
+</html>

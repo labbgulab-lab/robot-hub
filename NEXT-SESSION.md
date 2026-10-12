@@ -36,7 +36,22 @@ On 2026-10-05 neither NAO nor Furhat had it saved.
    wire lands before Disconnect clears the robot. Try it once on hardware.
 6. **Robot files panel** (2026-10-06): OpenAIChat 1.3.0 is in the library,
    keyless. Download it with a GPT key from the page and import it on Furhat.
-7. **reachy3 has a hardware fault** — Stewart leg 5 (motor ID 15) is stuck at
+7. **Pepper's new dashboard (`pepper_app`, built 2026-10-07, never on the
+   robot).** Launch Pepper, allow the Windows Firewall prompt (private), then
+   check in this order: Robot pill green (agent connected; the log names the
+   speaker mode), Screen pill green and the welcome page on the chest tablet,
+   camera picture, **Wizard of Oz quick phrase in Hebrew** (does Pepper's
+   speaker play it, and is it clean?), each movement button once, then **Start
+   conversation** with Pepper's mic (the only audio route). If Pepper's speaker
+   stays silent, the log says why; English Wizard of Oz with Pepper's own
+   voice still works. Check that the vendor chatbot stays quiet during the
+   conversation and comes back after. Then, for the demo:
+   - **Emoji test** on the tablet, photo, **Mark broken**.
+   - Run **Feelings Together** with emoji and words only, on both engines.
+   - Have Hebrew speakers answer, including one with basic English.
+   - Check that Pepper waits for answers and re-asks only once.
+   Details: `pepper_app/README.md`.
+8. **reachy3 has a hardware fault** — Stewart leg 5 (motor ID 15) is stuck at
    22°; see TASKS.md. Avoid long sessions on it. Use reachy2 for demos.
 
 ## Status
