@@ -83,7 +83,24 @@ NO_YAW = [0.9, -0.9] * 3 + [0.0]
 # while charging; basic awareness is paused so it does not turn the base.
 WALK_LEGS = [(1.0, 0.0, 0.0), (0.0, 0.0, 3.14159), (1.0, 0.0, 0.0), (0.0, 0.0, 3.14159)]
 WALK_CONFIG = [["MaxVelXY", 0.2], ["MaxAccXY", 0.2], ["MaxVelTheta", 0.6]]
+WHEELS = ["WheelFL", "WheelFR", "WheelB"]
 MOVES = sorted(list(ANIMATIONS) + list(ARM_POSES) + ["yes", "no", "hands", "walk"])
+
+
+def walk_failed(why, leg):
+    """Why Pepper refused a leg, for the operator (ALMotion/MoveFailed)."""
+    reason = why[0] if why else "?"
+    if reason == "Safety":
+        try:
+            x, y = why[2][0], why[2][1]
+            where = " about %.1f m away" % ((x * x + y * y) ** 0.5)
+        except Exception:
+            where = ""
+        return ("Walking stopped: something is in Pepper's way%s. Clear the floor around "
+                "Pepper (it keeps 0.4 m from everything) and press Walking again." % where)
+    if reason == "Rest":
+        return "Walking stopped: Pepper's wheels were off. Press Walking again."
+    return "Walking stopped at leg %d of %d (%s)." % (leg + 1, len(WALK_LEGS), reason)
 
 def log(msg):
     print(time.strftime("%H:%M:%S"), msg)
@@ -375,17 +392,19 @@ class Agent(object):
                 mot.angleInterpolation(["HeadYaw", "HeadPitch"], [0.0, 0.0], [1.0, 1.0], True)
                 for i, (x, y, theta) in enumerate(WALK_LEGS):
                     if self.walk_stop:
-                        log("walk: stopped by the operator before leg %d" % (i + 1))
+                        self._tell("INFO", "Walking: stopped (Stop pressed)")
                         return
+                    # Pepper rests idle wheels after ~5 s; a leg started on resting
+                    # wheels was refused with "Rest" (2026-10-12).
+                    mot.setStiffnesses(WHEELS, 1.0)
                     if not mot.moveTo(x, y, theta, WALK_CONFIG):
                         try:
                             why = p["ALMemory"].getData("ALMotion/MoveFailed")
                         except Exception:
-                            why = "?"
-                        log("walk: leg %d of %d did not finish (%s); stopping the walk"
-                            % (i + 1, len(WALK_LEGS), why))
+                            why = None
+                        self._tell("WARNING", walk_failed(why, i))
                         return
-                log("walk: done")
+                self._tell("INFO", "Walking: done")
             except Exception as e:
                 log("walk: %s" % last_line(e))
             finally:
@@ -393,6 +412,14 @@ class Agent(object):
                 self.motion_busy_until = time.time() + 1.0
         self._in_thread(lambda: self._with_awareness_paused(run))
         return "walk (1 m, turn, 1 m, turn)"
+
+    def _tell(self, level, text):
+        """A line for the dashboard log (and the robot's own log)."""
+        log(text)
+        try:
+            self.link.send_json({"ev": "log", "level": level, "msg": text})
+        except Exception:
+            pass
 
     def _arms(self, name):
         mot, pos = self.p["ALMotion"], self.p["ALRobotPosture"]

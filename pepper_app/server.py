@@ -159,6 +159,9 @@ class PepperApp:
 
     # ------------------------------------------------------------- robot
     def _on_robot(self, kind: str, data: dict) -> None:
+        if kind == "log":            # a line from the agent on the robot (e.g. Walking)
+            self.log(data.get("level", "INFO"), data.get("msg", ""))
+            return
         if kind == "link":
             r = self.robot
             level = {"connected": "INFO", "deploying": "INFO"}.get(r.state, "ERROR")

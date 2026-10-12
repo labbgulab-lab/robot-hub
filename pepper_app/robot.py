@@ -265,6 +265,8 @@ class RobotLink:
         elif ev == "playing":
             self.playing = bool(msg.get("on"))
             self._emit("playing", {"on": self.playing})
+        elif ev == "log":
+            self._emit("log", {"level": msg.get("level") or "INFO", "msg": msg.get("msg") or ""})
 
     def _write(self, kind: bytes, payload: bytes) -> None:
         if self.writer is None:
