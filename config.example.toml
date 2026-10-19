@@ -52,6 +52,10 @@ announce = "I am {name}, I am connected and ready to run."
   display_name = "reachy2"
   [robots.reachy_wireless.units."b967ec76e88a0fdd"]
   display_name = "reachy3"
+  [robots.reachy_wireless.units."bc4a70b8c1261981"]
+  display_name = "reachy4"
+  [robots.reachy_wireless.units."ab90483fd9d70e58"]
+  display_name = "reachy5"
   [robots.reachy_wireless.settings]
   # Launch target: the reachy_chat checkout and the python inside its venv.
   # Relative paths start at this folder: clone reachy_chat next to robot-hub.
