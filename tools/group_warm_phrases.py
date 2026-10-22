@@ -34,6 +34,9 @@ async def main() -> None:
     ap.add_argument("--voices", default="openrouter",
                     help="comma list of openrouter, openai, gemini, elevenlabs")
     ap.add_argument("--langs", default="he,en")
+    ap.add_argument("--seats", action="store_true",
+                    help="the robots ticked Included on the group page (group.local.json), "
+                         "with their own ElevenLabs voices, instead of the default characters")
     args = ap.parse_args()
     keys = json.loads((ROOT / "keys.local.json").read_text(encoding="utf-8"))["keys"]
     oa = next((k["key"] for k in keys if k["provider"] == "gpt"), "")
@@ -44,7 +47,15 @@ async def main() -> None:
     want = set(args.voices.split(","))
     gm = services.gemini_key
     by_key = {}
-    for ch in DEFAULT_CHARACTERS:
+    characters = DEFAULT_CHARACTERS
+    if args.seats:
+        # The demo's own robots (2026-10-22: Max and Leo), voiced exactly as a
+        # session voices them, so it finds them on disk ("el:<voice id>").
+        cfg = json.loads((ROOT / "group.local.json").read_text(encoding="utf-8"))
+        characters = [s for s in cfg.get("seats", []) if s.get("included") and s.get("voice_id")]
+        want = {"elevenlabs"}
+        print("seats:", ", ".join("{} ({})".format(s["character"], s["voice_id"]) for s in characters))
+    for ch in characters:
         seat = {"character": ch["character"], "voice_id": ch["voice_id"], "persona": ch["persona"]}
         if "openrouter" in want and orr:
             by_key["or:{}:{}".format(OPENAI_VOICES[ch["character"]], ch["character"])] = seat
@@ -59,7 +70,7 @@ async def main() -> None:
         seat = by_key[voice_key]
         out = []
         if voice_key.startswith("el:"):
-            async for c in services.speech(voice_key[3:], text):
+            async for c in services.speech(voice_key[3:], text, background=True):
                 out.append(c)
         elif voice_key.startswith("or:"):
             async for c in openrouter_speech(services.http, orr, OPENAI_VOICES[seat["character"]],
