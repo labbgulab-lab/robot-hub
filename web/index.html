@@ -36,6 +36,11 @@
 <header class="topbar"><div class="topbar-inner">
   <h1 class="brand">Robot Hub</h1>
   <div class="topbar-right">
+    <!-- Several Reachys and the people in the room, on a page of its own
+         (docs/GROUP-CONVERSATION.md). Needs two connected Reachys. -->
+    <span class="group-hint" id="group-hint">Connect at least two Reachys</span>
+    <button type="button" class="group-button" id="group-open" disabled
+            title="Connect at least two Reachys first">Group conversation</button>
     <label class="toggle" title="Connect to each robot automatically as it appears">
       <input type="checkbox" id="auto-connect">
       <span>Auto-connect</span>
@@ -106,10 +111,11 @@
       <details class="setup-robot">
         <summary>Reachy Mini</summary>
         <ol>
-          <li><strong>Already on a hotspot it knows?</strong> Launch it, then on its dashboard press <em>Add WiFi…</em>, type your hotspot's name and password, and Save. It stays where it is; turn the old hotspot off and yours on, and it moves over by itself.</li>
-          <li>Otherwise power it on. If it knows no network nearby, it opens its own WiFi called <code>reachy-mini-ap</code>.</li>
-          <li>Open the <strong>Reachy Mini Control</strong> desktop app. It joins <code>reachy-mini-ap</code> (or uses Bluetooth) and asks for the WiFi to use. Pick your hotspot and type its password.</li>
-          <li>The robot restarts its WiFi and appears on your hotspot within a minute. Its card here lights up. If the app offers a software update, let it finish.</li>
+          <li><strong>In the lab:</strong> connect this laptop to the <strong>lab WiFi</strong> (ask in the lab for its name and password; it has no internet, and that is fine) and power the robot on. Its card lights up here.</li>
+          <li>Turn your hotspot on. On the robot's card press <em>Add WiFi…</em>, type your hotspot's name and password, and Join. The robot moves to your hotspot now and remembers it. Connect this laptop to your hotspot to see it again.</li>
+          <li>From then on the robot picks your hotspot whenever it is on, and goes back to the lab WiFi when it is off.</li>
+          <li><strong>Already on a hotspot it knows?</strong> Same thing: <em>Add WiFi…</em> on its card, with your hotspot on.</li>
+          <li><strong>A new robot that knows no WiFi yet:</strong> power it on; it opens its own WiFi called <code>reachy-mini-ap</code>. Open the <strong>Reachy Mini Control</strong> desktop app, which joins it (or uses Bluetooth) and asks for the WiFi to use: pick the lab WiFi. Then, on its card here, <em>Add WiFi…</em> with the lab WiFi's name and password and tick <em>This is the lab WiFi</em>, so it stays the robot's fallback.</li>
         </ol>
       </details>
       <details class="setup-robot">
@@ -263,14 +269,16 @@
     </div>
     <p class="posture-note hidden" role="status"></p>
 
-    <!-- NAO and Pepper: teach the robot another hotspot. It joins at once
-         (it cannot save one without joining) and remembers it. -->
+    <!-- NAO, Pepper and Reachy: teach the robot another hotspot. It joins at
+         once if it can see it, and remembers it. Reachy also keeps the lab
+         WiFi as its fallback (hub/reachy_wifi.py). -->
     <div class="card-wifi hidden">
       <button type="button" class="wifi-toggle" data-action="wifi-toggle">Add WiFi…</button>
       <form class="wifi-form hidden" autocomplete="off">
         <input class="wifi-ssid" type="text" placeholder="Hotspot name" aria-label="Hotspot name">
         <input class="wifi-pass" type="password" placeholder="Password" aria-label="Hotspot password">
         <button type="submit" class="pill pill-connect wifi-join"><span>Join</span></button>
+        <label class="wifi-lab hidden"><input class="wifi-lab-box" type="checkbox"> This is the lab WiFi (the robot's fallback; it does not move now)</label>
         <p class="wifi-hint">Turn that hotspot on first (2.4 GHz). The robot moves to it now and remembers it.</p>
       </form>
       <p class="wifi-note hidden" role="status"></p>

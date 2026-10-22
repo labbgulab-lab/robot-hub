@@ -55,10 +55,12 @@ def default_input_device_name() -> Optional[str]:
         log.info("sounddevice unavailable (%s); audio arbitration is name-only", exc)
         return None
     try:
-        index = sd.default.device[0]
-        if index is None or index < 0:
-            return None
-        return str(sd.query_devices(index)["name"])
+        from .laptop_mic import PA_LOCK   # the mic watcher restarts PortAudio
+        with PA_LOCK:
+            index = sd.default.device[0]
+            if index is None or index < 0:
+                return None
+            return str(sd.query_devices(index)["name"])
     except Exception as exc:  # noqa: BLE001
         log.warning("could not resolve the default input device: %s", exc)
         return None
@@ -70,10 +72,12 @@ def default_output_device_name() -> Optional[str]:
     except Exception:  # noqa: BLE001
         return None
     try:
-        index = sd.default.device[1]
-        if index is None or index < 0:
-            return None
-        return str(sd.query_devices(index)["name"])
+        from .laptop_mic import PA_LOCK
+        with PA_LOCK:
+            index = sd.default.device[1]
+            if index is None or index < 0:
+                return None
+            return str(sd.query_devices(index)["name"])
     except Exception:  # noqa: BLE001
         return None
 

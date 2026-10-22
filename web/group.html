@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Several Reachys and the people in the room, talking together.">
+<title>Group conversation</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232563eb'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css?v=2026-10-22b">
+<link rel="stylesheet" href="/group.css?v=2026-10-22b">
+</head>
+<body class="group-page">
+
+<!-- Interface icons, embedded so the page needs no network of its own. -->
+<svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="alert" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
+</defs></svg>
+
+<header class="topbar"><div class="topbar-inner">
+  <h1 class="brand">Group conversation</h1>
+  <div class="topbar-right">
+    <span class="save-badge" id="config-badge" role="status">loading</span>
+    <a class="back-link" href="/">Robot Hub</a>
+    <span class="hub-link" id="ws-state" title="Live connection to the hub">
+      <span class="dot"></span><span id="ws-text">connecting</span>
+    </span>
+  </div>
+</div></header>
+
+<!-- The hub's own error, or a refused request. Stays until it is fixed. -->
+<div id="error-banner" class="banner group-error hidden" role="alert">
+  <svg aria-hidden="true"><use href="#alert"/></svg><span id="error-text" dir="auto"></span>
+</div>
+
+<!-- One screen: what is happening and the conversation on the left, the
+     robots (each with its own settings) and the session's settings on the
+     right. Only the transcript and, with many robots, the cards scroll. -->
+<main class="board">
+
+  <!-- What is happening now, readable from a step back. -->
+  <section class="stage" id="stage" data-phase="idle" aria-label="Status">
+    <div class="stage-top">
+      <div class="stage-main">
+        <p class="stage-phase"><span class="dot"></span><span id="phase-label">Not running</span></p>
+        <p class="stage-line" id="status-line" role="status">Not running</p>
+        <p class="stage-detail hidden" id="status-detail" dir="auto"></p>
+      </div>
+      <div class="stage-clock">
+        <div class="timer" aria-label="Session time">
+          <span id="timer">0:00</span><span class="timer-of"> / <span id="timer-total">5:00</span></span>
+        </div>
+        <div class="timer-bar" id="timer-bar"><span id="timer-fill"></span></div>
+      </div>
+    </div>
+    <p class="people-live hidden" id="people-live" dir="auto"></p>
+    <div class="stage-actions">
+      <button type="button" class="ready-button" id="get-ready" disabled title="Connect the robots, check every service with a real request and write the first line of each mode, so a mode button speaks at once">Get ready</button>
+      <button type="button" class="start-button mode-button" id="start-group" data-mode="group" disabled>
+        <span class="mode-name">Group talk</span><span class="mode-sub">robots + people</span></button>
+      <button type="button" class="start-button mode-button" id="start-interrupt" data-mode="interrupt" disabled>
+        <span class="mode-name">Interrupt mode</span><span class="mode-sub">they cut you off</span></button>
+      <button type="button" class="stop-button" id="stop" disabled title="The robots go quiet and stay connected: a mode button starts again at once">Stop</button>
+      <button type="button" class="disconnect-button" id="disconnect" disabled title="Release the robots (needed to change who sits where, Included and Listens)">Disconnect</button>
+    </div>
+    <p class="start-hint" id="start-hint"></p>
+    <!-- Who hears the people, with the instant switch to the robots' mics. -->
+    <div class="mic-line" id="mic-line">
+      <span class="mic-state" id="mic-state" role="status">Mic: checking</span>
+      <button type="button" class="mic-switch" id="mic-switch" hidden>Use robots' mics</button>
+    </div>
+    <!-- Every service, checked with a real request (Get ready, hub start). -->
+    <ul class="ready-checks" id="ready-checks" aria-label="Service checks"></ul>
+  </section>
+
+  <!-- The conversation itself, newest at the bottom, and the operator's
+       steering box under it. -->
+  <section class="convo" aria-labelledby="transcript-title">
+    <div class="panel-head">
+      <h2 id="transcript-title">Conversation <span class="count" id="turn-count"></span></h2>
+      <button type="button" class="jump hidden" id="jump">Jump to latest</button>
+    </div>
+    <ol class="transcript" id="transcript"></ol>
+    <p class="transcript-empty" id="transcript-empty">Nothing said yet. Press a mode when everyone is seated.</p>
+    <form class="nudge" id="nudge-form" autocomplete="off">
+      <label class="nudge-label" for="nudge-text">Steer</label>
+      <input id="nudge-text" type="text" dir="auto"
+             placeholder="e.g. make them argue about it, or ask the people a question">
+      <button type="submit" class="nudge-send" id="nudge-send">Send</button>
+    </form>
+    <p class="nudge-last hidden" id="nudge-last" dir="auto"></p>
+  </section>
+
+  <!-- The robots, left to right as the people see the table. -->
+  <section class="robots" aria-labelledby="robots-title">
+    <div class="robots-head">
+      <h2 id="robots-title">Robots</h2>
+      <span class="robots-sub" id="robots-sub">left to right, as the people see the table. Everything here changes at once, also mid-conversation.</span>
+      <span class="save-state" id="save-state" role="status"></span>
+    </div>
+    <ol class="cards" id="seats"></ol>
+    <p class="config-empty hidden" id="seats-empty">No Reachys yet. Connect them on the Robot Hub page and they appear here.</p>
+  </section>
+
+  <!-- What the whole session shares. -->
+  <section class="session" aria-label="Session settings">
+    <label class="sfield sfield-topic">Topic
+      <input id="topic" type="text" dir="auto" autocomplete="off"
+             placeholder="What they talk about (empty: they choose)">
+    </label>
+    <label class="sfield">Language
+      <select id="language"></select>
+    </label>
+    <label class="sfield sfield-num">Minutes
+      <input id="minutes" type="number" min="1" max="60" step="1">
+    </label>
+    <label class="sfield sfield-num" title="Silence after a robot line before the next one, in seconds">Gap (s)
+      <input id="listen-gap" type="number" min="0" max="5" step="0.1">
+    </label>
+    <label class="sfield sfield-num" title="On the mic-meter scale. A voice quieter than this at every robot does not take the floor. 0 = off.">Voice threshold
+      <input id="voice-min" type="number" min="0" max="0.9" step="0.05">
+    </label>
+    <label class="sfield" title="How easily a person talking over a robot cuts it off (group talk) and is heard over the robots (both modes)">People cut in
+      <select id="barge-in">
+        <option value="off">Off (only in the gaps)</option>
+        <option value="careful">Careful</option>
+        <option value="normal">Normal</option>
+        <option value="eager">Eager</option>
+      </select>
+    </label>
+    <div class="sfield sfield-mic" title="Where the people are heard. Auto: a DJI mic plugged into this laptop, else the robots' own mics. Changing it reconnects the robots at the next start.">
+      <label for="people-mic">People's mic</label>
+      <div class="mic-row">
+        <select id="people-mic"></select>
+        <span class="level" data-key="mic:people" title="People's mic level"><span class="level-fill"></span></span>
+      </div>
+    </div>
+    <div class="session-checks">
+      <label class="check" title="Voices come compressed (OpenAI and ElevenLabs only): on the phone hotspot raw voice audio arrives slower than it plays">
+        <input type="checkbox" id="slow-network"> Slow network</label>
+      <label class="check" title="Tick this if the robots look away from whoever is speaking.">
+        <input type="checkbox" id="heads-mirror"> Heads turn the other way</label>
+      <label class="check">
+        <input type="checkbox" id="simulate"> Simulate on this laptop</label>
+    </div>
+    <p class="session-note" id="voice-note"></p>
+  </section>
+</main>
+
+<!-- Copy one robot's settings to others. -->
+<div class="modal hidden" id="copy-modal" role="dialog" aria-modal="true" aria-labelledby="copy-title">
+  <form class="modal-box" id="copy-form">
+    <h2 id="copy-title">Copy settings</h2>
+    <fieldset>
+      <legend>To</legend>
+      <div class="copy-targets" id="copy-targets"></div>
+    </fieldset>
+    <fieldset>
+      <legend>What</legend>
+      <div class="copy-what">
+        <label class="check"><input type="checkbox" value="interrupt_level" checked> Interrupting (0-5)</label>
+        <label class="check"><input type="checkbox" value="voice_provider" checked> Voice provider</label>
+        <label class="check"><input type="checkbox" value="voices"> The voice itself</label>
+        <label class="check"><input type="checkbox" value="writer" checked> Writer</label>
+        <label class="check"><input type="checkbox" value="gestures" checked> Gestures</label>
+        <label class="check"><input type="checkbox" value="vision" checked> Camera</label>
+        <label class="check"><input type="checkbox" value="loudness" checked> Volume</label>
+        <label class="check"><input type="checkbox" value="persona"> Personality</label>
+      </div>
+    </fieldset>
+    <div class="modal-actions">
+      <button type="button" class="ghost-button" id="copy-cancel">Cancel</button>
+      <button type="submit" class="nudge-send" id="copy-go">Copy</button>
+    </div>
+  </form>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- One card per robot, cloned per seat. -->
+<template id="seat-template">
+  <li class="card">
+    <div class="card-head">
+      <span class="seat-pos">1</span>
+      <input class="seat-character" type="text" dir="auto" placeholder="Name" aria-label="Name" maxlength="30">
+      <div class="seat-order">
+        <button type="button" class="seat-move" data-move="-1" title="Move one seat to the left" aria-label="Move left">&lsaquo;</button>
+        <button type="button" class="seat-move" data-move="1" title="Move one seat to the right" aria-label="Move right">&rsaquo;</button>
+      </div>
+    </div>
+    <p class="name-warn hidden">Another robot has this name.</p>
+    <div class="card-meta">
+      <span class="seat-robot">robot</span>
+      <span class="seat-state">Not connected</span>
+      <span class="level" title="Microphone level"><span class="level-fill"></span></span>
+    </div>
+    <div class="card-checks">
+      <label class="check" title="Takes part in the conversation"><input type="checkbox" class="seat-included"> Included</label>
+      <label class="check" title="Its microphone is used to hear the people"><input type="checkbox" class="seat-listen"> Listens</label>
+      <label class="check" title="Looks through its camera when asked what it sees"><input type="checkbox" class="seat-vision"> Camera</label>
+    </div>
+    <label class="cfield cfield-persona"><span class="cfield-label">Personality</span>
+      <textarea class="seat-persona" dir="auto" rows="3" aria-label="Personality"
+                placeholder="Who this character is and how they talk. Say he/him or she/her for Hebrew."></textarea>
+    </label>
+    <div class="cfield"><span class="cfield-label">Voice</span>
+      <div class="pair">
+        <select class="seat-provider" aria-label="Voice provider"></select>
+        <select class="seat-voice" aria-label="Voice"></select>
+      </div>
+    </div>
+    <label class="cfield"><span class="cfield-label">Writer</span>
+      <select class="seat-writer"></select>
+    </label>
+    <div class="cfield"><span class="cfield-label">Interrupting</span>
+      <div class="level-picker" role="radiogroup" aria-label="Interrupting, 0 to 5">
+        <button type="button" role="radio" data-level="0" title="Never: waits until the person finishes">0</button>
+        <button type="button" role="radio" data-level="1" title="Rarely, after the person talks a while">1</button>
+        <button type="button" role="radio" data-level="2" title="Now and then">2</button>
+        <button type="button" role="radio" data-level="3" title="Regularly">3</button>
+        <button type="button" role="radio" data-level="4" title="Often, and piles on">4</button>
+        <button type="button" role="radio" data-level="5" title="Every time the person talks">5</button>
+      </div>
+    </div>
+    <div class="cfield"><span class="cfield-label">Gestures</span>
+      <div class="segmented" role="radiogroup" aria-label="Gestures">
+        <button type="button" role="radio" data-gestures="lively">Lively</button>
+        <button type="button" role="radio" data-gestures="calm">Calm</button>
+      </div>
+    </div>
+    <label class="cfield cfield-inline"><span class="cfield-label">Volume</span>
+      <span class="volume"><input type="range" class="seat-loudness" min="0" max="250" step="5"><span class="volume-value">150%</span></span>
+    </label>
+    <div class="card-foot">
+      <span class="card-now"></span>
+      <button type="button" class="ghost-button copy-button">Copy to others</button>
+    </div>
+  </li>
+</template>
+
+<noscript><p class="noscript">Enable JavaScript to see the conversation.</p></noscript>
+<script src="/group.js?v=2026-10-22b"></script>
+</body>
+</html>

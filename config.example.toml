@@ -17,6 +17,14 @@ netscan_max_hosts = 256
 # Leave blank to infer from the active interface.
 expected_subnet = ""
 
+[network]
+# The lab WiFi's name (ask in the lab). It has no internet; the robots keep it
+# as their fallback, and on it you can hand any robot your own hotspot.
+lab_wifi = ""
+# The phone hotspot new Reachys are set up on (tools/reachy_bringup.py, the
+# /reachy-set-up skill); its password goes in .env as HOTSPOT_PASSWORD.
+hotspot = ""
+
 [ports]
 range_start = 9100
 range_end = 9199
@@ -61,9 +69,11 @@ announce = "I am {name}, I am connected and ready to run."
   # Relative paths start at this folder: clone reachy_chat next to robot-hub.
   reachy_chat_path = "../reachy_chat"
   python = ""            # blank = <reachy_chat_path>/.venv/(Scripts|bin)/python
-  # "robot": reachy_chat runs ON the robot and hears through its built-in mic;
-  # Launch installs it onto a new robot first. "laptop": the old K11 path.
-  mic_mode = "robot"
+  # "auto" (2026-10-22): "laptop" when the hub sees a DJI mic plugged into this
+  # laptop, else "robot". "robot": reachy_chat runs ON the robot and hears
+  # through its built-in mic; Launch installs it onto a new robot first.
+  # "laptop": reachy_chat runs here and hears through a laptop mic.
+  mic_mode = "auto"
   volume = 100           # speaker volume set on every connect
   # Which laptop capture device "laptop" mode takes. Leave both blank to match
   # the K11 by its USB-audio class name; set mic_device to pin an exact one.

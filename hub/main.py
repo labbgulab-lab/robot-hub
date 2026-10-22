@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,8 @@ from pydantic import BaseModel
 
 from .config import REPO_ROOT, load_config
 from .core import Hub
+from .group.api import make_router as make_group_router
+from .group.conductor import GroupManager
 from .library import MAX_BYTES, Library, LibraryError
 from . import wifi
 from .discovery.selfnet import local_ipv4
@@ -77,16 +80,27 @@ hub = Hub(config)
 library = Library(config, hub.keys, hub.bus)
 
 
+group = GroupManager(hub)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await hub.start()
+    # The DJI mic watcher and the warm-up of every service the group
+    # conversation uses start with the hub (Tomer, 2026-10-22) -- from main()
+    # only: tests start this app too, and must not make paid API calls.
+    if os.environ.get("HUB_WARM_AT_START") == "1":
+        await group.startup()
     try:
         yield
     finally:
+        await group.shutdown()
         await hub.stop()
 
 
 app = FastAPI(title="Robot Hub", lifespan=lifespan)
+# Several Reachys in one conversation (docs/GROUP-CONVERSATION.md).
+app.include_router(make_group_router(group))
 
 
 @app.middleware("http")
@@ -145,11 +159,12 @@ async def post_posture(key: str, body: PostureRequest) -> JSONResponse:
 class WifiJoin(BaseModel):
     ssid: str
     password: str
+    lab: bool = False       # Reachy: save it as the lab WiFi (the fallback)
 
 
 @app.post("/api/robots/{key}/wifi")
 async def post_wifi(key: str, body: WifiJoin) -> JSONResponse:
-    result = await hub.join_wifi(key, body.ssid, body.password)
+    result = await hub.join_wifi(key, body.ssid, body.password, body.lab)
     return JSONResponse(result, status_code=200 if result.get("ok") else 409)
 
 
@@ -238,7 +253,7 @@ async def get_doctor() -> dict[str, Any]:
 @app.get("/api/wifi")
 async def get_wifi() -> dict[str, Any]:
     addresses = [str(n) for n in await asyncio.to_thread(local_ipv4)]
-    return await asyncio.to_thread(wifi.status, addresses)
+    return await asyncio.to_thread(wifi.status, addresses, config.network.lab_wifi)
 
 
 # ------------------------------------------------------------------ files
@@ -342,6 +357,7 @@ if WEB_DIR.exists():
 def main() -> None:
     import uvicorn
     _log_to_file()
+    os.environ["HUB_WARM_AT_START"] = "1"   # lifespan: watch the mic, warm the services
     uvicorn.run("hub.main:app", host=config.server.host, port=config.server.port,
                 reload=False, log_level="info")
 

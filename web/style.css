@@ -81,6 +81,19 @@ svg {
 }
 .toggle input { accent-color: var(--blue); width: 16px; height: 16px; cursor: pointer; }
 
+/* The group conversation's door: the one solid button in the bar. */
+.group-hint { font-size: 13px; color: var(--muted); }
+.group-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 36px; padding: 6px 14px;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: #fff; background: var(--blue);
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+  transition: background .2s;
+}
+.group-button:hover:not(:disabled) { background: var(--blue-dark); }
+.group-button:disabled { color: #90a0b5; background: var(--grey-light); border-color: var(--border); }
+
 .hub-link { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
 .hub-link .dot { background: #c2ccd9; }
 .hub-link.live .dot { background: var(--green); }
@@ -510,6 +523,8 @@ footer svg { width: 14px; height: 14px; }
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink);
 }
 .wifi-hint { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 12px; }
+.wifi-lab { flex-basis: 100%; display: flex; gap: 6px; align-items: center; color: var(--ink); font-size: 12px; }
+.wifi-lab input { margin: 0; }
 .wifi-note { margin: 6px 0 0; color: var(--ink); }
 .wifi-note.ok { color: var(--green); }
 .wifi-note.error { color: var(--red); }

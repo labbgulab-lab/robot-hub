@@ -15,3 +15,9 @@ pepper_dashboard/known_addresses.json
 
 # Pepper app: presentations, cached speech, settings (per laptop)
 pepper_app/data/
+
+# Group conversation: seats, personas, settings (per laptop)
+group.local.json
+
+# Group conversation: voiced interjections, the learned echo map, dry runs (per laptop)
+cache/

@@ -8,6 +8,11 @@ websockets>=13
 sounddevice>=0.5
 psutil>=6
 paramiko>=3
+# Group conversation: Silero VAD on the robots' mic streams
+onnxruntime>=1.18
+numpy>=1.26
+# Group conversation: Opus-compress what the people said before uploading it
+soundfile>=0.12
 tomli-w>=1.0
 # Windows only -- USB PnP detection for the Reachy Mini Lite
 wmi>=1.5; sys_platform == "win32"

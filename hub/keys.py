@@ -31,16 +31,16 @@ log = logging.getLogger("hub.keys")
 
 # What the lab has keys for. Only some have a speaking backend in reachy_chat
 # today -- see SPEECH_BACKEND.
-PROVIDERS = ("gemini", "gpt", "elevenlabs", "qwen")
+PROVIDERS = ("gemini", "gpt", "elevenlabs", "qwen", "openrouter")
 PROVIDER_LABELS = {"gemini": "Gemini", "gpt": "GPT", "elevenlabs": "ElevenLabs",
-                   "qwen": "Qwen"}
+                   "qwen": "Qwen", "openrouter": "OpenRouter"}
 DEFAULT_PROVIDER = "gemini"
 
 # The hub's provider name -> reachy_chat's `--provider`. None means the robot
 # cannot be *launched* on it: reachy_chat has no Qwen backend, and ElevenLabs
 # is a voice layered over a brain, not a brain (2026-10-05).
 SPEECH_BACKEND = {"gemini": "gemini", "gpt": "gpt_live", "elevenlabs": None,
-                  "qwen": None}
+                  "qwen": None, "openrouter": None}
 # Which of those actually hold a conversation today.
 SPEAKS_TODAY = {"gemini", "gpt"}
 

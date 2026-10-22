@@ -176,22 +176,26 @@ function renderLaunch(el, r) {
 
 /* ------------------------------------------------------------ add wifi */
 
-// NAO and Pepper: teach the robot a lab member's hotspot (hub join_wifi). It
-// joins at once and remembers it, so on success the card goes dim until this
-// laptop moves to that hotspot too.
-const WIFI_TYPES = ['naoqi', 'pepper'];
+// NAO, Pepper and Reachy: teach the robot a lab member's hotspot (hub
+// join_wifi). It joins at once and remembers it, so on success the card goes
+// dim until this laptop moves to that hotspot too. A Reachy can instead save
+// the lab WiFi as its fallback, which never moves it.
+const WIFI_TYPES = ['naoqi', 'pepper', 'reachy_wireless'];
 
 function renderWifi(el, r) {
   const box = el.querySelector('.card-wifi');
   const show = WIFI_TYPES.includes(r.type_id) && PRESENT.includes(r.state);
   box.classList.toggle('hidden', !show && !box.dataset.busy);
   const form = box.querySelector('.wifi-form');
+  form.querySelector('.wifi-lab').classList.toggle('hidden', r.type_id !== 'reachy_wireless');
   if (form.dataset.wired) return;
   form.dataset.wired = '1';
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const ssid = form.querySelector('.wifi-ssid').value.trim();
     const pass = form.querySelector('.wifi-pass');
+    const labBox = form.querySelector('.wifi-lab-box');
+    const lab = labBox.checked && !form.querySelector('.wifi-lab').classList.contains('hidden');
     const note = box.querySelector('.wifi-note');
     const join = form.querySelector('.wifi-join');
     const say = (text, kind) => {
@@ -202,16 +206,18 @@ function renderWifi(el, r) {
     if (pass.value.length < 8) { say('A WiFi password has at least 8 characters.', 'error'); return; }
     join.disabled = true;
     box.dataset.busy = '1';
-    say(`Joining “${ssid}”… up to a minute. Keep that hotspot on.`);
+    say(lab ? `Saving “${ssid}” as the lab WiFi…`
+            : `Joining “${ssid}”… up to a minute. Keep that hotspot on.`);
     try {
       const res = await fetch(`/api/robots/${encodeURIComponent(el.dataset.key)}/wifi`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ssid, password: pass.value }),
+        body: JSON.stringify({ ssid, password: pass.value, lab }),
       });
       const body = await res.json().catch(() => ({}));
       if (body.ok) {
         pass.value = '';
+        labBox.checked = false;
         form.classList.add('hidden');
         say(body.message, 'ok');
         announce(body.message);
@@ -532,7 +538,8 @@ const setupBadge = document.getElementById('setup-badge');
 const setupStatus = document.getElementById('setup-status');
 const setupCheck = document.getElementById('setup-check');
 
-const HOTSPOT_KIND = { iphone: 'iPhone hotspot', android: 'Android hotspot', phone: 'phone hotspot' };
+const HOTSPOT_KIND = { iphone: 'iPhone hotspot', android: 'Android hotspot', phone: 'phone hotspot',
+                       lab: 'lab WiFi, no internet' };
 
 function firstVisit() {
   try {
@@ -865,7 +872,32 @@ function updateSummary() {
   document.getElementById('running-count').textContent =
     all.filter(r => r.state === 'RUNNING').length;
   document.getElementById('robots-count').textContent = `(${all.length})`;
+  updateGroupButton();
 }
+
+/* ---------------------------------------------------- group conversation */
+// Several Reachys and the people in the room (docs/GROUP-CONVERSATION.md).
+// It runs on its own page; this button opens it once two Reachys are
+// connected, from the same robot events that draw the cards.
+const groupOpen = document.getElementById('group-open');
+const groupHint = document.getElementById('group-hint');
+
+function updateGroupButton() {
+  const reachys = [...state.values()].filter(
+    r => r.type_id === 'reachy_wireless' && CONNECTED.includes(r.state)).length;
+  const ready = reachys >= 2;
+  groupOpen.disabled = !ready;
+  groupOpen.title = ready
+    ? `Open the group conversation (${reachys} Reachys connected)`
+    : 'Connect at least two Reachys first';
+  groupHint.classList.toggle('hidden', ready);
+}
+
+// One named tab: a second click brings back the same page, not a twin.
+groupOpen.addEventListener('click', () => {
+  const tab = window.open('/group.html', 'robot-hub-group');
+  if (!tab) announce('The browser blocked the new tab. Allow pop-ups for the hub.');
+});
 
 function renderLog(entry) {
   const li = document.createElement('li');

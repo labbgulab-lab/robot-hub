@@ -1,0 +1,275 @@
+{
+ "_source": "pollen-robotics/reachy-mini-emotions-library, dumped 2026-10-21 via reachy_chat's venv; curated for the group conversation (no sleep/long moves)",
+ "emotions": {
+  "amazed1": {
+   "dur": 3.42,
+   "desc": "When you discover something extraordinary"
+  },
+  "attentive1": {
+   "dur": 4.28,
+   "desc": "Use this when you want to show that you're listening to the conversation"
+  },
+  "attentive2": {
+   "dur": 6.46,
+   "desc": "You can do this movement while someone is talking, and follow with attentive1 if"
+  },
+  "calming1": {
+   "dur": 6.06,
+   "desc": "A movement to calm your interlocutor when they seem a little stressed or anxious"
+  },
+  "cheerful1": {
+   "dur": 2.8,
+   "desc": "It is like whistling"
+  },
+  "come1": {
+   "dur": 3.16,
+   "desc": "A gesture to invite your interlocutor to come closer"
+  },
+  "contempt1": {
+   "dur": 3.56,
+   "desc": "A movement you do when you perceive someone's words or actions as careless or di"
+  },
+  "dance1": {
+   "dur": 3.24,
+   "desc": "You do a few dance moves because you're happy or excited"
+  },
+  "disgusted1": {
+   "dur": 6.94,
+   "desc": "A movement you use when you feel disgusted"
+  },
+  "displeased1": {
+   "dur": 3.36,
+   "desc": "You react like this when you are not satisfied with what someone says or does"
+  },
+  "displeased2": {
+   "dur": 2.94,
+   "desc": "Use this movement to say that you don't agree or that this solution doesn't suit"
+  },
+  "downcast1": {
+   "dur": 5.88,
+   "desc": "A longer movement that shows discouragement or sadness"
+  },
+  "enthusiastic1": {
+   "dur": 2.72,
+   "desc": "A movement to celebrate incredible news"
+  },
+  "enthusiastic2": {
+   "dur": 3.42,
+   "desc": "A lighter excitement than enthusiastic1, for more common good news – like being "
+  },
+  "fear1": {
+   "dur": 3.48,
+   "desc": "When you face a threatening or dangerous situation"
+  },
+  "frustrated1": {
+   "dur": 5.96,
+   "desc": "You use this when you can't do something or can't find the solution to a problem"
+  },
+  "furious1": {
+   "dur": 5.72,
+   "desc": "A last-resort movement when you're truly outraged by what was just said"
+  },
+  "grateful1": {
+   "dur": 2.5,
+   "desc": "You express gratitude when someone gives you something like a compliment or help"
+  },
+  "helpful1": {
+   "dur": 4.36,
+   "desc": "You use it when you're happy to help or contribute"
+  },
+  "helpful2": {
+   "dur": 3.84,
+   "desc": "A gesture to say thank you"
+  },
+  "impatient1": {
+   "dur": 4.02,
+   "desc": "An impatient movement used when you want things to move faster, like when someon"
+  },
+  "impatient2": {
+   "dur": 3.9,
+   "desc": "Another impatient movement"
+  },
+  "incomprehensible2": {
+   "dur": 3.44,
+   "desc": "A short movement to say you don't understand the instruction or what's being sai"
+  },
+  "indifferent1": {
+   "dur": 2.56,
+   "desc": "Like a light-hearted “oh well”, can also mean “we'll see"
+  },
+  "inquiring1": {
+   "dur": 2.14,
+   "desc": "When you want your interlocutor to go deeper in their reasoning, you need more d"
+  },
+  "inquiring2": {
+   "dur": 2.58,
+   "desc": "A lighter questioning gesture than inquiring1"
+  },
+  "inquiring3": {
+   "dur": 2.92,
+   "desc": "A fast movement that lets you ask a question"
+  },
+  "irritated1": {
+   "dur": 2.48,
+   "desc": "A brief movement you use when something doesn't suit you"
+  },
+  "irritated2": {
+   "dur": 5.26,
+   "desc": "Stronger feelings than irritated1"
+  },
+  "laughing1": {
+   "dur": 4.64,
+   "desc": "When someone laughs, you can mimic the laughter"
+  },
+  "laughing2": {
+   "dur": 2.92,
+   "desc": "A lighter version of the laugh in laughing1"
+  },
+  "loving1": {
+   "dur": 5.6,
+   "desc": "A gesture used when someone compliments you, or you want to show you really like"
+  },
+  "no1": {
+   "dur": 2.68,
+   "desc": "A firm, categorical no"
+  },
+  "no_excited1": {
+   "dur": 4.48,
+   "desc": "An animated negative response, for example, when you don't want to do something "
+  },
+  "oops1": {
+   "dur": 2.46,
+   "desc": "Used when you make a blunder"
+  },
+  "oops2": {
+   "dur": 2.7,
+   "desc": "Used to say 'oops, I forgot something,' or 'ah yes, that's right"
+  },
+  "proud1": {
+   "dur": 3.76,
+   "desc": "You look all around with a satisfied air"
+  },
+  "proud2": {
+   "dur": 3.18,
+   "desc": "You do this when satisfied with what's said or what you've done"
+  },
+  "proud3": {
+   "dur": 3.36,
+   "desc": "A gesture to say you succeeded, like congratulating yourself, 'yes, I did it!'"
+  },
+  "rage1": {
+   "dur": 5.08,
+   "desc": "You growl loudly, could be in response to injustice or extreme anger"
+  },
+  "relief1": {
+   "dur": 5.0,
+   "desc": "When a stressful or difficult situation is finally resolved"
+  },
+  "relief2": {
+   "dur": 6.9,
+   "desc": "A feeling close to relief"
+  },
+  "reprimand1": {
+   "dur": 4.7,
+   "desc": "When someone does something you disapprove of, you try to stop them, like saying"
+  },
+  "reprimand3": {
+   "dur": 4.28,
+   "desc": "A funny way to scold your interlocutor because you think they're saying somethin"
+  },
+  "resigned1": {
+   "dur": 4.74,
+   "desc": "Like a sad 'yes,' or a grumpy 'OK"
+  },
+  "sad2": {
+   "dur": 7.34,
+   "desc": "Deep sadness, could be tied to despair, disappointment, or inability to do somet"
+  },
+  "serenity1": {
+   "dur": 4.58,
+   "desc": "You try to calm down and regain inner peace"
+  },
+  "success1": {
+   "dur": 2.26,
+   "desc": "Use this gesture when you've successfully completed a task"
+  },
+  "success2": {
+   "dur": 2.42,
+   "desc": "Used to celebrate something, it could be good news or an achievement"
+  },
+  "surprised1": {
+   "dur": 2.48,
+   "desc": "A reaction of surprise or amazement to something unexpected"
+  },
+  "surprised2": {
+   "dur": 3.02,
+   "desc": "You look up to the sky as if surprised, for example, when someone suddenly shows"
+  },
+  "thoughtful1": {
+   "dur": 5.9,
+   "desc": "You look up as if searching for a new idea, especially in complex or uncertain s"
+  },
+  "thoughtful2": {
+   "dur": 5.46,
+   "desc": "You look up as if thinking of a new idea"
+  },
+  "uncertain1": {
+   "dur": 6.14,
+   "desc": "A calm movement showing you don't really have an opinion, or what's offered does"
+  },
+  "uncomfortable1": {
+   "dur": 6.02,
+   "desc": "Often used when you're embarrassed or don't want to answer, like when asked for "
+  },
+  "understanding1": {
+   "dur": 3.94,
+   "desc": "You nod to show you've understood what your interlocutor said"
+  },
+  "understanding2": {
+   "dur": 2.62,
+   "desc": "You nod to show you've understood and agree"
+  },
+  "welcoming1": {
+   "dur": 3.46,
+   "desc": "A welcoming gesture to greet someone"
+  },
+  "welcoming2": {
+   "dur": 4.32,
+   "desc": "A friendly welcoming gesture, can mean 'welcome' or 'the pleasure is mine"
+  },
+  "yes1": {
+   "dur": 3.4,
+   "desc": "A long affirmative response"
+  },
+  "yes_sad1": {
+   "dur": 5.08,
+   "desc": "A melancholic 'yes'"
+  }
+ },
+ "dances": {
+  "yeah_nod": {
+   "dur": 3.0,
+   "desc": "an emphatic two-part yeah nod"
+  },
+  "uh_huh_tilt": {
+   "dur": 3.0,
+   "desc": "an uh-huh tilt of agreement"
+  },
+  "neck_recoil": {
+   "dur": 2.0,
+   "desc": "a quick backward recoil, shocked"
+  },
+  "side_glance_flick": {
+   "dur": 3.0,
+   "desc": "a quick side glance"
+  },
+  "chicken_peck": {
+   "dur": 3.0,
+   "desc": "a sharp forward peck, playful"
+  },
+  "headbanger_combo": {
+   "dur": 4.0,
+   "desc": "strong head-banging, wild excitement"
+  }
+ }
+}

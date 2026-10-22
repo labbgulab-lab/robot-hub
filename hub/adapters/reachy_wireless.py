@@ -25,7 +25,8 @@ app is provisioned first with reachy_chat's `tools/deploy_robot_app.py`.
 Settings read from `[robots.reachy_wireless.settings]`:
     reachy_chat_path   checkout to run `laptop_chat.py` from / deploy from
     python             interpreter; blank = <reachy_chat_path>/.venv/Scripts/python.exe
-    mic_mode           "robot" (default, runs on the robot) | "laptop"
+    mic_mode           "auto" (default: "laptop" when a DJI mic is plugged into
+                       the laptop, else "robot") | "robot" (runs on the robot) | "laptop"
     robot_mic_match    robot capture device (default "reachymini_audio_src")
     robot_mic_rate     robot capture rate (default 16000)
     robot_dashboard_port  on-robot dashboard port (default 8765)
@@ -43,6 +44,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .. import announce as announce_helper
+from .. import reachy_wifi
 from ..keys import PROVIDER_LABELS, SPEECH_BACKEND
 from ..supervisor import get_supervisor, shared_port_allocator
 from .base import (AdapterUnavailable, Claim, Found, Health, RobotAdapter,
@@ -178,6 +180,7 @@ class ReachyWirelessAdapter(RobotAdapter):
         self._child_name = ""
         self._url: Optional[str] = None
         self._robot_running = False
+        self._launched_mode = ""        # the mic mode the running app was launched in
         # Per-unit name from config.toml, so ten Reachys do not all log and
         # announce as "Reachy-Mini" (HUB-INTERFACE.md 2).
         try:
@@ -276,7 +279,17 @@ class ReachyWirelessAdapter(RobotAdapter):
         return str(self.settings.get("robot_mic_match") or DEFAULT_ROBOT_MIC_MATCH)
 
     def _mic_mode(self) -> str:
-        return str(self.settings.get("mic_mode") or "robot").strip().lower()
+        """"robot" or "laptop". The setting may say "auto" (the default since
+        2026-10-22): the laptop's DJI mic when the hub sees one plugged in
+        (laptop_mic.MIC_WATCH), else the robot's own. A launched app keeps
+        the mode it was launched in until it stops."""
+        if self._launched_mode:
+            return self._launched_mode
+        mode = str(self.settings.get("mic_mode") or "auto").strip().lower()
+        if mode == "auto":
+            from ..laptop_mic import MIC_WATCH
+            return "laptop" if MIC_WATCH.dji() is not None else "robot"
+        return mode
 
     def _laptop_mic_device(self) -> str:
         """The concrete capture endpoint, resolved -- never the word 'default'.
@@ -284,6 +297,11 @@ class ReachyWirelessAdapter(RobotAdapter):
         A named claim is what makes the collision with NAO's device-less
         capture visible instead of silent (2.5).
         """
+        if str(self.settings.get("mic_mode") or "auto").strip().lower() == "auto":
+            from ..laptop_mic import MIC_WATCH
+            dji = MIC_WATCH.dji()
+            if dji is not None:
+                return dji["name"]
         if self._mic_name is not None:
             return self._mic_name
         configured = self.settings.get("mic_device")
@@ -294,11 +312,10 @@ class ReachyWirelessAdapter(RobotAdapter):
         needle = str(self.settings.get("mic_match") or DEFAULT_MIC_MATCH).lower()
         name = ""
         try:
-            import sounddevice as sd   # optional: a hub without audio still runs
-            for device in sd.query_devices():
-                if (device.get("max_input_channels", 0) > 0
-                        and needle in str(device.get("name", "")).lower()):
-                    name = str(device["name"])
+            from ..laptop_mic import list_inputs   # optional: a hub without audio still runs
+            for device in list_inputs():
+                if needle in device["name"].lower():
+                    name = device["name"]
                     break
         except Exception as exc:  # noqa: BLE001
             self.notes.append(
@@ -408,6 +425,23 @@ class ReachyWirelessAdapter(RobotAdapter):
                     or self.config.secret("REACHY_SSH_PASSWORD")
                     or DEFAULT_SSH_PASSWORD)
         return str(self.settings.get("ssh_user") or DEFAULT_SSH_USER), str(password)
+
+    async def join_wifi(self, ssid: str, password: str, lab: bool = False) -> str:
+        """The card's "Add WiFi...": teach this robot a hotspot (hub/reachy_wifi.py).
+
+        A lab member's hotspot wins over every other network and the robot
+        moves to it now if it can see it; `lab` saves the lab WiFi as the
+        fallback instead and never moves the robot.
+        """
+        user, login = self._ssh_creds()
+        host = self.found.address
+
+        def run(command: str, stdin_text: Optional[str], timeout_s: float):
+            return _ssh_run(host, user, login, command, timeout_s, stdin_text)
+
+        return await thread_finishing_on_cancel(
+            reachy_wifi.teach, run, login, ssid, password, lab, self.display_name,
+            timeout_s=60.0 + reachy_wifi.WATCH_S + 30)
 
     async def _ssh(self, command: str, timeout_s: float = SSH_TIMEOUT_S,
                    stdin_text: Optional[str] = None) -> tuple[int, str]:
@@ -538,7 +572,9 @@ class ReachyWirelessAdapter(RobotAdapter):
 
     async def launch(self) -> str:
         if self._mic_mode() != "laptop":
-            return await self._launch_on_robot()
+            url = await self._launch_on_robot()
+            self._launched_mode = "robot"
+            return url
         root = self._reachy_chat_path()
         python = self._python(root)
         script = root / "laptop_chat.py"
@@ -555,6 +591,10 @@ class ReachyWirelessAdapter(RobotAdapter):
                 "--robot-id", self.stable_key(self.found),
                 "--robot-name", self.display_name,
                 "--no-browser"]   # the hub opens the tab itself
+        mic = self._laptop_mic_device()
+        if mic:
+            # The laptop mic the hub found (the DJI, 2026-10-22), by name.
+            argv += ["--mic-match", mic]
 
         await supervisor.start(self._child_name, argv, cwd=root, port=port,
                                owner=self.stable_key(self.found),
@@ -569,18 +609,24 @@ class ReachyWirelessAdapter(RobotAdapter):
                 "{:.0f} s -- the lines above are its own output".format(
                     port, DASHBOARD_WAIT_S))
         self._url = url
+        self._launched_mode = "laptop"
         return url
 
     async def stop_system(self) -> list[str]:
-        if self._mic_mode() != "laptop":
+        mode = self._mic_mode()
+        self._launched_mode = ""
+        if mode != "laptop":
             # Always, not only when this hub session launched it: after a hub
             # restart the app is still running on the robot.
             self._robot_running = False
             self._url = None
             return await self._clear_robot_side()
-        if not self._child_name:
-            return []
-        notes = await get_supervisor().stop(self._child_name)
-        self._child_name = ""
+        notes: list[str] = []
+        if self._child_name:
+            notes = await get_supervisor().stop(self._child_name)
+            self._child_name = ""
         self._url = None
+        # The mic mode can change with the DJI plugged in or out: an app still
+        # running on the robot from before must go too.
+        notes += await self._clear_robot_side()
         return notes

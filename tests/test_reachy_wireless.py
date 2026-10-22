@@ -290,3 +290,18 @@ def test_announcement_restores_released_media(tmp_path):
 
 def test_wav_length_is_read_from_the_file(tmp_path):
     assert abs(_wav_seconds(_clip(tmp_path)) - 0.1) < 1e-6
+
+
+# ---------------------------------------------------------------- add wifi
+def test_add_wifi_goes_to_this_robot_with_its_own_login(monkeypatch):
+    import asyncio
+    a = _adapter(ssh_user="pollen", ssh_password="pw")
+    seen = []
+
+    def fake_run(host, user, password, command, timeout_s, stdin_text=None):
+        seen.append((host, user, password, stdin_text))
+        return 0, "CURRENT Lab Net\nSEEN no\nACTION saved\nMOVE no\n"
+    monkeypatch.setattr(rw, "_ssh_run", fake_run)
+    msg = asyncio.run(a.join_wifi("Dana Phone", "secretpass1"))
+    assert seen == [(IP, "pollen", "pw", "pw\nsecretpass1\n")]
+    assert msg.startswith("reachy2 saved “Dana Phone”")
