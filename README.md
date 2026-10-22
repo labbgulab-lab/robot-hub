@@ -80,6 +80,13 @@ opens by itself the first time and whenever something is wrong.
   network by name *and* password, so lab members who use the same hotspot
   name and password share every robot's memory.
 - Turn the hotspot on **before** powering a robot.
+- **Reachy Mini, in the lab:** every lab Reachy also knows the **lab WiFi**
+  (no internet) as its fallback. Connect your laptop to the lab WiFi, power the
+  robot on, turn your hotspot on, and press **Add WiFi…** on its card. It moves
+  to your hotspot now and prefers it from then on. Without the hub:
+  `python tools/reachy_add_wifi.py --ssid "Your Hotspot"`. Put the lab WiFi's
+  name in `config.toml` under `[network] lab_wifi` so the Network setup panel
+  knows it.
 
 ### 4. Speaking keys
 
@@ -124,6 +131,15 @@ run `tools/setup-windows.ps1 -Kit <kit folder>`. It installs Git and Pythons
 3.12 + 2.7, clones everything into `%USERPROFILE%\robot-lab`, downloads NAO's
 speech model and writes `config.toml`. Pepper's Say-It dashboard is part of
 this repo (`pepper_dashboard/`).
+
+### Adding a newly built Reachy to the fleet
+
+`tools/reachy_bringup.py` takes a factory-fresh robot from its own
+`reachy-mini-ap` WiFi to a named fleet member: it saves your hotspot and the
+lab WiFi on it, updates its daemon, installs `reachy_chat` and registers it as
+the next `reachyN`. It switches this laptop's WiFi for a few minutes, so start
+it detached with `tools/reachy_bringup_start.ps1 -Name reachyN` (Windows).
+Needs `[network] hotspot` in `config.toml` and `HOTSPOT_PASSWORD` in `.env`.
 
 ### 6. Something wrong?
 

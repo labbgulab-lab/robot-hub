@@ -121,10 +121,10 @@ def _linux() -> dict[str, Any]:
     return info
 
 
-def status(addresses: list[str]) -> dict[str, Any]:
-    """{ssid, band, channel, hotspot: iphone|android|phone|no|unknown,
+def status(addresses: list[str], lab_wifi: str = "") -> dict[str, Any]:
+    """{ssid, band, channel, hotspot: iphone|android|phone|lab|no|unknown,
     ok: bool, problem: sentence or None}. `addresses` are this laptop's
-    IPv4 interfaces ("172.20.10.4/28")."""
+    IPv4 interfaces ("172.20.10.4/28"); `lab_wifi` is config [network]."""
     if sys.platform == "win32":
         info = _windows()
     elif sys.platform == "darwin":
@@ -139,7 +139,11 @@ def status(addresses: list[str]) -> dict[str, Any]:
         except ValueError:
             pass
     ssid = info.get("ssid") or ""
-    if any(ip in IPHONE_NET for ip in ips):
+    if lab_wifi and ssid == lab_wifi:
+        # No internet and not a phone, but the robots' fallback: the place to
+        # hand a robot your hotspot. Its band is the router's business.
+        hotspot = "lab"
+    elif any(ip in IPHONE_NET for ip in ips):
         hotspot = "iphone"
     elif any(ip in net for net in ANDROID_NETS for ip in ips):
         hotspot = "android"
@@ -153,7 +157,7 @@ def status(addresses: list[str]) -> dict[str, Any]:
     problem = None
     if info.get("band") is None and not ssid and not ips:
         problem = "This laptop is not on any network."
-    elif info.get("band") in ("5 GHz", "6 GHz") and hotspot != "no":
+    elif info.get("band") in ("5 GHz", "6 GHz") and hotspot not in ("no", "lab"):
         problem = ("Your hotspot is on {} — the robots cannot see it. Turn on 2.4 GHz "
                    "(iPhone: Maximize Compatibility; Android: AP band 2.4 GHz), then "
                    "reconnect this laptop to it.".format(info["band"]))

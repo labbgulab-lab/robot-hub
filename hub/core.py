@@ -564,12 +564,15 @@ class Hub:
             self.bus.emit_log("error", "{}: launch failed - {}".format(r.name, reason))
             return {"ok": False, "error": reason}
 
-    async def join_wifi(self, key: str, ssid: str, password: str) -> dict[str, Any]:
-        """The card's "Add WiFi...": teach NAO / Pepper a lab member's hotspot.
+    async def join_wifi(self, key: str, ssid: str, password: str,
+                        lab: bool = False) -> dict[str, Any]:
+        """The card's "Add WiFi...": teach NAO / Pepper / Reachy a lab
+        member's hotspot.
 
         The robot joins it now and keeps it, so it leaves this laptop's
         network on success and its card goes dim until the laptop follows.
-        The password is passed on and never logged.
+        `lab` (Reachy only) saves the lab WiFi as the robot's fallback
+        instead, without moving it. The password is passed on and never logged.
         """
         adapter = self.adapters.get(key)
         r = self.registry.get(key)
@@ -586,12 +589,19 @@ class Hub:
         if key in self._busy or key in self._postures:
             return {"ok": False, "error": "{} is busy — try again when it "
                                           "settles".format(r.name)}
+        if lab and getattr(adapter, "type_id", "") != "reachy_wireless":
+            return {"ok": False, "error": "only a Reachy Mini keeps a lab WiFi "
+                                          "fallback"}
         ssid = (ssid or "").strip()
+        lab_wifi = self.config.network.lab_wifi
+        if lab_wifi and ssid == lab_wifi and getattr(adapter, "type_id", "") == "reachy_wireless":
+            lab = True          # never let the lab WiFi outrank a hotspot
         self._busy.add(key)
-        self.bus.emit_log("info", "{}: joining the WiFi “{}” (up to "
-                                  "a minute)".format(r.name, ssid))
+        self.bus.emit_log("info", "{}: {} the WiFi “{}” (up to a minute)".format(
+            r.name, "saving the lab" if lab else "joining", ssid))
         try:
-            message = await adapter.join_wifi(ssid, password)
+            message = await (adapter.join_wifi(ssid, password, lab=True) if lab
+                             else adapter.join_wifi(ssid, password))
         except Exception as exc:  # noqa: BLE001
             reason = str(exc) or type(exc).__name__
             self.bus.emit_log("error", "{}: could not join “{}” - {}".format(

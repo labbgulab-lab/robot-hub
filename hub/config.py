@@ -28,6 +28,16 @@ class ServerCfg(BaseModel):
     port: int = 8099            # outside every reserved range in 7.1
 
 
+class NetworkCfg(BaseModel):
+    # The lab's own WiFi (no internet): every Reachy's fallback, and where a
+    # lab member hands a robot their hotspot (hub/reachy_wifi.py). Its name
+    # lives here, in the git-ignored config.toml, not in the public repo.
+    lab_wifi: str = ""
+    # The hotspot every new robot is set up on (tools/reachy_bringup.py);
+    # its password is HOTSPOT_PASSWORD in .env.
+    hotspot: str = ""
+
+
 class DiscoveryCfg(BaseModel):
     mdns: bool = True
     usb: bool = True
@@ -78,6 +88,7 @@ class RobotCfg(BaseModel):
 class Config(BaseModel):
     server: ServerCfg = Field(default_factory=ServerCfg)
     discovery: DiscoveryCfg = Field(default_factory=DiscoveryCfg)
+    network: NetworkCfg = Field(default_factory=NetworkCfg)
     ports: PortsCfg = Field(default_factory=PortsCfg)
     auto_connect: bool = False
     robots: dict[str, RobotCfg] = Field(default_factory=dict)
