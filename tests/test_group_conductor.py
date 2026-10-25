@@ -105,6 +105,9 @@ def test_hebrew_pronunciation_for_the_voice():
     assert c.pronounce("ולרובוט יש") == "ve le robot יש"
     assert c.pronounce("שלום לאבה לאב!") == "שלום Laba Lab!"
     assert c.pronounce("Robots vote") == "Robots vote"
+    assert c.pronounce("Dr. Guy Laban leads the lab.") == "Dr. Guy {} leads the lab.".format(
+        c.LABAN_SPOKEN)
+    assert c.pronounce("a Labana") == "a Labana"
 
 
 def test_hedged_stream_races_a_hung_request():

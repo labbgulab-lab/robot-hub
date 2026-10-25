@@ -165,13 +165,15 @@ DEFAULT_SETTINGS = {"topic": "", "language": "auto", "minutes": 5,
                     "director_model": DIRECTOR_MODEL, "barge_in": "normal",
                     "interrupt_level": 3, "vision": True, "gestures": "lively",
                     "slow_network": True,
+                    # Group talk starts with every robot saying one line about the lab
+                    "lab_intro": True,
                     # "auto" = a DJI mic on the laptop if one is plugged in,
                     # "robots" = the robots' own mics, else a laptop mic's name
                     "people_mic": "auto"}
 # Settings the page may change while robots are connected or talking.
 LIVE_SETTINGS = ("topic", "language", "minutes", "listen_gap_s", "heads_mirror",
                  "voice_min_level", "voice_provider", "director_model", "barge_in",
-                 "interrupt_level", "vision", "gestures", "slow_network")
+                 "interrupt_level", "vision", "gestures", "slow_network", "lab_intro")
 # Fewer ElevenLabs characters than this left: "auto" uses OpenAI voices.
 ELEVEN_MIN_CREDITS = 1500
 VOICE_PROVIDERS = ("auto", "elevenlabs", "openai", "openrouter", "gemini")
@@ -227,6 +229,52 @@ VOICE_STYLE = {"Reachy Mini 1": "bright, quick, enthusiastic",
                "Reachy Mini 5": "warm, friendly, curious"}
 HEBREW_NAMES = {"Noa": "נועה", "Dor": "דור", "Maya": "מאיה", "Eli": "אלי", "Tamar": "תמר"}
 
+# What the robots know about the lab (Tomer, 2026-10-25): the same file
+# Pepper answers from, so one edit updates both. Its first lines are notes
+# for Pepper; the facts start at "## The lab". The Reachys get only the
+# general part: no people list, no joining/contact, no room number ("they
+# need to answer very generally, if at all").
+LAB_FACTS_FILE = REPO_ROOT / "pepper_app" / "lab_facts.md"
+LAB_SECTIONS = ("## The lab", "## Projects")
+
+
+LABALAB_RE = re.compile(r"\bLabaLab\b", re.I)
+# The people asking about Guy or the lab: the writer gets the reminder in the
+# turn itself (flash-lite answered "who is Guy?" flatly from the rules alone).
+ASKS_GUY = re.compile(r"\bGuy\b|(?i:\blaban\b|\bprofessor\b|your boss|who leads|head of the lab)|גיא|לבן")  # "this guy" is not him
+ASKS_LAB = re.compile(r"\b(lab|labs|laboratory|join|apply|contact)\b|מעבדה", re.I)
+GUY_NOTE = ("They asked about Guy Laban: answer with real respect, in the robot's words: "
+            "Dr. Guy Laban is a professor at Ben-Gurion University and one of the leading "
+            "researchers in his field, human-robot and human-AI interaction, with many "
+            "partnerships, and he leads Laba Lab.")
+LAB_NOTE = ("They asked about the lab: answer briefly and in general terms from LAB FACTS "
+            "only. For joining, contact, people or anything not in LAB FACTS, say the lab's "
+            "people here can tell them more; never mention websites, emails or places.")
+
+
+def lab_question_note(text: str) -> str:
+    if ASKS_GUY.search(text or ""):
+        return GUY_NOTE
+    if ASKS_LAB.search(text or ""):
+        return LAB_NOTE
+    return ""
+
+
+def lab_facts() -> str:
+    try:
+        text = LAB_FACTS_FILE.read_text(encoding="utf-8")
+    except OSError:
+        log.warning("no lab facts at %s", LAB_FACTS_FILE)
+        return "(none: say you do not know)"
+    keep, on = [], False
+    for row in text.splitlines():
+        if row.startswith("## "):
+            on = row.startswith(LAB_SECTIONS)
+        if on:
+            keep.append(re.sub(r"\s*Building [^.]*\.", "", row))
+    return "\n".join(keep).strip() or "(none: say you do not know)"
+
+
 COMMON_RULES = """\
 - WHAT THEY ARE: every robot is a Reachy Mini, a small social robot made for \
 human-robot interaction, and it knows it. They are robots, not humans, and never act \
@@ -241,6 +289,15 @@ never invent others. In Hebrew, the robots speak of themselves in masculine form
 speaks in this script; they are never said aloud. A robot never says a label or a name \
 and never calls on another robot by name ("Hey Reachy, what do you think..." is wrong). \
 To answer another robot, answer its point directly.
+- PEOPLE'S NAMES: when a person says their name, a robot may say it ONCE in the whole conversation (when it first answers them), never again. After that talk to them without the name: no line starts with a person's name and no line ends with one.
+- THE LAB: the robots belong to Laba Lab, Dr. Guy Laban's lab at Ben-Gurion \
+University. Only when someone asks about the lab or Guy, the robot answers briefly and \
+in general terms (what the lab studies, who leads it, the kind of work it does), from \
+LAB FACTS below and nothing else, never details. Guy is always spoken of with real respect: \
+asked who he is, the robot says he is a professor at Ben-Gurion University, one of the \
+leading researchers in his field, with many partnerships, and that he leads the lab. Asked about anything else (joining, contact, people, \
+schedules), it says the lab's people here can tell them more. Write the lab's name \
+as Laba Lab (two words, so it is spoken right). Otherwise do not bring the lab up.
 - The robots can see through cameras in their heads. When a picture is attached it is \
 what the named robot sees right now: if the people ask what a robot sees, holds, wears \
 or shows, that robot answers concretely from the picture (things and colours). Be \
@@ -256,6 +313,9 @@ surprise -> surprised or amazed, a question -> inquiring, good news -> enthusias
 - "tone" is 3-6 English words on HOW the line is said (e.g. "outraged, loud", "teasing, amused", \
 "warm, excited", "dry, unimpressed"): acted, expressive, never flat.
 - LANGUAGE: {language}
+
+LAB FACTS (all the robots know about the lab):
+{lab}
 
 MOVES the robots can make (name: when):
 {moves}"""
@@ -279,6 +339,8 @@ owns music trained on artists' work, what happens to working musicians' jobs and
 live performance, listeners' taste, AI as a tool that artists use).
 - Stay with a point until it is argued out: a follow-up, a counter-example, a \
 concession with a "but". Change point only when one has been argued out (move steer).
+- No robot repeats its own argument: once it has made a point (for example that \
+machines cannot feel heartbreak), it backs its side with a NEW reason the next time.
 - Answer the ARGUMENT, never the wording: do not riff on a word or metaphor the other \
 robot used (sweat -> plumbing -> vacuum tubes, or a chef -> microwave meals -> fast \
 food, is exactly wrong). Metaphors are rare.
@@ -293,7 +355,8 @@ themselves and have no songs, fans, servers or updates of their own.
 - Pick a move: build (add a new reason or example), challenge (disagree with a specific \
 point and say why), question (ask the other robot something specific about its point), \
 yes-but (accept one part, push back on another), joke (welcome, often: a funny line \
-that still makes a point about the topic), \
+that still makes a point about the topic; never starting with "If", and not about the \
+robot's own circuits, motors or antennas), \
 people (turn to the people in the room), steer (take the next real question of the \
 topic), wrap (only the very last line, when told time is up).
 - Never open with agreement or praise ("I agree", "Great point", "Exactly", "נכון", \
@@ -313,9 +376,9 @@ cut off by the people, do not finish its sentence: answer the people. Turn to th
 people about once every 8 robot lines (not right after they spoke), each time in a \
 new way.
 - The robots never copy each other: no robot reuses a device, question form or \
-sentence pattern another robot already used (one asked the room for a show of hands: \
-nobody does that again; one opened with "who here...": the next question to the room \
-is different).
+sentence pattern another robot already used (one opened with "who here...": the next \
+question to the room is different). Never ask the people to raise their hands, vote \
+by hands or do a show of hands.
 - Every line brings something NEW: a fresh example, a number, a joke, a new angle \
 or a surprising question. Never reuse a phrase or argument a robot already used (no catchphrases), and never use the same move three times in a row.
 """ + COMMON_RULES + """
@@ -469,6 +532,110 @@ def strip_leading_name(text: str, names: list[str]) -> str:
     return text
 
 
+# Tomer, 2026-10-25: after a guest said their name the robots opened ~every
+# line with "<name>, ..." ("1 time over all is ok"). A person's name may be said once
+# per conversation; after that it is taken out of the line.
+_NAME_INTRO = re.compile(r"(?i:my name is|my name's|call me|i am called|קוראים לי|שמי)\s+"
+                         r"([A-Z][a-z]+|[א-ת]{2,})")
+_NOT_NAMES = {"I", "I'm", "I'll", "I've", "I'd", "AI", "OK", "Okay", "Reachy", "Mini",
+              "English", "Hebrew", "God", "TV"}
+
+
+def people_names(human_texts: list[str], robot_texts: list[str]) -> set[str]:
+    """Names the people gave: "my name is Dana", or a capitalised word in the
+    middle of what they said ("this is Dana from the lab") that a robot then
+    called them by ("Dana, ...")."""
+    named: set[str] = set()
+    maybe: set[str] = set()
+    for text in human_texts:
+        named.update(_NAME_INTRO.findall(text or ""))
+        maybe.update(re.findall(r"(?<=[a-z,] )([A-Z][a-z]+)\b", text or ""))
+    called = {m for t in robot_texts for m in re.findall(r"^\s*([A-Z][a-z]+)\s*,", t or "")}
+    return (named | (maybe & called)) - _NOT_NAMES
+
+
+def says_name(text: str, name: str) -> bool:
+    return re.search(r"(?<![\w'])" + re.escape(name) + r"(?![\w'])", text or "") is not None
+
+
+def strip_person_name(text: str, name: str) -> str:
+    """Take a person's name out where it only calls them: "Dana, would you..."
+    -> "Would you...", "...the rent, Dana." -> "...the rent.", "Hello Dana," ->
+    "Hello,". A name inside the sentence ("Dana's job") stays."""
+    n = re.escape(name)
+    m = re.match(r"^\s*{}\s*[,!:\-–—]\s*".format(n), text)
+    if m and len(text) > m.end() + 3:
+        rest = text[m.end():]
+        text = rest[:1].upper() + rest[1:]
+    text = re.sub(r"\s*,\s*{}(?=\s*[,.?!…]|\s*$)".format(n), "", text)
+    text = re.sub(r"\b(hello|hi|hey|thanks|thank you|sorry|look|listen|well|oh)\s+{}\b".format(n),
+                  r"\1", text, flags=re.I)
+    return re.sub(r",\s*,", ",", text).strip()
+
+
+# Tomer, 2026-10-25 evening run review: ~half the lines opened with the
+# other robot's last words (the writer ignores the rule), "raise your hand"
+# came back (feels fake), one robot's jokes were all "If X, then my
+# circuits...", the other argued "no soul, no heartbreak" five times. Checked
+# here; a line that breaks one is written again, once (GroupTalk.prepare).
+HANDS_RE = re.compile(r"\b(?:raise (?:your|a|their) hands?|hands? up|show of hands)\b", re.I)
+SELF_JOKE_RE = re.compile(r"\bmy (?:circuits?|motors?|antennas?|sensors?|power supply|"
+                          r"processors?|servos?|batter(?:y|ies)|wires?|chips?)\b", re.I)
+FEELING_RE = re.compile(r"\b(?:heartbreak|heartbroken|soul|souls|emotions?|emotional|feel|"
+                        r"feels|felt|feelings?|lived|human spirit|trauma|struggles?|pain|"
+                        r"suffering|human life|messy life|life experience)\b", re.I)
+_ECHO_SKIP = {"about", "after", "again", "also", "because", "being", "could", "does",
+              "doesn't", "even", "every", "from", "have", "just", "like", "make", "makes",
+              "more", "much", "only", "really", "should", "some", "than", "that", "their",
+              "them", "then", "there", "these", "they", "thing", "think", "this", "those",
+              "very", "what", "when", "where", "which", "while", "will", "with", "would",
+              "your", "yours", "music", "human", "humans", "people", "artist", "artists",
+              "song", "songs", "robot", "robots"}
+
+
+def _content(text: str, skip: set) -> list[str]:
+    return [w for w in re.findall(r"[a-z']+", (text or "").lower())
+            if len(w) >= 4 and w not in skip]
+
+
+def echo_opening(text: str, prev: str, topic: str = "") -> str:
+    """The words a line opens with (its first three) that come from `prev`,
+    compared by their first five letters ("Skipping intros" after "skip the
+    intro"); the topic's own words do not count."""
+    skip = _ECHO_SKIP | set(re.findall(r"[a-z']+", (topic or "").lower()))
+    head = [w for w in re.findall(r"[a-z']+", (text or "").lower())[:3]
+            if len(w) >= 4 and w not in skip]
+    before = {w[:5] for w in _content(prev, skip)}
+    return " ".join(w for w in head if w[:5] in before)
+
+
+def line_problems(text: str, prev_robot: str, own: list[str], topic: str = "") -> list[str]:
+    """What is wrong with a written line, for the writer's second try.
+    `prev_robot`: the robot line just before it ("" after the people);
+    `own`: this robot's earlier lines."""
+    problems = []
+    echo = echo_opening(text, prev_robot, topic) if prev_robot else ""
+    if echo:
+        problems.append('it opens with words from the line before ("{}"): open differently '
+                        '(a reason, an example, a question, a short reaction) and answer the '
+                        'point, not the words'.format(echo))
+    if HANDS_RE.search(text):
+        problems.append("it asks the people to raise hands: never do that")
+    if text.lstrip().lower().startswith("if ") and any(
+            o.lstrip().lower().startswith("if ") for o in own[-4:]):
+        problems.append('it starts with "If", like this robot\'s earlier lines: start differently')
+    if SELF_JOKE_RE.search(text) and any(SELF_JOKE_RE.search(o) for o in own[-6:]):
+        problems.append('it jokes about the robot\'s own parts ("my circuits", "my motors") '
+                        'again: joke about the topic instead')
+    # (not when answering the people: a second try there is a second they wait)
+    if prev_robot and FEELING_RE.search(text) and sum(
+            bool(FEELING_RE.search(o)) for o in own[-6:]) >= 2:
+        problems.append("this robot already argued about feelings, soul or lived experience: "
+                        "make a DIFFERENT argument for its side (for example money and jobs, "
+                        "copyright, live shows, tools, listeners' taste, what is new)")
+    return problems
+
+
 _INTERJ = (r"(?:wait|hold on(?: a (?:second|sec|minute))?|hang on|can i just say something|no+|nope|oh|come on|sorry|excuse me|okay|ok|yes|yeah|"
            r"exactly|actually|um+|uh+|ha+|please|whoa|hey|well|"
            r"רגע|לא|נו באמת|נו|מה פתאום|סליחה|אוקיי|כן|בדיוק|בעצם|אממ|חה|בחייך|אוי|היי|טוב)")
@@ -509,10 +676,17 @@ def strip_interjection(text: str) -> str:
 _HE_PREFIX = {"ה": "ha", "ו": "ve", "ל": "le", "ב": "be", "ש": "she", "מ": "me", "כ": "ke"}
 
 
+# Tomer, 2026-10-25: the voices said "Laban" wrong; it is LA-BAHN, both
+# a's as in "banana", with the n at the end. Spelled so for the voice only.
+LABAN_SPOKEN = "Lah-bahn"
+_LABAN_RE = re.compile(r"\bLaban\b")
+
+
 def pronounce(text: str) -> str:
-    """Hebrew words the voices get wrong, spelled for the voice only (the
-    transcript keeps the Hebrew). Tomer's pick, 2026-10-19: "robot" /
-    "robotim" and "Laba Lab" in Latin letters."""
+    """Words the voices get wrong, spelled for the voice only (the
+    transcript keeps the real spelling). Tomer's pick, 2026-10-19: Hebrew
+    "robot" / "robotim" and "Laba Lab" in Latin letters; 2026-10-25: Laban."""
+    text = _LABAN_RE.sub(LABAN_SPOKEN, text)
     if not _hebrew(text):
         return text
 
@@ -1641,6 +1815,7 @@ class Conversation:
                     "often; calm robots ({}) gesture on about half their lines and rarely "
                     "react.".format(", ".join(lively), ", ".join(calm)))
         return {"cast": self.cast(), "hebrew_names": names, "language": self.language_rule(),
+                "lab": lab_facts(),
                 "moves": moves.menu(), "gesture_rule": rule,
                 "topic": self.settings.get("topic") or ""}
 
@@ -1667,6 +1842,15 @@ class Conversation:
             where = " (heard closest to {})".format(self.character_of(heard)) if heard else ""
             lines.append("PEOPLE{}: {}".format(where, text))
         return lines
+
+    def names_said(self) -> list[str]:
+        """The people's names a robot has already said (once is the most,
+        Tomer 2026-10-25); the whole session, across modes."""
+        robot = [t.get("spoken") or t["text"] for t in self.m.transcript
+                 if t["kind"] == "robot" and not t.get("unspoken")]
+        names = people_names([t["text"] for t in self.m.transcript if t["kind"] == "human"],
+                             robot)
+        return sorted(n for n in names if any(says_name(r, n) for r in robot))
 
     def character_of(self, robot_name: Optional[str]) -> str:
         s = next((s for s in self.seats if s["name"] == robot_name), None)
@@ -1784,6 +1968,9 @@ class Conversation:
             HEBREW_NAMES.get(s["character"], "")
                                                         for s in self.seats]
         text = strip_leading_name(_clean(out.get("text", "")), names)
+        for name in self.names_said():
+            text = strip_person_name(text, name)
+        text = LABALAB_RE.sub("Laba Lab", text)     # one word is mispronounced
         reactions = out.get("reactions") if isinstance(out.get("reactions"), dict) else {}
         line = Line(seat=seat, move=_clean(out.get("move", "") or out.get("stance", ""))[:20],
                     text=text, final=final, nudge=nudge,
@@ -2034,6 +2221,34 @@ class GroupTalk(Conversation):
     CLOSING = ("The conversation is ending now. Write the closing line of the speaker "
                "below: its strongest final point on the topic in one or two sentences, "
                "then a short goodbye to the people.")
+    # Tomer, 2026-10-25: Group talk starts with a lab intro, one line per
+    # robot in seat order about Laba Lab and Guy Laban's work; then the first
+    # robot hands over ("Well, let's get into it, I understand you want to
+    # talk about <topic> today...") and the second robot opens the debate.
+    INTRO = ("Before the debate, the robots introduce where they come from. Write the "
+             "lab intro: exactly {n} spoken line(s), one per robot, in this order: {order}. "
+             "Each line is one or two sentences, 12 to 30 words, about Laba Lab and Dr. Guy "
+             "Laban's work, taken ONLY from LAB FACTS (never invent anything). The first "
+             "greets the people, names Laba Lab at Ben-Gurion University and says what it "
+             "studies in plain words (how people relate to AI and robots: language, "
+             "emotion, behaviour). The next says, with real respect, that the lab is led "
+             "by Dr. Guy Laban, one of the leading researchers in his field with many "
+             "partnerships. Any further line adds one DIFFERENT thing, in general, plain "
+             "words (the kind of projects, the lab's robots), no jargon, no repeats, no "
+             "topic of the debate yet, no goodbye. Each line in "
+             "the robot's own voice and position, warm and lively. Then the hand-over, "
+             "said by {first}: short and natural, in the spirit of: Well, let's get into "
+             "it. I understand you want to talk about <the topic in a few plain words> "
+             "today, so let's get to it. (No opinion in it yet.) Reply with JSON only: "
+             '{{"lines": [{{"speaker": "<label>", "tone": "<how it is said>", "gesture": '
+             '"<a name from MOVES, or none>", "text": "<what they say>"}}], '
+             '"handover": "<the hand-over line>"}}')
+    OPENING_AFTER_INTRO = ("The lab intro and the hand-over to the topic were just said "
+                           "(the lines below). Now {speaker} starts the debate: no greeting, "
+                           "no thanks and no word about the lab; straight into the topic "
+                           "with a strong opinion from its own position.")
+    intro_task: Optional["asyncio.Future"] = None
+    intro_lines: list = []
     cut_entry: Optional[dict] = None    # the robot line the people just cut off
     live_prefix = ""                    # the start of a sentence, said before a pause
     resume_key: Optional[str] = None    # cut off by a noise: this robot speaks next
@@ -2073,6 +2288,10 @@ class GroupTalk(Conversation):
         if asked:
             user.append("Already asked to the people (never again, in no form): {}".format(
                 " | ".join(asked)))
+        said = self.names_said()
+        if said:
+            user.append("Already said once, never say again: {} (talk to them without the "
+                        "name).".format(", ".join(said)))
         last_robot = mine[-1] if mine else None
         if last_robot is not None and last_robot.get("cut_noise"):
             user.append("The last line was cut off by a noise and nobody spoke: that same "
@@ -2090,7 +2309,16 @@ class GroupTalk(Conversation):
                         "closest to asks them, briefly and in character, to say it again.")
         elif last_human is not None:
             user.append("The people just spoke: answer them directly.")
-        if opening:
+            note = lab_question_note(last_human)
+            if note:
+                user.append(note)
+        if opening and self.intro_lines:
+            user.append(self.OPENING_AFTER_INTRO.format(
+                speaker=self.after_intro_seat()["character"])
+                        + "\nThe lab intro: " + " | ".join(
+                            "{}: {}".format(ln.seat["character"], ln.text)
+                            for ln in self.intro_lines))
+        elif opening:
             user.append(self.OPENING
                         + (" A picture of the room from its camera is attached: it may "
                            "mention one friendly detail it sees." if saw else ""))
@@ -2134,16 +2362,39 @@ class GroupTalk(Conversation):
                        else self.next_speaker(people_text, heard))
         system, user = self.prompt(opening, final, nudge, extra_human, saw, speaker)
         t = time.monotonic()
-        out = await self.ask(system, user, image, model=self.writer_of(speaker)
-                             if speaker is not None else self.one_writer() or "")
+        model = self.writer_of(speaker) if speaker is not None else self.one_writer() or ""
+        out = await self.ask(system, user, image, model=model)
         if not _clean(out.get("text", "")):
             raise ServiceError("the director wrote an empty line")
+        problems = ([] if opening or final or saw is not None
+                    else self.problems_of(out, speaker))
+        if problems:
+            log.info("line written again (%s): %s", "; ".join(problems), out.get("text"))
+            try:
+                again = await self.ask(system, user + "\n\nA first try was: {}\nIt is not good: "
+                                       "{}. Write the line again as JSON.".format(
+                                           json.dumps(out.get("text"), ensure_ascii=False),
+                                           "; ".join(problems)), image, model=model)
+                if _clean(again.get("text", "")):
+                    out = again
+            except ServiceError as exc:
+                log.info("second try failed (%s): the first one is said", exc)
         if saw is not None and people_text:
             out["speaker"] = saw["character"]
         line = self.make_line(out, final=final, nudge=nudge, t=t, people_text=people_text,
                               speaker=speaker)
         line.saw = saw["name"] if saw else ""
         return line
+
+    def problems_of(self, out: dict, speaker: Optional[dict]) -> list[str]:
+        char = speaker["character"] if speaker is not None else str(out.get("speaker") or "")
+        said = [t for t in self.mine() if not (t["kind"] == "robot" and t.get("unspoken"))]
+        last = said[-1] if said else None
+        prev = (last.get("spoken") or last["text"]) if last and last["kind"] == "robot" else ""
+        own = [t.get("spoken") or t["text"] for t in said
+               if t["kind"] == "robot" and t.get("character") == char and t.get("move") != "intro"]
+        return line_problems(_clean(out.get("text", "")), prev, own,
+                             self.settings.get("topic") or "")
 
     def asks_people(self, line: Line) -> bool:
         if line.move.lower().startswith("people"):
@@ -2169,7 +2420,76 @@ class GroupTalk(Conversation):
             await asyncio.sleep(0.03)
 
     def opener(self) -> "asyncio.Future":
-        return asyncio.create_task(self.prepare(opening=True))
+        if not self.wants_intro():
+            return asyncio.create_task(self.prepare(opening=True))
+        self.intro_task = asyncio.ensure_future(self.make_intro())
+        return asyncio.create_task(self.open_after_intro())
+
+    def wants_intro(self) -> bool:
+        return (self.mode == "group" and bool(self.seats)
+                and bool(self.settings.get("lab_intro", True)))
+
+    async def make_intro(self) -> list:
+        """One writer call for the whole intro, voiced at once (Get ready
+        makes it ahead with the opener)."""
+        system = self.SYSTEM.format(**self.common())
+        user = self.INTRO.format(n=len(self.seats),
+                                 order=", ".join(s["character"] for s in self.seats),
+                                 first=self.seats[0]["character"])
+        out = await self.ask(system, user, model=self.one_writer() or self.writer_of(self.seats[0]))
+        said = [o for o in (out.get("lines") or []) if isinstance(o, dict)]
+        lines = []
+        for seat, o in zip(self.seats, said):
+            if _clean(o.get("text", "")):
+                o = {**o, "move": "intro", "reactions": {}}
+                lines.append(self.make_line(o, speaker=seat))
+        if not lines:
+            raise ServiceError("the writer wrote no lab intro")
+        handover = _clean(str(out.get("handover") or ""))
+        if not handover:
+            topic = re.split(r"[:?]", self.settings.get("topic") or "")[0].strip()
+            handover = ("Well, let's get into it. I understand you want to talk about {} "
+                        "today, so let's get to it.".format(topic) if topic else
+                        "Well, let's get into it.")
+        lines.append(self.make_line({"text": handover, "move": "intro", "reactions": {},
+                                     "gesture": "inquiring1", "tone": "upbeat, inviting"},
+                                    speaker=self.seats[0]))
+        self.intro_lines = lines
+        return lines
+
+    def after_intro_seat(self) -> dict:
+        """Who starts the debate after the hand-over: the second robot."""
+        return self.seats[1] if len(self.seats) > 1 else self.seats[0]
+
+    async def open_after_intro(self) -> Line:
+        try:
+            await self.intro_task
+        except Exception as exc:  # noqa: BLE001
+            log.info("lab intro failed (%s): plain opener", exc)
+            return await self.prepare(opening=True)
+        return await self.prepare(opening=True, speaker=self.after_intro_seat())
+
+    async def say_intro(self) -> None:
+        """Every robot its lab line, one after the other (nobody cuts in)."""
+        task, self.intro_task = self.intro_task, None
+        try:
+            lines = await task
+        except Exception as exc:  # noqa: BLE001
+            self.note("the lab intro failed: {}".format(exc))
+            return
+        self.note("lab intro: every robot says a line about the lab")
+        for line in lines:
+            if self.closing or line.seat["key"] not in self.s.links:
+                continue
+            entry = self.turn(kind="robot", who=line.seat["name"],
+                              character=line.seat["character"], text=line.text,
+                              move="intro", gesture=line.gesture, tone=line.tone)
+            self.last_robot = line.seat["key"]
+            self.spoke_at[line.seat["key"]] = time.monotonic()
+            self.ears.reset_capture()
+            await self.speak(line, entry, cut_by_people=False)
+            await asyncio.sleep(0.3)
+        self.ears.reset_capture()
 
     async def close_round(self) -> None:
         """Every robot says its closing line, one after the other, starting
@@ -2209,6 +2529,8 @@ class GroupTalk(Conversation):
         ears = self.ears
         ears.reset_capture()
         pending: Optional[asyncio.Future] = self.premade or self.opener()
+        if self.intro_task is not None:
+            await self.say_intro()
         try:
             while True:
                 if self.s.drop_dead_links() and len(self.seats) < 1:
@@ -2504,6 +2826,10 @@ class InterruptTalk(Conversation):
         if len(set(self.levels_sig())) > 1:
             user.append("How pushy each robot is (0 never cuts in, 5 every time): {}.".format(
                 ", ".join("{} {}".format(s["character"], self.seat_level(s)) for s in self.seats)))
+        said = self.names_said()
+        if said:
+            user.append("Already said once, never say again: {} (talk to them without the "
+                        "name).".format(", ".join(said)))
         if self.m.pending_nudge:
             user.append("Operator instruction (follow it): {}".format(self.m.pending_nudge))
         user.append(task)
@@ -3284,7 +3610,8 @@ class GroupManager:
                            ("heads_mirror", bool), ("voice_min_level", float),
                            ("voice_provider", str), ("director_model", str),
                            ("barge_in", str), ("interrupt_level", int), ("vision", bool),
-                           ("gestures", str), ("slow_network", bool), ("people_mic", str)):
+                           ("gestures", str), ("slow_network", bool), ("people_mic", str),
+                           ("lab_intro", bool)):
             if name in settings:
                 try:
                     self.cfg["settings"][name] = kind(settings[name])
@@ -3770,7 +4097,7 @@ class GroupManager:
     def premade_sig(self) -> str:
         st = self.cfg["settings"]
         seats = self.session.seats if self.session is not None else []
-        return json.dumps([st.get("topic"), st.get("language"),
+        return json.dumps([st.get("topic"), st.get("language"), st.get("lab_intro", True),
                            [[s["key"], s.get("character"), s.get("persona"),
                              s.get("voice_provider"), s.get("voice_id"), s.get("writer"),
                              s.get("interrupt_level")] for s in seats]], ensure_ascii=False)
@@ -3801,6 +4128,8 @@ class GroupManager:
         voices = [t.result().tts for _c, t in modes.values()
                   if t.done() and not t.cancelled() and t.exception() is None
                   and isinstance(t.result(), Line) and t.result().tts is not None]
+        voices += [ln.tts for c, _t in modes.values()
+                   for ln in getattr(c, "intro_lines", []) if ln.tts is not None]
         if voices:
             await asyncio.wait(voices, timeout=30.0)
 

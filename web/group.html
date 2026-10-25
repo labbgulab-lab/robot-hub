@@ -139,14 +139,15 @@
         <option value="eager">Eager</option>
       </select>
     </label>
-    <div class="sfield sfield-mic" title="Where the people are heard. Auto: a DJI mic plugged into this laptop, else the robots' own mics. Changing it reconnects the robots at the next start.">
-      <label for="people-mic">People's mic</label>
+    <div class="sfield sfield-mic" title="Where the audience is heard. Auto: the DJI mic plugged into this laptop, else the robots' own mics. Changing it reconnects the robots at the next start.">
+      <label for="people-mic">Audience mic</label>
       <div class="mic-row">
         <select id="people-mic"></select>
-        <span class="level" data-key="mic:people" title="People's mic level"><span class="level-fill"></span></span>
+        <span class="level" data-key="mic:people" title="Audience mic level"><span class="level-fill"></span></span>
       </div>
     </div>
     <div class="session-checks">
+      <label class="check" title="Group talk starts with every robot saying one line about Laba Lab and Guy Laban's work (from Pepper's lab facts); the first robot hands over to the topic and the second one starts the debate"><input type="checkbox" id="lab-intro"> Lab intro</label>
       <label class="check" title="Voices come compressed (OpenAI and ElevenLabs only): on the phone hotspot raw voice audio arrives slower than it plays">
         <input type="checkbox" id="slow-network"> Slow network</label>
       <label class="check" title="Tick this if the robots look away from whoever is speaking.">

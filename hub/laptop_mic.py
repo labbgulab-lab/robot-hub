@@ -30,7 +30,10 @@ from typing import Any, Callable, Optional
 log = logging.getLogger("hub.laptop_mic")
 
 PA_LOCK = threading.RLock()
-AUTO_HINTS = ("dji",)       # "auto" = the first input with this in its name
+# "auto" = the first input with one of these in its name. The DJI Mic Mini
+# receiver shows on Windows as "Microphone (Wireless Mic Rx)" (seen 2026-10-25),
+# without "DJI" in it.
+AUTO_HINTS = ("dji", "wireless mic rx")
 SCAN_S = 3.0
 
 _streams = 0                # audio streams this process has open (no restart under them)

@@ -55,6 +55,7 @@ const gapEl = document.getElementById('listen-gap');
 const voiceMinEl = document.getElementById('voice-min');
 const bargeEl = document.getElementById('barge-in');
 const slowEl = document.getElementById('slow-network');
+const labIntroEl = document.getElementById('lab-intro');
 const peopleMicEl = document.getElementById('people-mic');
 const mirrorEl = document.getElementById('heads-mirror');
 const simulateEl = document.getElementById('simulate');
@@ -118,7 +119,7 @@ const VOICE_FIELD = { auto: 'voice_id', elevenlabs: 'voice_id', openai: 'openai_
                       openrouter: 'openai_voice', gemini: 'gemini_voice' };
 // Session settings the hub takes while they talk.
 const LIVE_KEYS = ['topic', 'language', 'minutes', 'listen_gap_s', 'heads_mirror', 'voice_min_level',
-                   'barge_in', 'slow_network'];
+                   'barge_in', 'slow_network', 'lab_intro'];
 // The session clock runs only while the conversation itself does.
 const LIVE_PHASES = ['speaking', 'listening', 'human', 'thinking'];
 // One colour per seat, kept for the whole session, so a robot's lines and its
@@ -129,7 +130,7 @@ const QUICK_SAVE_MS = 150;       // a click: the robots should feel it at once
 const FOLLOW_AFTER_MS = 20000;   // scrolled up in the transcript: follow again after this
 const DEFAULT_SETTINGS = { topic: '', language: 'auto', minutes: 5, listen_gap_s: 0.6, simulate: false,
                            voice_min_level: 0.3, heads_mirror: false, barge_in: 'normal',
-                           slow_network: true, voice_provider: 'auto',
+                           slow_network: true, lab_intro: true, voice_provider: 'auto',
                            director_model: 'google/gemini-3.5-flash', interrupt_level: 3,
                            vision: true, gestures: 'lively', people_mic: 'auto' };
 const DEFAULT_STATUS = { phase: 'idle', speaker: null, elapsed_s: 0, detail: '' };
@@ -479,15 +480,15 @@ function renderMic() {
   let text;
   let cls = '';
   if (m.in_use === 'people') {
-    text = `Mic: ${str(m.people_mic)}`;
+    text = `Mic: ${micLabel(m.people_mic)}`;
     if (health === 'ok') { text += ' · signal ok'; cls = 'ok'; }
     else if (health) { text += ` · ${health}`; cls = 'warn'; }
   } else if (m.in_use === 'robots') {
     const robots = arr(m.robot_mics);
     text = `Mic: the robots' own${robots.length ? ` (${robots.join(', ')})` : ''}`;
-    if (m.dji) text += ` · ${str(m.dji)} plugged in`;
+    if (m.dji) text += ' · DJI mic plugged in';
   } else {
-    text = m.dji ? `Mic: ${str(m.dji)} plugged in (used when the robots connect)`
+    text = m.dji ? 'Mic: DJI mic plugged in (used when the robots connect)'
                  : "Mic: no DJI plugged in · the robots' own mics";
     cls = m.dji ? 'ok' : '';
   }
@@ -497,7 +498,7 @@ function renderMic() {
   micSwitchBtn.hidden = !live || (m.in_use === 'robots' && !m.dji);
   micSwitchBtn.disabled = micSwitching;
   const back = m.in_use === 'robots';
-  micSwitchBtn.textContent = back ? `Use ${str(m.dji) || 'the DJI mic'}` : "Use robots' mics";
+  micSwitchBtn.textContent = back ? 'Use the DJI mic' : "Use robots' mics";
   micSwitchBtn.classList.toggle('back', back);
 }
 
@@ -655,6 +656,7 @@ function renderConfig() {
   setValue(voiceMinEl, st.voice_min_level);
   if (document.activeElement !== bargeEl) bargeEl.value = str(st.barge_in) || 'normal';
   slowEl.checked = st.slow_network !== false;
+  labIntroEl.checked = st.lab_intro !== false;
   renderPeopleMic(st);
   mirrorEl.checked = !!st.heads_mirror;
   simulateEl.checked = !!st.simulate;
@@ -673,19 +675,31 @@ function renderConfig() {
   renderSaveState();
 }
 
-// Auto (a DJI mic if one is plugged in), the robots' own mics, or a laptop mic.
+// Windows' names for the laptop's mics, as people say them (2026-10-25: the
+// DJI receiver is "Microphone (Wireless Mic Rx)", the built-in one
+// "Microphone Array (Realtek(R) Audio)"). The setting keeps Windows' name.
+function micLabel(name) {
+  const n = str(name);
+  const low = n.toLowerCase();
+  if (low.includes('dji') || low.includes('wireless mic rx')) return 'DJI mic';
+  if (/realtek|intel|smart sound|microphone array/.test(low)) return "Laptop's built-in mic";
+  const inner = n.match(/^\s*(?:microphone|mic|headset)[^(]*\((.+)\)\s*$/i);
+  return inner ? inner[1].replace(/\(R\)|\(TM\)/gi, '').trim() : n;
+}
+
+// Auto (the DJI mic if it is plugged in), the robots' own mics, or a laptop mic.
 function renderPeopleMic(st) {
   const choice = str(st.people_mic) || 'auto';
-  const dji = S.mics.find(n => n.toLowerCase().includes('dji'));
-  const opts = [['auto', dji ? `Auto: ${dji}` : 'Auto: DJI mic (not plugged in)'],
+  const dji = str(S.mic.dji) || S.mics.find(n => micLabel(n) === 'DJI mic');
+  const opts = [['auto', dji ? 'Auto (DJI mic, plugged in)' : 'Auto (DJI mic when plugged in)'],
                 ['robots', "Robots' own mics"],
-                ...S.mics.map(n => [n, n])];
-  if (!opts.some(([id]) => id === choice)) opts.push([choice, `${choice} (not plugged in)`]);
+                ...S.mics.map(n => [n, micLabel(n)])];
+  if (!opts.some(([id]) => id === choice)) opts.push([choice, `${micLabel(choice)} (not plugged in)`]);
   fillOptions(peopleMicEl, opts, choice);
   peopleMicEl.disabled = S.running;
   const active = S.people_mic_active;
   peopleMicEl.title = S.connected
-    ? (active ? `Hearing the people through ${active}` : "Hearing the people through the robots' mics")
+    ? (active ? `Hearing the audience through the ${micLabel(active)}` : "Hearing the audience through the robots' mics")
     : 'Used when the robots connect';
 }
 
@@ -710,6 +724,7 @@ voiceMinEl.addEventListener('input', () => {
 });
 bargeEl.addEventListener('change', () => editSetting('barge_in', bargeEl.value, QUICK_SAVE_MS));
 slowEl.addEventListener('change', () => editSetting('slow_network', slowEl.checked, QUICK_SAVE_MS));
+labIntroEl.addEventListener('change', () => editSetting('lab_intro', labIntroEl.checked, QUICK_SAVE_MS));
 peopleMicEl.addEventListener('change', () => editSetting('people_mic', peopleMicEl.value, QUICK_SAVE_MS));
 mirrorEl.addEventListener('change', () => editSetting('heads_mirror', mirrorEl.checked, QUICK_SAVE_MS));
 simulateEl.addEventListener('change', () => editSetting('simulate', simulateEl.checked, QUICK_SAVE_MS));

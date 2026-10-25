@@ -6,7 +6,7 @@ ONLY from it. Edit it here when the website changes, then relaunch Pepper.
 
 ## The lab
 - Name: LabaLab, the Language, Affect and Behaviour in AI Research Lab (in Hebrew: המעבדה לשפה, רגש והתנהגות בבינה מלאכותית).
-- Head: Dr. Guy Laban (ד"ר גיא לבן), Principal Investigator. His research focuses on language, affect and behaviour in AI.
+- Head: Dr. Guy Laban (ד"ר גיא לבן), Principal Investigator, a professor at Ben-Gurion University. He is one of the leading researchers in his field, human-robot and human-AI interaction, highly respected, with many research partnerships and collaborations. His research focuses on language, affect and behaviour in AI.
 - Where: Department of Industrial Engineering and Management, Ben-Gurion University of the Negev (אוניברסיטת בן-גוריון בנגב), Beer-Sheva, Israel. Building 15, room -132.
 - What it studies: how people interact with, perceive and form relationships with AI systems, at the meeting point of language, emotion (affect) and behaviour.
 - Research areas: human-AI interaction, affective computing, human-robot interaction, social robots, the psychology of relationships with AI, conversational AI.
