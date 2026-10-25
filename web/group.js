@@ -33,6 +33,9 @@ const readyBtn = document.getElementById('get-ready');
 const micStateEl = document.getElementById('mic-state');
 const micSwitchBtn = document.getElementById('mic-switch');
 const readyChecksEl = document.getElementById('ready-checks');
+const checksPill = document.getElementById('checks-pill');
+const moreTimeBtn = document.getElementById('more-time');
+let addingTime = false;          // a +1 on its way to the hub
 const stopBtn = document.getElementById('stop');
 const disconnectBtn = document.getElementById('disconnect');
 const peopleLive = document.getElementById('people-live');
@@ -55,6 +58,9 @@ const slowEl = document.getElementById('slow-network');
 const peopleMicEl = document.getElementById('people-mic');
 const mirrorEl = document.getElementById('heads-mirror');
 const simulateEl = document.getElementById('simulate');
+// Robots that talk through this laptop's speaker, next to the real ones
+// (the cards' + and X; 2026-10-25). The hub keeps at most these five.
+const LAPTOP_KEYS = ['sim:1', 'sim:2', 'sim:3', 'sim:4', 'sim:5'];
 const voiceNote = document.getElementById('voice-note');
 
 const transcriptEl = document.getElementById('transcript');
@@ -94,7 +100,8 @@ const PHASE_LABEL = {
   stopping: 'Stopping',
   ready: 'Connected',
 };
-const MODE_NAME = { group: 'Group talk', interrupt: 'Interrupt mode' };
+const MODE_NAME = { group: 'Group talk', interrupt: 'Interrupt mode', free: 'Free talk' };
+const MODE_SUB = { group: 'robots + people', interrupt: 'they cut you off', free: 'chat about anything' };
 const LEVEL_TEXT = ['never', 'rarely', 'now and then', 'regularly', 'often', 'every time'];
 const PROVIDERS = [['auto', 'Auto'], ['elevenlabs', 'ElevenLabs'], ['openai', 'OpenAI'],
                    ['openrouter', 'OpenRouter'], ['gemini', 'Gemini (daily cap)']];
@@ -243,6 +250,8 @@ function normalize(raw) {
     connected: !!st.connected,
     mode: st.mode ? str(st.mode) : null,
     people_live: str(st.people_live),
+    limit_s: st.limit_s === null || st.limit_s === undefined ? null : num(st.limit_s, null),
+    closing: !!st.closing,
     eleven_credits: st.eleven_credits === null || st.eleven_credits === undefined ? null : num(st.eleven_credits, null),
     voice_backend: obj(st.voice_backend),
     brain: obj(st.brain),
@@ -381,9 +390,12 @@ function renderStatus() {
   phaseLabel.textContent = PHASE_LABEL[phase] || phase;
   statusLineEl.textContent = '';
   statusLineEl.append(...statusParts(status));
-  const detail = ['interrupting', 'the robots are listening'].includes(str(status.detail)) ? '' : str(status.detail);
+  // Ready already says it all in the big line.
+  const detail = ['interrupting', 'the robots are listening'].includes(str(status.detail))
+    || phase === 'ready' ? '' : str(status.detail);
   const modeText = S.running && S.mode ? MODE_NAME[S.mode] || S.mode : '';
-  statusDetail.textContent = [modeText, detail].filter(Boolean).join(' - ');
+  const closing = S.running && S.closing ? 'closing: each robot says its last word' : '';
+  statusDetail.textContent = [modeText, closing || detail].filter(Boolean).join(' - ');
   statusDetail.classList.toggle('hidden', !statusDetail.textContent);
   renderPeopleLive();
   renderTimer();
@@ -399,7 +411,7 @@ function elapsedNow() {
 
 function renderTimer() {
   const minutes = num((S.running ? S.settings : draft.settings).minutes, 5);
-  const total = Math.max(0, minutes) * 60;
+  const total = S.running && S.limit_s ? S.limit_s : Math.max(0, minutes) * 60;
   const elapsed = elapsedNow();
   timerEl.textContent = clock(elapsed);
   timerTotal.textContent = clock(total);
@@ -423,7 +435,7 @@ function renderButtons() {
     if (starting === mode) sub.textContent = S.connected ? 'starting…' : 'connecting…';
     else if (active) sub.textContent = 'running';
     else if (S.running) sub.textContent = 'switch to this';
-    else sub.textContent = mode === 'group' ? 'robots + people' : 'they cut you off';
+    else sub.textContent = MODE_SUB[mode] || '';
   });
   const warmBusy = !!S.warm.busy;
   readyBtn.disabled = !!starting || gettingReady || warmBusy || S.running || !enough;
@@ -434,13 +446,19 @@ function renderButtons() {
   renderMic();
   renderChecks();
   stopBtn.disabled = stopping || !(S.running || phase === 'starting');
-  stopBtn.textContent = stopping || phase === 'stopping' ? 'Stopping…' : 'Stop';
+  const closing = S.running && S.closing;
+  stopBtn.textContent = stopping || phase === 'stopping' ? 'Stopping…' : (closing ? 'Stop now' : 'Stop');
+  stopBtn.classList.toggle('closing', closing);
+  stopBtn.title = closing
+    ? 'The robots are saying goodbye. Press to stop at once, without the rest of the closing lines.'
+    : 'End the conversation: the robot that is talking finishes, then every robot says one closing line and goodbye. Press again to stop at once. The robots stay connected.';
+  moreTimeBtn.disabled = !S.running || closing || addingTime;
   disconnectBtn.disabled = stopping || !S.connected;
 
   let hint = '';
   if (S.connected && !S.running && !starting) hint = 'Robots connected and listening. A mode button starts at once.';
   else if (!S.running && !starting) {
-    if (!enough) hint = 'Include at least two Reachys, or tick Simulate.';
+    if (!enough) hint = 'Include at least two Reachys, or press + on a card to add a laptop robot.';
     else if (simulate) hint = 'Simulation: this laptop speaks and listens.';
     else {
       const away = seats.filter(s => !connectedKey(s.key)).map(s => s.name || s.key);
@@ -483,12 +501,22 @@ function renderMic() {
   micSwitchBtn.classList.toggle('back', back);
 }
 
-// One chip per service checked with a real request (hub start, Get ready).
+// One chip per service checked with a real request (hub start, Get ready),
+// folded into one pill: "8 checks ok", or what failed (2026-10-25).
 function renderChecks() {
   const checks = obj(S.warm.checks);
   const sig = JSON.stringify(checks);
   if (readyChecksEl.dataset.sig === sig) return;
   readyChecksEl.dataset.sig = sig;
+  const all = Object.entries(checks).map(([name, c]) => [name, obj(c)]);
+  const bad = all.filter(([, c]) => c.ok === false).map(([name]) => name);
+  const done = all.filter(([, c]) => c.ok === true).length;
+  checksPill.classList.toggle('hidden', all.length === 0);
+  checksPill.classList.toggle('bad', bad.length > 0);
+  checksPill.classList.toggle('ok', !bad.length && done === all.length && done > 0);
+  checksPill.textContent = bad.length ? `${bad.length} failed: ${bad.join(', ')}`
+    : done === all.length ? `${done} checks ok` : `checking ${done}/${all.length}`;
+  if (bad.length) readyChecksEl.classList.remove('hidden');
   readyChecksEl.textContent = '';
   Object.entries(checks).forEach(([name, c]) => {
     c = obj(c);
@@ -498,6 +526,26 @@ function renderChecks() {
     readyChecksEl.append(li);
   });
 }
+
+checksPill.addEventListener('click', () => {
+  const open = readyChecksEl.classList.toggle('hidden') === false;
+  checksPill.setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+
+// +1: the running conversation ends a minute later (press again for more).
+moreTimeBtn.addEventListener('click', async () => {
+  if (moreTimeBtn.disabled) return;
+  addingTime = true;
+  renderButtons();
+  try {
+    const body = await post('/api/group/more_time', { seconds: 60 });
+    if (body.ok && body.limit_s) { S.limit_s = num(body.limit_s, S.limit_s); renderTimer(); }
+    else if (!body.ok) announce(`Could not add time: ${body.error}`);
+  } finally {
+    addingTime = false;
+    renderButtons();
+  }
+});
 
 readyBtn.addEventListener('click', async () => {
   if (readyBtn.disabled) return;
@@ -543,10 +591,35 @@ function renderError() {
   errorBanner.classList.toggle('hidden', !message);
 }
 
+// What the person is saying, typed out as it comes (2026-10-25). The hub
+// sends everything said so far every second or so; new words are typed in,
+// a correction of earlier words just replaces them.
+let liveShown = '';
+let liveTyping = 0;
+
 function renderPeopleLive() {
-  const show = S.running && S.mode === 'interrupt' && peopleLiveText;
-  peopleLive.textContent = show ? `"${peopleLiveText.slice(-160)}"` : '';
-  peopleLive.classList.toggle('hidden', !show);
+  const target = S.running ? peopleLiveText.slice(-160) : '';
+  if (!target) {
+    clearInterval(liveTyping);
+    liveTyping = 0;
+    liveShown = '';
+    peopleLive.textContent = '';
+    peopleLive.classList.add('hidden');
+    return;
+  }
+  peopleLive.classList.remove('hidden');
+  if (!target.startsWith(liveShown)) {
+    // Keep what still matches, retype the rest.
+    let same = 0;
+    while (same < liveShown.length && liveShown[same] === target[same]) same++;
+    liveShown = target.slice(0, same);
+  }
+  clearInterval(liveTyping);
+  liveTyping = setInterval(() => {
+    if (liveShown.length >= target.length) { clearInterval(liveTyping); liveTyping = 0; return; }
+    liveShown = target.slice(0, liveShown.length + 2);
+    peopleLive.textContent = `${liveShown}\u258c`;
+  }, 25);
 }
 
 // Twice a second: the clock runs on between the hub's status messages.
@@ -733,6 +806,17 @@ function fillSeatRow(row, seat, i) {
   row.querySelector('.seat-vision').checked = !!seat.vision;
   row.querySelector('[data-move="-1"]').disabled = locked || i === 0;
   row.querySelector('[data-move="1"]').disabled = locked || i === last;
+  const simulating = !!draft.settings.simulate;
+  const onLaptop = seat.key.startsWith('sim:');
+  const add = row.querySelector('.seat-add');
+  const remove = row.querySelector('.seat-remove');
+  add.hidden = remove.hidden = simulating;
+  add.disabled = locked || laptopKeys().length >= LAPTOP_KEYS.length;
+  remove.disabled = locked || (!onLaptop && !seat.included);
+  add.title = locked ? 'Disconnect first to add a robot'
+    : (add.disabled ? 'No more robots fit' : 'Add a robot here (it talks through this laptop\'s speaker)');
+  remove.title = locked ? 'Disconnect first to remove a robot'
+    : (onLaptop ? 'Remove this robot' : 'Take this Reachy off the table (tick Included to bring it back)');
 
   setValue(row.querySelector('.seat-persona'), seat.persona);
 
@@ -788,6 +872,8 @@ function makeSeatRow(key) {
     if (lvl) { setSeat(key, { interrupt_level: Number(lvl.dataset.level) }, QUICK_SAVE_MS); return; }
     const g = event.target.closest('[data-gestures]');
     if (g) { setSeat(key, { gestures: g.dataset.gestures }, QUICK_SAVE_MS); return; }
+    if (event.target.closest('.seat-add')) { addSeat(key); return; }
+    if (event.target.closest('.seat-remove')) { removeSeat(key); return; }
     if (event.target.closest('.copy-button')) openCopy(key);
   });
   return row;
@@ -833,6 +919,43 @@ function editSeat(key, target, kind) {
     // The level is heard when the drag ends.
     if (kind === 'change') markDirty(QUICK_SAVE_MS);
   }
+}
+
+function laptopKeys() {
+  return draft.seats.map(s => s.key).filter(k => LAPTOP_KEYS.includes(k));
+}
+
+// +: a new robot on this laptop's speaker, right after this card. The hub
+// gives it a label, a position and a voice no other robot has.
+function addSeat(afterKey) {
+  if (S.connected || draft.settings.simulate) return;
+  const have = laptopKeys();
+  const key = LAPTOP_KEYS.find(k => !have.includes(k));
+  if (!key) return;
+  const i = draft.seats.findIndex(s => s.key === afterKey);
+  const seat = normalizeSeat({ key, name: 'laptop', included: true, listen: false }, draft.settings);
+  seat.fresh = true;
+  draft.seats.splice(i + 1, 0, seat);
+  draft.settings.laptop_seats = laptopKeys();
+  markDirty(QUICK_SAVE_MS);
+  renderSeats();
+  renderButtons();
+}
+
+// X: a laptop robot goes away; a real Reachy only leaves the table.
+function removeSeat(key) {
+  if (S.connected) return;
+  if (LAPTOP_KEYS.includes(key)) {
+    draft.seats = draft.seats.filter(s => s.key !== key);
+    draft.settings.laptop_seats = laptopKeys();
+  } else {
+    const seat = draftSeat(key);
+    if (!seat) return;
+    seat.included = false;
+  }
+  markDirty(QUICK_SAVE_MS);
+  renderSeats();
+  renderButtons();
 }
 
 function moveSeat(key, step) {
@@ -952,6 +1075,8 @@ function errorFrom(body, res) {
 // order, Included and Listens as they are, and takes only the session
 // settings it can change live.
 function seatPayload(s) {
+  // A robot just added with +: the hub fills in its label, position and voice.
+  if (s.fresh) return { key: s.key, included: true, listen: false };
   const out = {};
   ['key', 'included', 'listen', 'character', 'persona', 'voice_provider', 'voice_id', 'openai_voice',
    'gemini_voice', 'writer', 'interrupt_level', 'gestures', 'vision', 'loudness'].forEach(k => {
@@ -1241,7 +1366,7 @@ stopBtn.addEventListener('click', async () => {
   stopping = true;
   renderButtons();
   try {
-    const body = await post('/api/group/stop');
+    const body = await post('/api/group/stop', { now: !!(S.running && S.closing) });
     if (body.ok) localError = '';
     else {
       localError = `Could not stop: ${body.error}`;
@@ -1354,3 +1479,68 @@ renderStatus();
 renderTranscript();
 loadState();
 connect();
+
+/* --------------------------------------------------------------- tooltips */
+// Every control explains itself when the mouse rests on it (Tomer,
+// 2026-10-25). The explanations are the elements' titles; they move into
+// data-tip so the browser's own slow tooltip never shows, and one quick
+// tooltip of ours shows them instead. Titles set later by the code are
+// caught the same way.
+const tipEl = document.createElement('div');
+tipEl.className = 'tip';
+tipEl.setAttribute('role', 'tooltip');
+document.body.append(tipEl);
+let tipFor = null;
+let tipTimer = 0;
+
+function adoptTitle(node) {
+  if (node && node.hasAttribute && node.hasAttribute('title')) {
+    const t = node.getAttribute('title');
+    node.removeAttribute('title');
+    if (t) node.dataset.tip = t;
+  }
+}
+
+function adoptAll(root) {
+  root.querySelectorAll('[title]').forEach(adoptTitle);
+}
+
+adoptAll(document);
+document.querySelectorAll('template').forEach(t => adoptAll(t.content));
+new MutationObserver(records => records.forEach(r => {
+  if (r.type === 'attributes') adoptTitle(r.target);
+  else r.addedNodes.forEach(n => { if (n.nodeType === 1) { adoptTitle(n); adoptAll(n); } });
+})).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] });
+
+function placeTip(target) {
+  const r = target.getBoundingClientRect();
+  const w = tipEl.offsetWidth;
+  const h = tipEl.offsetHeight;
+  let x = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+  let y = r.bottom + 8;
+  if (y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 8);
+  tipEl.style.left = `${x}px`;
+  tipEl.style.top = `${y}px`;
+}
+
+function hideTip() {
+  clearTimeout(tipTimer);
+  tipFor = null;
+  tipEl.classList.remove('on');
+}
+
+document.addEventListener('mouseover', (event) => {
+  const target = event.target.closest && event.target.closest('[data-tip]');
+  if (target === tipFor) return;
+  hideTip();
+  if (!target || !target.dataset.tip) return;
+  tipFor = target;
+  tipTimer = setTimeout(() => {
+    if (tipFor !== target || !target.isConnected) return;
+    tipEl.textContent = target.dataset.tip;
+    placeTip(target);
+    tipEl.classList.add('on');
+  }, 300);
+});
+document.addEventListener('mousedown', hideTip);
+document.addEventListener('scroll', hideTip, true);

@@ -490,13 +490,17 @@ class Services:
 
     async def openrouter_transcribe(self, pcm: bytes, language: str = "") -> tuple[str, Optional[str]]:
         import base64
+        # Ogg Opus, not WAV: 30 KB instead of 316 KB for 10 s of speech, same
+        # text and speed through OpenRouter's Gemini (measured 2026-10-25).
+        _name, data, mime = compressed(pcm)
         body = {"model": OR_STT_MODEL, "reasoning": {"effort": "minimal", "exclude": True},
                 "messages": [{"role": "user", "content": [
                     {"type": "text", "text": "Transcribe only the speech in this clip exactly, "
                                              "{}; never translate. Output only the words, nothing "
                                              "if no speech.".format(spoken_in(language))},
                     {"type": "input_audio", "input_audio": {
-                        "data": base64.b64encode(wav_bytes(pcm)).decode(), "format": "wav"}}]}]}
+                        "data": base64.b64encode(data).decode(),
+                        "format": "ogg" if mime == "audio/ogg" else "wav"}}]}]}
         try:
             r = await asyncio.wait_for(self.http.post(
                 OPENROUTER + "/chat/completions",

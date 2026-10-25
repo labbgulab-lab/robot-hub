@@ -7,7 +7,7 @@
 <title>Group conversation</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232563eb'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='white'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/style.css?v=2026-10-22b">
-<link rel="stylesheet" href="/group.css?v=2026-10-22b">
+<link rel="stylesheet" href="/group.css?v=2026-10-25e">
 </head>
 <body class="group-page">
 
@@ -19,8 +19,8 @@
 <header class="topbar"><div class="topbar-inner">
   <h1 class="brand">Group conversation</h1>
   <div class="topbar-right">
-    <span class="save-badge" id="config-badge" role="status">loading</span>
-    <a class="back-link" href="/">Robot Hub</a>
+    <span class="save-badge" id="config-badge" role="status" title="Whether your settings are saved on the hub. They are kept for the next time.">loading</span>
+    <a class="back-link" href="/" title="Back to the main hub page with all the robots.">Robot Hub</a>
     <span class="hub-link" id="ws-state" title="Live connection to the hub">
       <span class="dot"></span><span id="ws-text">connecting</span>
     </span>
@@ -37,39 +37,48 @@
      right. Only the transcript and, with many robots, the cards scroll. -->
 <main class="board">
 
-  <!-- What is happening now, readable from a step back. -->
+  <!-- What is happening now, the clock and the controls: kept small so the
+       conversation gets the room (Tomer, 2026-10-25). The service checks
+       fold into one pill. -->
   <section class="stage" id="stage" data-phase="idle" aria-label="Status">
     <div class="stage-top">
-      <div class="stage-main">
-        <p class="stage-phase"><span class="dot"></span><span id="phase-label">Not running</span></p>
-        <p class="stage-line" id="status-line" role="status">Not running</p>
-        <p class="stage-detail hidden" id="status-detail" dir="auto"></p>
-      </div>
+      <p class="stage-main" title="What is happening right now">
+        <span class="dot"></span><span class="phase-label" id="phase-label">Not running</span>
+        <span class="stage-line" id="status-line" role="status">Not running</span>
+        <span class="stage-detail hidden" id="status-detail" dir="auto"></span>
+      </p>
       <div class="stage-clock">
-        <div class="timer" aria-label="Session time">
+        <div class="timer" aria-label="Session time" title="Time so far / when the conversation ends. At the end every robot says a closing line.">
           <span id="timer">0:00</span><span class="timer-of"> / <span id="timer-total">5:00</span></span>
         </div>
-        <div class="timer-bar" id="timer-bar"><span id="timer-fill"></span></div>
+        <button type="button" class="more-time" id="more-time" disabled
+                title="Add one minute to this conversation while it runs; press again for more. The saved Minutes setting does not change.">+1</button>
       </div>
     </div>
-    <p class="people-live hidden" id="people-live" dir="auto"></p>
+    <div class="timer-bar" id="timer-bar"><span id="timer-fill"></span></div>
     <div class="stage-actions">
-      <button type="button" class="ready-button" id="get-ready" disabled title="Connect the robots, check every service with a real request and write the first line of each mode, so a mode button speaks at once">Get ready</button>
-      <button type="button" class="start-button mode-button" id="start-group" data-mode="group" disabled>
+      <button type="button" class="ready-button" id="get-ready" disabled title="Before the audience arrives: connect the robots, check every service with a real request and prepare the first line of each mode, so a mode button speaks at once.">Get ready</button>
+      <button type="button" class="start-button mode-button" id="start-group" data-mode="group" disabled
+              title="The robots debate the topic with each other, and anyone in the room can join in at any time. Talking over a robot cuts it off. While the other mode runs, this switches at once.">
         <span class="mode-name">Group talk</span><span class="mode-sub">robots + people</span></button>
-      <button type="button" class="start-button mode-button" id="start-interrupt" data-mode="interrupt" disabled>
+      <button type="button" class="start-button mode-button" id="start-interrupt" data-mode="interrupt" disabled
+              title="A person talks about the topic and the robots cut in: they argue, cheer, mock or correct. How often each one cuts in is its Interrupting level (0-5) on its card.">
         <span class="mode-name">Interrupt mode</span><span class="mode-sub">they cut you off</span></button>
-      <button type="button" class="stop-button" id="stop" disabled title="The robots go quiet and stay connected: a mode button starts again at once">Stop</button>
-      <button type="button" class="disconnect-button" id="disconnect" disabled title="Release the robots (needed to change who sits where, Included and Listens)">Disconnect</button>
+      <button type="button" class="start-button mode-button free-button" id="start-free" data-mode="free" disabled
+              title="No topic and no sides: the robots chat freely with the people about anything, follow whatever the room brings up and start fun subjects of their own. Use it when the room wants to talk about something else: Stop, then Free talk.">
+        <span class="mode-name">Free talk</span><span class="mode-sub">chat about anything</span></button>
+      <button type="button" class="stop-button" id="stop" disabled title="End the conversation: the robot that is talking finishes, then every robot says one closing line and goodbye. Press again to stop at once. The robots stay connected.">Stop</button>
+      <button type="button" class="disconnect-button" id="disconnect" disabled title="Release the robots. Needed only to change the seats: order, Included, Listens, adding or removing a robot.">Disconnect</button>
     </div>
-    <p class="start-hint" id="start-hint"></p>
-    <!-- Who hears the people, with the instant switch to the robots' mics. -->
-    <div class="mic-line" id="mic-line">
-      <span class="mic-state" id="mic-state" role="status">Mic: checking</span>
-      <button type="button" class="mic-switch" id="mic-switch" hidden>Use robots' mics</button>
+    <!-- Who hears the people (with the instant switch), hints, the checks. -->
+    <div class="stage-foot">
+      <span class="mic-state" id="mic-state" role="status" title="Who hears the people right now. With the DJI mic plugged into this laptop it is the DJI; if it goes quiet or is unplugged, the robots' own mics take over by themselves.">Mic: checking</span>
+      <button type="button" class="mic-switch" id="mic-switch" hidden title="Switch at once, also mid-conversation, between the DJI mic and the robots' own microphones.">Use robots' mics</button>
+      <span class="start-hint" id="start-hint"></span>
+      <button type="button" class="checks-pill hidden" id="checks-pill" aria-expanded="false"
+              title="Every service the conversation needs (writers, voices, speech to text), checked with a real request. Click to see each one.">checks</button>
     </div>
-    <!-- Every service, checked with a real request (Get ready, hub start). -->
-    <ul class="ready-checks" id="ready-checks" aria-label="Service checks"></ul>
+    <ul class="ready-checks hidden" id="ready-checks" aria-label="Service checks"></ul>
   </section>
 
   <!-- The conversation itself, newest at the bottom, and the operator's
@@ -77,15 +86,18 @@
   <section class="convo" aria-labelledby="transcript-title">
     <div class="panel-head">
       <h2 id="transcript-title">Conversation <span class="count" id="turn-count"></span></h2>
-      <button type="button" class="jump hidden" id="jump">Jump to latest</button>
+      <button type="button" class="jump hidden" id="jump" title="Scroll down to the newest line.">Jump to latest</button>
     </div>
     <ol class="transcript" id="transcript"></ol>
     <p class="transcript-empty" id="transcript-empty">Nothing said yet. Press a mode when everyone is seated.</p>
+    <!-- What the person is saying, typed out while they say it. -->
+    <p class="people-live hidden" id="people-live" dir="auto" aria-live="polite"></p>
     <form class="nudge" id="nudge-form" autocomplete="off">
-      <label class="nudge-label" for="nudge-text">Steer</label>
+      <label class="nudge-label" for="nudge-text" title="Tell the robots what to do next. The next line follows it, then the debate goes on.">Steer</label>
       <input id="nudge-text" type="text" dir="auto"
+             title="Tell the robots what to do next, for example a new angle or a question for the room. The next line follows it, then the debate goes on."
              placeholder="e.g. make them argue about it, or ask the people a question">
-      <button type="submit" class="nudge-send" id="nudge-send">Send</button>
+      <button type="submit" class="nudge-send" id="nudge-send" title="Send it to the robots now (Enter works too).">Send</button>
     </form>
     <p class="nudge-last hidden" id="nudge-last" dir="auto"></p>
   </section>
@@ -103,23 +115,23 @@
 
   <!-- What the whole session shares. -->
   <section class="session" aria-label="Session settings">
-    <label class="sfield sfield-topic">Topic
+    <label class="sfield sfield-topic" title="What the robots debate. Each robot's side is in its Personality. Empty: they pick something themselves.">Topic
       <input id="topic" type="text" dir="auto" autocomplete="off"
              placeholder="What they talk about (empty: they choose)">
     </label>
-    <label class="sfield">Language
+    <label class="sfield" title="Auto: the language the people spoke last (Hebrew or English). Hebrew or English: always that language.">Language
       <select id="language"></select>
     </label>
-    <label class="sfield sfield-num">Minutes
+    <label class="sfield sfield-num" title="How long a conversation lasts. At the end every robot says a closing line. While it runs, +1 by the timer adds time.">Minutes
       <input id="minutes" type="number" min="1" max="60" step="1">
     </label>
-    <label class="sfield sfield-num" title="Silence after a robot line before the next one, in seconds">Gap (s)
+    <label class="sfield sfield-num" title="Silence after a robot line before the next robot speaks, in seconds. Longer leaves the people more room to jump in; shorter is snappier.">Gap (s)
       <input id="listen-gap" type="number" min="0" max="5" step="0.1">
     </label>
     <label class="sfield sfield-num" title="On the mic-meter scale. A voice quieter than this at every robot does not take the floor. 0 = off.">Voice threshold
       <input id="voice-min" type="number" min="0" max="0.9" step="0.05">
     </label>
-    <label class="sfield" title="How easily a person talking over a robot cuts it off (group talk) and is heard over the robots (both modes)">People cut in
+    <label class="sfield" title="How easily a person talking over a robot cuts it off. Off: the people are heard only in the pauses. Careful: only a clearly louder voice cuts in (fewest false cut-offs from noise). Normal: the default. Eager: cuts in easily, also on room noise.">People cut in
       <select id="barge-in">
         <option value="off">Off (only in the gaps)</option>
         <option value="careful">Careful</option>
@@ -139,7 +151,7 @@
         <input type="checkbox" id="slow-network"> Slow network</label>
       <label class="check" title="Tick this if the robots look away from whoever is speaking.">
         <input type="checkbox" id="heads-mirror"> Heads turn the other way</label>
-      <label class="check">
+      <label class="check" title="No robots needed: every robot talks through this laptop's speaker and listens through its mic. For rehearsing.">
         <input type="checkbox" id="simulate"> Simulate on this laptop</label>
     </div>
     <p class="session-note" id="voice-note"></p>
@@ -181,34 +193,39 @@
   <li class="card">
     <div class="card-head">
       <span class="seat-pos">1</span>
-      <input class="seat-character" type="text" dir="auto" placeholder="Name" aria-label="Name" maxlength="30">
+      <input class="seat-character" type="text" dir="auto" placeholder="Reachy Mini 1" aria-label="Label" maxlength="30"
+             title="This robot's label in the transcript and for the writer. It is never said aloud.">
       <div class="seat-order">
         <button type="button" class="seat-move" data-move="-1" title="Move one seat to the left" aria-label="Move left">&lsaquo;</button>
         <button type="button" class="seat-move" data-move="1" title="Move one seat to the right" aria-label="Move right">&rsaquo;</button>
+        <button type="button" class="seat-move seat-add" aria-label="Add a robot">+</button>
+        <button type="button" class="seat-move seat-remove" aria-label="Remove this robot">&times;</button>
       </div>
     </div>
-    <p class="name-warn hidden">Another robot has this name.</p>
+    <p class="name-warn hidden">Another robot has this label.</p>
     <div class="card-meta">
       <span class="seat-robot">robot</span>
       <span class="seat-state">Not connected</span>
       <span class="level" title="Microphone level"><span class="level-fill"></span></span>
     </div>
     <div class="card-checks">
-      <label class="check" title="Takes part in the conversation"><input type="checkbox" class="seat-included"> Included</label>
-      <label class="check" title="Its microphone is used to hear the people"><input type="checkbox" class="seat-listen"> Listens</label>
-      <label class="check" title="Looks through its camera when asked what it sees"><input type="checkbox" class="seat-vision"> Camera</label>
+      <label class="check" title="Takes part in the conversation. Untick to leave this robot out; it stays connected to the hub. Fixed until Disconnect."><input type="checkbox" class="seat-included"> Included</label>
+      <label class="check" title="Its microphone hears the people when the DJI mic is not in use. Fixed until Disconnect."><input type="checkbox" class="seat-listen"> Listens</label>
+      <label class="check" title="It can look through its camera when someone asks what it sees. It never comments on the room unasked."><input type="checkbox" class="seat-vision"> Camera</label>
     </div>
-    <label class="cfield cfield-persona"><span class="cfield-label">Personality</span>
+    <label class="cfield cfield-persona" title="This robot's position on the topic and how it argues. The writer follows it on every line; a change applies from the next line."><span class="cfield-label">Personality</span>
       <textarea class="seat-persona" dir="auto" rows="3" aria-label="Personality"
-                placeholder="Who this character is and how they talk. Say he/him or she/her for Hebrew."></textarea>
+                placeholder="This robot's position on the topic and how it argues."></textarea>
     </label>
     <div class="cfield"><span class="cfield-label">Voice</span>
       <div class="pair">
-        <select class="seat-provider" aria-label="Voice provider"></select>
-        <select class="seat-voice" aria-label="Voice"></select>
+        <select class="seat-provider" aria-label="Voice provider"
+                title="Which service speaks for this robot. ElevenLabs: the most natural voices (lab key). OpenAI: good voices, needs OpenAI credits. OpenRouter: OpenAI's voices through OpenRouter. Gemini: works with the Gemini key, small daily cap. Auto: ElevenLabs while it has credits, else OpenAI. The voice never changes mid-conversation."></select>
+        <select class="seat-voice" aria-label="Voice"
+                title="The voice itself, from that service. Only male voices are listed. Give each robot a different one."></select>
       </div>
     </div>
-    <label class="cfield"><span class="cfield-label">Writer</span>
+    <label class="cfield" title="The AI model that writes this robot's lines. Gemini 3.5 Flash: smartest, about 2.5 s. gpt-oss-120b: fastest, about 1.2 s. GPT-5.4 mini: about 2.8 s. GPT-4.1 mini: needs OpenAI credits. Flash-Lite: fast, with the Gemini key. The next line is written while the other robot talks, so the wait is usually hidden."><span class="cfield-label">Writer</span>
       <select class="seat-writer"></select>
     </label>
     <div class="cfield"><span class="cfield-label">Interrupting</span>
@@ -223,8 +240,8 @@
     </div>
     <div class="cfield"><span class="cfield-label">Gestures</span>
       <div class="segmented" role="radiogroup" aria-label="Gestures">
-        <button type="button" role="radio" data-gestures="lively">Lively</button>
-        <button type="button" role="radio" data-gestures="calm">Calm</button>
+        <button type="button" role="radio" data-gestures="lively" title="Moves its head and antennas on almost every line, and reacts while the others talk.">Lively</button>
+        <button type="button" role="radio" data-gestures="calm" title="Moves on about half of its lines and rarely reacts to the others.">Calm</button>
       </div>
     </div>
     <label class="cfield cfield-inline"><span class="cfield-label">Volume</span>
@@ -232,12 +249,12 @@
     </label>
     <div class="card-foot">
       <span class="card-now"></span>
-      <button type="button" class="ghost-button copy-button">Copy to others</button>
+      <button type="button" class="ghost-button copy-button" title="Copy some of this robot's settings (voice, writer, gestures, volume and more) to other robots. You choose which.">Copy to others</button>
     </div>
   </li>
 </template>
 
 <noscript><p class="noscript">Enable JavaScript to see the conversation.</p></noscript>
-<script src="/group.js?v=2026-10-22b"></script>
+<script src="/group.js?v=2026-10-25d"></script>
 </body>
 </html>

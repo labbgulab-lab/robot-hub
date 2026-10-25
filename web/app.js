@@ -877,19 +877,20 @@ function updateSummary() {
 
 /* ---------------------------------------------------- group conversation */
 // Several Reachys and the people in the room (docs/GROUP-CONVERSATION.md).
-// It runs on its own page; this button opens it once two Reachys are
-// connected, from the same robot events that draw the cards.
+// It runs on its own page; this button opens it once a Reachy is connected
+// (one Reachy plus the page's "Laptop robot" is enough to try it), from the
+// same robot events that draw the cards.
 const groupOpen = document.getElementById('group-open');
 const groupHint = document.getElementById('group-hint');
 
 function updateGroupButton() {
   const reachys = [...state.values()].filter(
     r => r.type_id === 'reachy_wireless' && CONNECTED.includes(r.state)).length;
-  const ready = reachys >= 2;
+  const ready = reachys >= 1;
   groupOpen.disabled = !ready;
   groupOpen.title = ready
     ? `Open the group conversation (${reachys} Reachys connected)`
-    : 'Connect at least two Reachys first';
+    : 'Connect a Reachy first';
   groupHint.classList.toggle('hidden', ready);
 }
 

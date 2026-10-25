@@ -143,10 +143,10 @@ def test_each_robot_speaks_with_its_own_provider_and_voice():
     assert s.voice_backend(noa) == "gemini" and s.gemini_voice(noa) == "Kore"
     assert s.voice_backend(dor) == "openai" and s.openai_voice(dor) == "onyx"
     # OpenRouter's voice has no onyx: that robot falls back to its default.
-    assert s.voice_backend(eli) == "openrouter" and s.router_voice(eli) == "verse"
+    assert s.voice_backend(eli) == "openrouter" and s.router_voice(eli) == "echo"
     assert s.voice_backend(maya) == "eleven" and s.voice_key(maya) == "el:X1"
     # Default voices when none was picked.
-    assert s.openai_voice({"key": "a", "character": "Noa"}) == "coral"
+    assert s.openai_voice({"key": "a", "character": "Reachy Mini 1"}) == "ash"
     # ElevenLabs refused: a robot set to ElevenLabs keeps it (2026-10-22: never
     # a voice change mid-conversation); a robot on Auto moves on.
     s.eleven_down = True
@@ -298,13 +298,13 @@ def test_the_named_robot_answers_in_interrupt_mode_with_mixed_writers():
 
 
 def test_a_level_zero_fan_does_not_block_defending():
-    seats = [{"key": "1", "name": "r1", "character": "Tamar", "interrupt_level": 0},
-             {"key": "2", "name": "r2", "character": "Noa", "interrupt_level": 5},
-             {"key": "3", "name": "r3", "character": "Dor", "interrupt_level": 5}]
+    seats = [{"key": "1", "name": "r1", "character": "Reachy Mini 5", "interrupt_level": 0},
+             {"key": "2", "name": "r2", "character": "Reachy Mini 1", "interrupt_level": 5},
+             {"key": "3", "name": "r3", "character": "Reachy Mini 2", "interrupt_level": 5}]
     t = talk(c.InterruptTalk, seats)
     line = c.Line(seat=seats[2], move="oppose", text="No.", final=False, nudge="",
                   director_s=0.0, stance="oppose")
     random.seed(4)
     picks = [t.defender_for(line) for _ in range(300)]
-    assert any(p is not None and p["character"] == "Noa" for p in picks)
-    assert not any(p is not None and p["character"] == "Tamar" for p in picks)
+    assert any(p is not None and p["character"] == "Reachy Mini 1" for p in picks)
+    assert not any(p is not None and p["character"] == "Reachy Mini 5" for p in picks)

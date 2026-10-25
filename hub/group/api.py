@@ -39,9 +39,17 @@ def make_router(group: GroupManager) -> APIRouter:
         return reply(await group.start(str((body or {}).get("mode") or "group")))
 
     @router.post("/api/group/stop")
-    async def post_stop() -> JSONResponse:
-        """Stop talking; the robots stay connected for the next start."""
-        return reply(await group.stop())
+    async def post_stop(body: dict = Body(default={})) -> JSONResponse:
+        """Stop talking; the robots stay connected for the next start.
+        {"now": false} (the default): each robot says a closing line first."""
+        if (body or {}).get("now"):
+            return reply(await group.stop())
+        return reply(await group.finish())
+
+    @router.post("/api/group/more_time")
+    async def post_more_time(body: dict = Body(default={})) -> JSONResponse:
+        """{"seconds": 60}: the running conversation ends later."""
+        return reply(group.more_time(float((body or {}).get("seconds") or 60)))
 
     @router.post("/api/group/disconnect")
     async def post_disconnect() -> JSONResponse:

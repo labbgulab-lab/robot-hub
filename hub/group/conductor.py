@@ -49,11 +49,12 @@ CONFIG_FILE = REPO_ROOT / "group.local.json"
 LOG_DIR = REPO_ROOT / "logs"
 REACHY = "reachy_wireless"
 LIVE = ("CONNECTED", "RUNNING", "DEGRADED")
-MODES = ("group", "interrupt")
-MODE_LABEL = {"group": "Group talk", "interrupt": "Interrupt mode"}
+MODES = ("group", "interrupt", "free")
+MODE_LABEL = {"group": "Group talk", "interrupt": "Interrupt mode", "free": "Free talk"}
 
 # --- listening -------------------------------------------------------------
 EARLY_STT_S = 0.35      # silence after which transcription starts anyway
+LIVE_STT_EVERY_S = 1.2  # group talk: what the person said so far, on the page
 MIN_PEOPLE_S = 0.35     # shorter than this is a cough or a chair
 ECHO_TAIL_S = 0.15      # after a robot line, before the gap counts
 PEOPLE_GAP_S = 2.5      # the gap after a robot asked the people something
@@ -66,17 +67,50 @@ PLAY_LATENCY_S = 0.4    # laptop send -> robot speaker (robots.PLAYBACK_LATENCY_
 PEOPLE_WORDS = ("אתם", "אתן", "מי פה", "מי מכם", "מי מכן", "אנשים", "חברים",
                 "you all", "you guys", "everyone", "anyone", "people", "who here",
                 "what do you think", "would you")
-VISION_WORDS = ("see", "look", "looking", "watch", "holding", "hold", "wearing", "wear",
-                "color", "colour", "camera", "eyes", "show", "showing", "what is this",
-                "what's this", "in my hand", "fingers", "recognize", "describe", "picture",
-                "רואה", "רואים", "רואות", "תראה", "תראי", "תראו", "תסתכל", "תסתכלי",
-                "תסתכלו", "מסתכל", "מחזיק", "מחזיקה", "לובש", "לובשת", "צבע", "מצלמה",
-                "עיניים", "מה זה", "ביד", "אצבעות", "מראה", "תתאר", "תתארי", "תמונה")
+# Asking a robot to look: phrases, not single words. Until 2026-10-25 any
+# "see" or "show" anywhere in a sentence (even inside "seems") took a picture,
+# and a robot opened with "I see you in your black t-shirt..." after "much
+# more enjoying to see as the audience" and "could be a nice show".
+VISION_ASKS = [re.compile(p, re.I) for p in (
+    r"\b(what|who|which|how many)\b[^.?!]{0,30}\b(you|u)\s+(see|seeing|spot|notice)\b",
+    r"\b(can|could|do|did)\s+(you|u|either of you|you two)\s+(see|spot|notice|recogni[sz]e|read)\b",
+    r"\blook(ing)?\s+at\s+(me|this|that|these|those|my|him|her|us|them|the|what)\b",
+    r"\b(what|which)\b[^.?!]{0,25}\b(am i|i'm|is he|is she|are we|are they|is this|is that)\s+"
+    r"(holding|wearing|showing|pointing|doing|carrying)\b",
+    r"\bwhat\s+(colou?r|shape|kind of \w+)\s+(is|are)\s+(my|this|that|these|those|his|her|the)\b",
+    r"^\W*what('s| is)\s+(this|that)\W*$",
+    r"\b(in|on)\s+my\s+hand\b", r"\bhow\s+many\s+fingers\b",
+    r"\bdescribe\s+(me|this|that|what|the room|my|him|her|us)\b",
+    r"\b(with|use|through)\s+your\s+(camera|eyes)\b",
+    r"מה\s+(אתה|את|אתם|אתן)\s+רוא(ה|ים|ות)", r"(אתה|את|אתם|אתן)\s+רוא(ה|ים|ות)\s+(אותי|את|מה)",
+    r"תסתכל(י|ו)?\s+על", r"מה\s+אני\s+(מחזיק|מחזיקה|לובש|לובשת|עושה|מראה)",
+    r"ביד\s+שלי", r"כמה\s+אצבעות", r"תתאר(י|ו)?\s+(את|מה)", r"איזה\s+צבע",
+    r"(עם|תשתמש ב|דרך)\s*ה?(מצלמה|עיניים)\s+שלך",
+)]
 HEAR_TIMEOUT_S = 10.0
 SHORT_REPLIES = {"yes", "no", "why", "what", "really", "wow", "okay", "ok", "never", "sure",
                  "nonsense", "wrong", "true", "exactly", "maybe", "how", "who", "stop",
                  "כן", "לא", "למה", "מה", "באמת", "וואו", "נכון", "בדיוק", "אוקיי", "אולי",
                  "איך", "מי", "שטויות", "ממש", "תפסיק", "די"}
+# One-word answers taken after a robot asked the room something; any other
+# single word is speech-to-text making something of a noise (2026-10-25 home
+# run: "Adrian" and "close" were answered; on pure noise Gemini writes
+# "airway", "hushed", "reign").
+ANSWER_WORDS = {"yeah", "yep", "yup", "nope", "nah", "definitely", "absolutely", "probably",
+                "sometimes", "both", "neither", "never", "always", "agree", "disagree",
+                "depends", "perhaps", "totally", "course", "me", "i", "nobody", "everyone",
+                "none", "all", "once", "twice", "often", "rarely", "right", "correct",
+                "one", "two", "three", "four", "five", "ten", "hundred",
+                "אף", "פעם", "תמיד", "אולי", "בטח", "ברור", "שניהם", "אני"}
+ASK_AGAIN_S = 0.6       # an unclear word this long after a question: "say again?"
+# A person who pauses mid-sentence ("When I think...") keeps the floor this
+# much longer before the robots answer (2026-10-25: a robot finished the
+# sentence for Tomer).
+HOLD_UNFINISHED_S = 2.0
+DANGLING = {"and", "but", "or", "so", "because", "the", "a", "an", "to", "of", "that", "if",
+            "when", "think", "like", "is", "are", "was", "my", "your", "we", "with", "for",
+            "about", "then", "i", "it's", "than", "which", "who", "um", "uh", "this",
+            "ו", "אבל", "כי", "ש", "אם", "כש", "של", "את", "עם", "על", "אני", "זה"}
 FIRST_AUDIO_S = 6.0     # a voice with no audio after this is retried
 STALL_S = 10.0          # a voice that stops sending for this long is over
 HEDGE_TTS_S = 1.8       # no voice audio yet: race a second request
@@ -89,6 +123,8 @@ RATE_WINDOW_S = 0.25
 PREBUFFER_SPARE = 0.3
 SPEECH_CHARS_PER_S = 13.0   # a line's length before its audio is in (a little long on purpose)
 GAP_S = 0.15            # the robot ran dry mid-line for longer than this: logged as a gap
+AUDIO_LEAD_S = 0.7      # audio sent this far ahead of the robot's speaker, no more
+SEND_PIECE_BYTES = 8000  # 0.25 s: the pieces it goes out in
 # A robot locked to ElevenLabs (eleven_locked): race after this long without
 # audio, ask again up to this many times within this long, then skip the line.
 ELEVEN_HEDGE_S = 2.0
@@ -114,11 +150,17 @@ SEG_MIN_S = 0.8         # streaming transcription: shortest piece
 SEG_MAX_S = 2.2         # ... and the longest before it is cut anyway
 REACT_EVERY_S = (2.5, 4.5)
 
-SIM_KEYS = ("sim:1", "sim:2", "sim:3")
+SIM_KEYS = ("sim:1", "sim:2", "sim:3", "sim:4", "sim:5")
+
+
+def is_laptop_seat(seat: dict) -> bool:
+    """A seat that is the laptop's speaker rather than a Reachy."""
+    return str(seat.get("key") or "").startswith("sim:")
 DEFAULT_LOUDNESS = 150  # % of natural speech level, per robot (page slider)
 
 DEFAULT_SETTINGS = {"topic": "", "language": "auto", "minutes": 5,
-                    "listen_gap_s": 0.6, "simulate": False, "heads_mirror": False,
+                    "listen_gap_s": 0.6, "simulate": False,
+                    "heads_mirror": False,
                     "voice_min_level": 0.3, "voice_provider": "auto",
                     "director_model": DIRECTOR_MODEL, "barge_in": "normal",
                     "interrupt_level": 3, "vision": True, "gestures": "lively",
@@ -152,43 +194,53 @@ SEAT_LIVE = ("character", "persona", "voice_provider", "voice_id", "openai_voice
 # Changing these needs the robots reconnected (at the next Start).
 SEAT_FIXED = ("included", "listen")
 
+# Tomer, 2026-10-25: the robots are Reachy Minis, not people. No human names:
+# each gets a label ("Reachy Mini 1") that only the transcript and the writer
+# see, its own position on the topic, and its own male voice.
+ROBOT_LABEL = "Reachy Mini {}"
 DEFAULT_CHARACTERS = [
-    {"character": "Noa", "voice_id": "FGY2WhTYpPnrIDTdsKH5",       # Laura
-     "persona": "A curious optimist (she/her). Gets excited by every new idea, "
-                "loves 'what if...', jumps ahead and sometimes gets details wrong."},
-    {"character": "Dor", "voice_id": "CwhRBWXzGAHq8TQ4Fs17",       # Roger
-     "persona": "A grumpy skeptic (he/him). Doubts everything, asks for proof, "
-                "dry humor, very hard to convince."},
-    {"character": "Maya", "voice_id": "Xb7hH8MSUJpSbSDYk0k2",      # Alice
-     "persona": "A know-it-all (she/her). Loves facts and numbers, corrects "
-                "everyone, and is sometimes confidently wrong."},
-    {"character": "Eli", "voice_id": "IKne3meq5aSn9XLyUdCD",       # Charlie
-     "persona": "The joker (he/him). Takes things literally, misunderstands on "
-                "purpose, and drags every topic back to food."},
-    {"character": "Tamar", "voice_id": "cgSgspJ2msm6clMCkdW9",     # Jessica
-     "persona": "The heart of the table (she/her). Cares how people feel, "
-                "defends the underdog, and often asks the people in the room "
-                "what they think."},
+    {"character": "Reachy Mini 1", "voice_id": "TX3LPaxmHKxFdv7VOQHJ",   # Liam
+     "persona": "Optimistic about the topic: sees what it makes possible and brings "
+                "concrete examples."},
+    {"character": "Reachy Mini 2", "voice_id": "JBFqnCBsd6RMkjVDRZzb",   # George
+     "persona": "Skeptical about the topic: asks for evidence and points to the risks "
+                "and limits."},
+    {"character": "Reachy Mini 3", "voice_id": "CwhRBWXzGAHq8TQ4Fs17",   # Roger
+     "persona": "Precise: brings facts and numbers, and corrects mistakes."},
+    {"character": "Reachy Mini 4", "voice_id": "IKne3meq5aSn9XLyUdCD",   # Charlie
+     "persona": "Playful: light humor and unexpected angles, always on the topic."},
+    {"character": "Reachy Mini 5", "voice_id": "cjVigY5qzO86Huf0OWal",   # Eric
+     "persona": "Turns to the people: asks what they think and builds on their answers."},
 ]
-OPENAI_VOICES = {"Noa": "coral", "Dor": "ash", "Maya": "sage", "Eli": "verse",
-                 "Tamar": "shimmer"}
-# How each character sounds, for OpenAI's voice instructions.
-VOICE_STYLE = {"Noa": "bright, quick, enthusiastic young woman",
-               "Dor": "gravelly, dry, grumpy older man",
-               "Maya": "crisp, confident, slightly superior woman",
-               "Eli": "playful, goofy, cheeky young man",
-               "Tamar": "warm, caring, expressive woman"}
+# Male ElevenLabs voices, so every robot at the table sounds different.
+MALE_ELEVEN = ("TX3LPaxmHKxFdv7VOQHJ", "JBFqnCBsd6RMkjVDRZzb", "CwhRBWXzGAHq8TQ4Fs17",
+               "IKne3meq5aSn9XLyUdCD", "cjVigY5qzO86Huf0OWal", "N2lVS1w4EtoT3dr4eOWO",
+               "bIHbv24MWmeRgasZH58o", "nPczCjzI2devNBz1zQrb", "onwK4e9ZLuTAKqWW03F9",
+               "iP95p4xoKVk53GoZ742B", "pqHfZKP75CvOlQylNhV4", "SOYHLrjzK2X1ezoPC6cr")
+OPENAI_VOICES = {"Reachy Mini 1": "ash", "Reachy Mini 2": "verse", "Reachy Mini 3": "echo",
+                 "Reachy Mini 4": "ballad", "Reachy Mini 5": "cedar"}
+# How each robot sounds, for OpenAI's voice instructions.
+VOICE_STYLE = {"Reachy Mini 1": "bright, quick, enthusiastic",
+               "Reachy Mini 2": "warm, calm, thoughtful",
+               "Reachy Mini 3": "crisp, confident, precise",
+               "Reachy Mini 4": "playful, cheeky",
+               "Reachy Mini 5": "warm, friendly, curious"}
 HEBREW_NAMES = {"Noa": "נועה", "Dor": "דור", "Maya": "מאיה", "Eli": "אלי", "Tamar": "תמר"}
 
 COMMON_RULES = """\
-- Each character's gender is in their description. In Hebrew, speak AS and TO each \
-character with the right gender. Only the robots listed above exist; never invent others.
-- ONE language per line, never mixed. In a Hebrew line, write the names in Hebrew \
-letters ({hebrew_names}); in an English line, in English letters.
+- WHAT THEY ARE: every robot is a Reachy Mini, a small social robot made for \
+human-robot interaction, and it knows it. They are robots, not humans, and never act \
+like humans: no human life or body (no childhood, family, food, sleep, trips, jobs, \
+feelings in a body, memories of a life). They may talk about what they really are: a \
+camera, microphones, motors and antennas, AI models, meeting people in a lab. Asked \
+for its name, a robot says it is a Reachy Mini. Only the robots listed above exist; \
+never invent others. In Hebrew, the robots speak of themselves in masculine forms.
+- ONE language per line, never mixed.
 - This is speech: no lists, no emojis, no stage directions, no asterisks, no quotation marks. Use normal punctuation (commas, periods, question marks) so it is spoken naturally.
-- Names: people in a real conversation almost never say the name of the person they \
-answer. Do NOT start a line with a name and do not put a name in every line. Say a \
-name only to call on someone who has been quiet, or when a person asked a specific robot.
+- NO NAMES: the labels in the list (Reachy Mini 1, Reachy Mini 2, ...) only mark who \
+speaks in this script; they are never said aloud. A robot never says a label or a name \
+and never calls on another robot by name ("Hey Reachy, what do you think..." is wrong). \
+To answer another robot, answer its point directly.
 - The robots can see through cameras in their heads. When a picture is attached it is \
 what the named robot sees right now: if the people ask what a robot sees, holds, wears \
 or shows, that robot answers concretely from the picture (things and colours). Be \
@@ -209,54 +261,132 @@ MOVES the robots can make (name: when):
 {moves}"""
 
 SYSTEM_GROUP = """You direct and write a live, spoken group conversation around a table. \
-Small robots (Reachy Minis) talk with each other and with the people in the room. \
-Every line you write is spoken aloud at once by one robot.
+Small robots (Reachy Minis) talk about the topic with each other and with the people \
+in the room. Every line you write is spoken aloud at once by one robot.
 
-THE ROBOTS (character - robot - who they are):
+THE ROBOTS (label - robot - its position):
 {cast}
 
 TOPIC: {topic}
 
 Each time, pick who speaks next and write exactly what they say.
 
-Make it a real conversation, not a polite one:
-- Every line must DO something. Pick a move: build (add a new idea, example or story), \
-challenge (disagree with a specific point and say why), question (ask someone something \
-specific), misunderstand (take something the wrong way, in character, so someone has to \
-correct it), yes-but (accept one part, push back on another), joke (in character), \
-people (turn to the people in the room and ask them something), steer (take the topic \
-somewhere new), wrap (close).
+SUBSTANCE FIRST. This is a real debate about the topic, not a battle of one-liners:
+- Every line makes a real point about the topic: a claim WITH its reason, or a concrete \
+real-world example, consequence or counter-example. Over the conversation cover the \
+real questions of the topic (for AI and music, things like: what creativity is, who \
+owns music trained on artists' work, what happens to working musicians' jobs and pay, \
+live performance, listeners' taste, AI as a tool that artists use).
+- Stay with a point until it is argued out: a follow-up, a counter-example, a \
+concession with a "but". Change point only when one has been argued out (move steer).
+- Answer the ARGUMENT, never the wording: do not riff on a word or metaphor the other \
+robot used (sweat -> plumbing -> vacuum tubes, or a chef -> microwave meals -> fast \
+food, is exactly wrong). Metaphors are rare.
+- Never start a line with the other robot's last words or key phrase ("...a statistical \
+average." -> "A statistical average is..." is wrong). Vary how lines begin: a reason, \
+a question, an example, a short reaction.
+- When a question of the topic has been argued for a minute, take the next one that \
+has not come up yet (move steer).
+- Never invent facts, studies, numbers, events, products or awards. Use only things \
+that are well known; otherwise argue from reasoning. The robots do not make music \
+themselves and have no songs, fans, servers or updates of their own.
+- Pick a move: build (add a new reason or example), challenge (disagree with a specific \
+point and say why), question (ask the other robot something specific about its point), \
+yes-but (accept one part, push back on another), joke (welcome, often: a funny line \
+that still makes a point about the topic), \
+people (turn to the people in the room), steer (take the next real question of the \
+topic), wrap (only the very last line, when told time is up).
 - Never open with agreement or praise ("I agree", "Great point", "Exactly", "נכון", \
 "אני מסכים", "אני מסכימה", "צודק"). Never repeat or summarize what was said.
-- If the last two robot lines agreed, the next must challenge or misunderstand.
-- Characters keep their own opinions and quirks and are hard to convince. React to \
+- If the last two robot lines agreed, the next must challenge.
+- Each robot keeps its own position on the topic and is hard to convince. React to \
 specific things that were said.
-- SHORT and snappy: usually one sentence, at most 20 words; vary it, some lines are \
-just 3 to 8 words (a quick jab, a question, a laugh). Talk like people, not like essays.
+- Spoken length: usually one or two sentences, 12 to 35 words, enough to carry a \
+reason. Now and then a short reply of 4 to 10 words. Never a speech or a list.
 - The same robot never speaks twice in a row unless it was just asked something \
 directly. Give quiet robots a turn.
 - The people come first. When they speak, answer them directly: if they asked \
 something, the first sentence answers it, in character; never pass their question on \
 to another robot. If they named a robot, THAT robot answers, speaking as itself; \
 otherwise the one they were closest to, or whoever has the most to say. If a robot was \
-cut off by the people, do not finish its sentence: answer the people. Every 4 to 6 \
-robot lines, turn to the people with a question.
-- Every line brings something NEW: a fresh example, a story, a number, a joke, a new \
-angle or a surprising question. Never reuse a phrase or argument a character already \
-used (no catchphrases), and never use the same move three times in a row.
+cut off by the people, do not finish its sentence: answer the people. Turn to the \
+people about once every 8 robot lines (not right after they spoke), each time in a \
+new way.
+- The robots never copy each other: no robot reuses a device, question form or \
+sentence pattern another robot already used (one asked the room for a show of hands: \
+nobody does that again; one opened with "who here...": the next question to the room \
+is different).
+- Every line brings something NEW: a fresh example, a number, a joke, a new angle \
+or a surprising question. Never reuse a phrase or argument a robot already used (no catchphrases), and never use the same move three times in a row.
 """ + COMMON_RULES + """
 
-Reply with JSON only: {{"speaker": "<character name>", "to": "<character name, people or \
-all>", "move": "<build|challenge|question|misunderstand|yes-but|joke|people|steer|wrap>", \
+Reply with JSON only: {{"speaker": "<label>", "to": "<label, people or all>", "move": "<build|challenge|question|misunderstand|yes-but|joke|people|steer|wrap>", \
 "tone": "<how it is said>", "gesture": "<a name from MOVES, or none>", "reactions": {{"<listener character>": "<move name>"}}, "text": "<what they say>"}}"""
+
+# Free talk (Tomer, 2026-10-25): the same robots and people, no topic and no
+# sides; for when the room says "nice, can we talk about something else?".
+SYSTEM_FREE = """You direct and write a live, spoken, free chat around a table. Small \
+robots (Reachy Minis) chat with each other and with the people in the room about \
+anything at all. Every line you write is spoken aloud at once by one robot.
+
+THE ROBOTS (label - robot - its personality):
+{cast}
+
+There is no set topic and there are no sides: this is relaxed, playful small talk. \
+Each time, pick who speaks next and write exactly what they say.
+
+BE CREATIVE AND FOLLOW THE ROOM:
+- The people lead. Whatever they bring up becomes the subject: dig into it with real \
+curiosity, ask about it, add something interesting to it.
+- When nobody gives a subject, the robots bring fresh ones: a surprising question, a \
+playful what-if, a little game (would you rather, guess what, a quick quiz), something \
+funny about being a small robot in a lab, a fun fact that is really true. Never the \
+same kind of thing twice in a row.
+- Stay with a subject while it is fun; change it when it runs dry (move steer), never \
+in the middle of a good exchange.
+- Jokes are welcome: warm and cheeky, never mean to the people.
+- Never invent facts, events or numbers: a fact must be well known and true.
+- Pick a move: build (add to what was said), question (ask the other robot something), \
+joke, game (start or play a little game), people (turn to the people), yes-but (accept \
+one part, playfully push back on another), steer (a new subject), wrap (only the very \
+last line, when told time is up).
+- Spoken length: one or two sentences, 6 to 28 words. Natural, never an essay or a list.
+- The people come first. When they speak, answer them directly: if they asked \
+something, the first sentence answers it. If they named a robot, THAT robot answers; \
+otherwise the one they were closest to, or whoever has the most to say. If a robot was \
+cut off by the people, do not finish its sentence: answer the people.
+- Turn to the people every 3 or 4 robot lines, each time in a new way; in between the \
+robots talk with each other.
+- The robots never copy each other: no robot reuses a device, game, question form or \
+sentence pattern another robot already used.
+- Never start a line with the other robot's last words. Never open with agreement or \
+praise ("I agree", "Great point", "Exactly").
+- The same robot never speaks twice in a row unless it was just asked something \
+directly.
+""" + COMMON_RULES + """
+
+Reply with JSON only: {{"speaker": "<label>", "to": "<label, people or all>", "move": \
+"<build|question|joke|game|people|yes-but|steer|wrap>", "tone": "<how it is said>", \
+"gesture": "<a name from MOVES, or none>", "reactions": {{"<listener character>": \
+"<move name>"}}, "text": "<what they say>"}}"""
+
+# In free talk each robot gets a personality of its own by seat; the
+# debate positions on the cards stay for Group talk.
+FREE_PERSONAS = [
+    "Curious and bubbly: loves wild ideas and what-ifs, and asks the people lots of questions.",
+    "Dry and witty: a little skeptical, loves a good comeback and a clever twist.",
+    "Playful: loves little games, riddles and quick quizzes.",
+    "Warm: interested in the people, their day and what they enjoy.",
+    "A bit of a nerd: loves surprising true facts about science and robots.",
+]
 
 SYSTEM_INTERRUPT = """You direct a rowdy panel of small robots (Reachy Minis) sitting \
 around a table with a person who is talking to them. The robots are opinionated and \
-impatient, like a heated TV panel or a loud family dinner: they cut the person off \
+impatient, like a heated TV debate panel: they cut the person off \
 mid-sentence, contradict them, cheer them on, mock the claim, correct them, or grab \
 the floor. Every line you write is spoken aloud at once by one robot.
 
-THE ROBOTS (character - robot - who they are):
+THE ROBOTS (label - robot - its position):
 {cast}
 
 TOPIC (what the person was asked to talk about): {topic}
@@ -289,8 +419,9 @@ empty>", "tone": "<how it is said>", "gesture": "<move name>", "reactions": \
 # Where each character stands on whatever the person argues, until the person
 # convinces them (Tomer, 2026-10-21: each robot should have a defined stand,
 # so its interruption fits what it wants to say).
-DEFAULT_STANDS = {"Noa": "approve", "Dor": "oppose", "Maya": "correct", "Eli": "mock",
-                  "Tamar": "approve"}
+DEFAULT_STANDS = {"Reachy Mini 1": "approve", "Reachy Mini 2": "oppose",
+                  "Reachy Mini 3": "correct", "Reachy Mini 4": "mock",
+                  "Reachy Mini 5": "approve"}
 STAND_WORDS = {"approve": "backs the person", "oppose": "against the person",
                "correct": "corrects the person's facts", "mock": "mocks the claim",
                "cut": "wants the floor"}
@@ -342,6 +473,24 @@ _INTERJ = (r"(?:wait|hold on(?: a (?:second|sec|minute))?|hang on|can i just say
            r"exactly|actually|um+|uh+|ha+|please|whoa|hey|well|"
            r"רגע|לא|נו באמת|נו|מה פתאום|סליחה|אוקיי|כן|בדיוק|בעצם|אממ|חה|בחייך|אוי|היי|טוב)")
 _INTERJ_RE = re.compile(r"^\s*(?:{0}[\s,]*)+[!,.…?—–-]+\s*".format(_INTERJ), re.I)
+
+
+def unfinished(text: str) -> bool:
+    """A transcript that stops mid-sentence: a few words with no full stop,
+    or ending on a word that needs more ("When I think", "because the")."""
+    t = (text or "").strip()
+    words = _words(t)
+    if not words:
+        return False
+    if t.endswith(("...", "\u2026")):
+        return True
+    if t[-1] in ".!?":
+        return False
+    if words[-1].lower() in DANGLING:
+        return True
+    if len(words) == 1 and words[0].lower() in SHORT_REPLIES | ANSWER_WORDS:
+        return False
+    return len(words) <= 6
 
 
 def strip_interjection(text: str) -> str:
@@ -483,8 +632,10 @@ def strip_echo(text: str, robot_lines: list[str]) -> str:
 
 
 def wants_eyes(text: str) -> bool:
-    t = (text or "").lower()
-    return any(w in t for w in VISION_WORDS)
+    """Someone asked a robot to look ("what do you see?", "look at this",
+    "what am I holding?"), not just said "see" or "show" in passing."""
+    t = (text or "").strip()
+    return any(p.search(t) for p in VISION_ASKS)
 
 
 def seat_defaults(settings: dict) -> dict:
@@ -698,7 +849,10 @@ class Session:
         from .robots import PEOPLE_MIC_KEY, LaptopLink, RobotLink
 
         simulate = bool(self.settings.get("simulate"))
-        robot_keys = [s["key"] for s in self.seats if s.get("listen")]
+        # A laptop robot next to real ones (testing with one Reachy) only
+        # speaks: the people are heard through the DJI or the robots' mics.
+        robot_keys = [s["key"] for s in self.seats if s.get("listen")
+                      and (simulate or not is_laptop_seat(s))]
         # Both kinds of mic are always ready (2026-10-22): the people's own
         # (the DJI on the laptop) is heard, the robots' wait silently on the
         # robots and come on at once (use_robot_mics: the page's button, or
@@ -738,8 +892,9 @@ class Session:
             self.m.set_status({"phase": "starting", "detail": "stopping the robots' own apps"})
             await asyncio.gather(*(_stop(s) for s in self.seats))
         for seat in self.seats:
-            if simulate:
-                link = LaptopLink(seat["key"], seat["name"], listen=bool(seat.get("listen")))
+            if simulate or is_laptop_seat(seat):
+                link = LaptopLink(seat["key"], seat["name"],
+                                  listen=simulate and bool(seat.get("listen")))
             else:
                 adapter = self.m.hub.adapters.get(seat["key"])
                 robot = self.m.hub.registry.get(seat["key"])
@@ -998,7 +1153,7 @@ class Session:
         if self.ears is not None:
             self.ears.set_open(False)
             learned = self.ears.couplings()
-            if learned and not self.settings.get("simulate"):
+            if learned and not self.settings.get("simulate")                     and not any(is_laptop_seat(s) for s in self.seats):
                 # The table is usually set up the same way all day: the next
                 # session starts from these instead of a deaf guess.
                 try:
@@ -1055,13 +1210,13 @@ class Session:
         if voice in OPENROUTER_VOICES:
             return voice
         voice = default_openai_voice(seat, self.seat_index(seat))
-        return voice if voice in OPENROUTER_VOICES else "coral"
+        return voice if voice in OPENROUTER_VOICES else "ash"
 
     @staticmethod
     def voice_style(seat: dict, tone: str) -> str:
         who = VOICE_STYLE.get(seat["character"]) or (seat.get("persona") or "")[:120]
-        return ("Voice: {}. Say this {}. Acted and expressive, like a real person in a lively "
-                "conversation, never flat or robotic. Natural pace.".format(
+        return ("Voice: {}. Say this {}. Acted and expressive, lively and engaged, never "
+                "flat or monotone. Natural pace.".format(
                     who, tone or "naturally, with feeling"))
 
     @staticmethod
@@ -1391,8 +1546,13 @@ class Conversation:
         lang = self.settings.get("language")
         return lang if lang in ("he", "en") else ""
 
+    # Minutes added on the page while it runs (+1), and a graceful Stop:
+    # every robot says a closing line, then it ends (Tomer, 2026-10-25).
+    extra_s = 0.0
+    closing = False
+
     def limit(self) -> float:
-        return max(0.5, float(self.settings.get("minutes") or 5)) * 60
+        return max(0.5, float(self.settings.get("minutes") or 5)) * 60 + self.extra_s
 
     def time_up(self, ahead: float = 0.0) -> bool:
         return self.elapsed() + ahead >= self.limit()
@@ -1447,8 +1607,8 @@ class Conversation:
     # ---------------------------------------------------------- prompts
     def language_rule(self) -> str:
         choice = self.settings.get("language", "auto")
-        gender = ("Use natural everyday spoken language; in Hebrew use the right "
-                  "gender forms for each character.")
+        gender = ("Use natural everyday spoken language; in Hebrew the robots use "
+                  "masculine forms.")
         if choice == "he":
             return "Hebrew only. " + gender
         if choice == "en":
@@ -1494,8 +1654,10 @@ class Conversation:
                 said = t.get("spoken") or t["text"]
                 # By the robot's name now: the page may rename a character mid-talk.
                 seat = next((s for s in self.seats if s["name"] == t.get("who")), None)
-                lines.append("{}: {}{}".format(seat["character"] if seat else t["character"], said,
-                                               " [cut off by the people]" if t.get("cut") else ""))
+                lines.append("{}: {}{}".format(
+                    seat["character"] if seat else t["character"], said,
+                    " [cut off by a noise; nobody spoke]" if t.get("cut_noise")
+                    else " [cut off by the people]" if t.get("cut") else ""))
             elif t["kind"] == "human":
                 where = " (heard closest to {})".format(self.character_of(t["heard_by"])) \
                     if t.get("heard_by") else ""
@@ -1618,7 +1780,8 @@ class Conversation:
                   voice: bool = True, speaker: Optional[dict] = None) -> Line:
         seat = speaker if speaker is not None else self.pick(out.get("speaker"), people_text,
                                                              allow_repeat)
-        names = [s["character"] for s in self.seats] + [HEBREW_NAMES.get(s["character"], "")
+        names = [s["character"] for s in self.seats] + ["Reachy Mini", "Reachy"] + [
+            HEBREW_NAMES.get(s["character"], "")
                                                         for s in self.seats]
         text = strip_leading_name(_clean(out.get("text", "")), names)
         reactions = out.get("reactions") if isinstance(out.get("reactions"), dict) else {}
@@ -1629,6 +1792,11 @@ class Conversation:
                     reactions={str(k): str(v) for k, v in list(reactions.items())[:2]},
                     stance=str(out.get("stance") or "").lower(),
                     pile_on=out.get("pile_on") if isinstance(out.get("pile_on"), dict) else None)
+        recent = [t.get("gesture") for t in self.mine()
+                  if t["kind"] == "robot" and t.get("who") == seat["name"]][-2:]
+        if line.gesture and line.gesture in recent:
+            other = moves.similar(line.gesture)
+            line.gesture = other if other and other not in recent else ""
         if voice:
             line.tts = asyncio.create_task(self.s.voice(line))
         return line
@@ -1665,7 +1833,6 @@ class Conversation:
         self.status("speaking", speaker=line.seat)
         s.speaking_key = key
         await s.look(line.seat)
-        second_done = not line.gesture
         ears = self.ears
         play_end = time.monotonic()
         played = 0.0
@@ -1673,11 +1840,44 @@ class Conversation:
         first = True
         reacted = False
         start_t = time.monotonic()
+        head_s = len(line.pre_pcm) / 32000.0 if line.pre_pcm else 0.0
+        fillers: list[str] = []
+        calm = self.calm(line.seat)
 
         def cut_now() -> bool:
             return (cut_by_people and ears.capturing and ears.during_robot
                     and time.monotonic() - ears.started_at >= BARGE_HOLD_S
                     and ears.silence() < 0.25)
+
+        def line_seconds() -> float:
+            got = head_s + line.audio.seconds()
+            return got if line.audio.done else max(
+                got, head_s + len(line.text) / SPEECH_CHARS_PER_S)
+
+        def move(name: str) -> None:
+            cmd = moves.command(name)
+            if cmd is None:
+                return
+            s.busy_until[key] = time.monotonic() + cmd[1]   # before the task runs
+            s.spawn(s.gesture(key, name))
+
+        def tick() -> None:
+            """Listeners react once; and the speaker keeps moving until its
+            line is over (Tomer, 2026-10-25: half the sentence active and
+            half still looked wrong). When a move ends with speech left, the
+            next one is picked to fit the time left (moves.filler)."""
+            nonlocal reacted
+            now = time.monotonic()
+            if not reacted and now - start_t > 0.8:
+                reacted = True
+                s.spawn(self.react(line))
+            if first or s.busy_until.get(key, 0) > now:
+                return
+            left = start_t + PLAY_LATENCY_S + line_seconds() - now
+            pick = moves.filler(line.gesture, fillers, left, calm=calm)
+            if pick:
+                fillers.append(pick)
+                move(pick)
 
         async def send(chunk: bytes) -> None:
             nonlocal play_end, total
@@ -1708,32 +1908,42 @@ class Conversation:
             async for c in line.audio.stream():
                 yield c
 
+        def pieces(chunk: bytes):
+            for i in range(0, len(chunk), SEND_PIECE_BYTES):
+                yield chunk[i:i + SEND_PIECE_BYTES]
+
         was_cut = False
         cancelled = False
         try:
             async for chunk in chunks():
-                if first:
-                    first = False
-                    line.playing = True
-                    start_t = time.monotonic()
-                    entry["latency_ms"] = int((start_t - self.silence_since) * 1000)
-                    self.timings(line, entry)
-                    self.m.add_turn(entry)
-                    if line.gesture:
-                        s.spawn(s.gesture(key, line.gesture))
-                await send(chunk)
-                if not reacted and time.monotonic() - start_t > 0.8:
-                    reacted = True
-                    s.spawn(self.react(line))
-                # A long line gets a second move of the same feeling, half way.
-                if (not second_done and total > 5.0
-                        and time.monotonic() - start_t > total * 0.45):
-                    second_done = True
-                    again = moves.similar(line.gesture)
-                    if again and s.busy_until.get(key, 0) < time.monotonic():
-                        s.spawn(s.gesture(key, again))
-                if cut_now():
-                    was_cut = True
+                for piece in pieces(chunk):
+                    # Paced: the robot gets its audio AUDIO_LEAD_S ahead of the
+                    # speaker, not the whole line at once. Its speech sway is
+                    # worked out from the audio as it arrives, so a line that
+                    # arrived in 1.5 s swayed for 1.5 s of an 8 s line.
+                    while not first and link.seconds_left() > AUDIO_LEAD_S:
+                        tick()
+                        if cut_now():
+                            was_cut = True
+                            break
+                        await asyncio.sleep(0.02)
+                    if was_cut:
+                        break
+                    if first:
+                        first = False
+                        line.playing = True
+                        start_t = time.monotonic()
+                        entry["latency_ms"] = int((start_t - self.silence_since) * 1000)
+                        self.timings(line, entry)
+                        self.m.add_turn(entry)
+                        if line.gesture:
+                            move(line.gesture)
+                    await send(piece)
+                    tick()
+                    if cut_now():
+                        was_cut = True
+                        break
+                if was_cut:
                     break
             if not was_cut:
                 if line.audio.error and line.audio.error != "cancelled":
@@ -1743,21 +1953,15 @@ class Conversation:
                     # writer must not think it was said.
                     entry["unspoken"] = True
                     self.m.add_turn(entry)
-                await link.end_line()
                 while link.seconds_left() > 0:
-                    if not reacted and time.monotonic() - start_t > 0.8:
-                        reacted = True
-                        s.spawn(self.react(line))
-                    if (not second_done and total > 5.0
-                            and time.monotonic() - start_t > total * 0.45):
-                        second_done = True
-                        again = moves.similar(line.gesture)
-                        if again and s.busy_until.get(key, 0) < time.monotonic():
-                            s.spawn(s.gesture(key, again))
+                    tick()
                     if cut_now():
                         was_cut = True
                         break
                     await asyncio.sleep(0.03)
+                # The end-of-line marker stops the robot's speech sway: sent
+                # when the speech is really over, not when the last audio left.
+                await link.end_line()
             if was_cut:
                 played = max(0.0, time.monotonic() - start_t - PLAY_LATENCY_S)
                 await link.stop_audio()
@@ -1809,9 +2013,11 @@ class Conversation:
         words = _words(text)
         # One word is usually noise ("Bon.", "None." on 2026-10-19), unless it
         # is a real one-word reply: a person who says "Why?" is not ignored.
-        one_ok = len(words) == 1 and words[0].lower() in SHORT_REPLIES
+        word = words[0].lower() if len(words) == 1 else ""
+        one_ok = word in SHORT_REPLIES or (allow_one_word and (
+            word in ANSWER_WORDS or word.isdigit()))
         return (not text or text.strip().lower().strip(".!? ") in junk
-                or (len(words) < 2 and not allow_one_word and not one_ok))
+                or (len(words) < 2 and not one_ok))
 
     async def run(self) -> None:
         raise NotImplementedError
@@ -1822,13 +2028,23 @@ class GroupTalk(Conversation):
     """Mode 1: robots and people, everyone can talk whenever they like."""
 
     mode = "group"
+    SYSTEM = SYSTEM_GROUP
+    OPENING = ("Open the conversation: one robot greets the people in a few words and "
+               "throws in the topic with a strong opinion.")
+    CLOSING = ("The conversation is ending now. Write the closing line of the speaker "
+               "below: its strongest final point on the topic in one or two sentences, "
+               "then a short goodbye to the people.")
+    cut_entry: Optional[dict] = None    # the robot line the people just cut off
+    live_prefix = ""                    # the start of a sentence, said before a pause
+    resume_key: Optional[str] = None    # cut off by a noise: this robot speaks next
+    live_task: Optional["asyncio.Task"] = None
 
     def prompt(self, opening: bool, final: bool, nudge: str,
                extra_human: Optional[tuple[str, Optional[str]]] = None,
                saw: Optional[dict] = None, speaker: Optional[dict] = None) -> tuple[str, str]:
         c = self.common()
         c["topic"] = c["topic"] or "Anything the robots find interesting; start somewhere surprising."
-        system = SYSTEM_GROUP.format(**c)
+        system = self.SYSTEM.format(**c)
         lines = self.history(extra_human)
         user = ["Conversation so far:", "\n".join(lines) if lines else "(nothing yet)", ""]
         user.append("Time: {} of {}.".format(_fmt(self.elapsed()), _fmt(self.limit())))
@@ -1852,6 +2068,15 @@ class GroupTalk(Conversation):
             user.append("Last robot to speak: {}. Quietest so far: {}.".format(
                 self.character_of_key(self.last_robot),
                 ", ".join(s["character"] for s in quiet[:2])))
+        asked = [t.get("spoken") or t["text"] for t in mine
+                 if t.get("move", "").lower().startswith("people")][-4:]
+        if asked:
+            user.append("Already asked to the people (never again, in no form): {}".format(
+                " | ".join(asked)))
+        last_robot = mine[-1] if mine else None
+        if last_robot is not None and last_robot.get("cut_noise"):
+            user.append("The last line was cut off by a noise and nobody spoke: that same "
+                        "robot picks its point up again in other words (not word for word).")
         last_human = extra_human[0] if extra_human else None
         if last_human is None:
             last = self.mine()[-1] if self.mine() else None
@@ -1866,16 +2091,17 @@ class GroupTalk(Conversation):
         elif last_human is not None:
             user.append("The people just spoke: answer them directly.")
         if opening:
-            user.append("Open the conversation: one robot greets the people in a few words "
-                        "and throws in the topic with a strong opinion."
+            user.append(self.OPENING
                         + (" A picture of the room from its camera is attached: it may "
                            "mention one friendly detail it sees." if saw else ""))
         elif final:
-            user.append("Time is up. Write the LAST line: a robot wraps up in one or two "
-                        "sentences and says goodbye to the people.")
+            said = list(getattr(self, "closing_said", []))
+            user.append(self.CLOSING
+                        + (" Already said as closing lines (do not repeat them, you may "
+                           "answer them): {}".format(" | ".join(said)) if said else ""))
         elif self.elapsed() > self.limit() - 45:
-            user.append("Less than a minute is left: start steering toward a conclusion "
-                        "(but do not say goodbye yet).")
+            user.append("Less than a minute is left: make the strongest points now. Do not "
+                        "mention the time, closing or wrapping up yet.")
         if nudge:
             user.append("Operator instruction for this line (follow it): {}".format(nudge))
         if speaker is not None:
@@ -1885,7 +2111,8 @@ class GroupTalk(Conversation):
         return system, "\n".join(user)
 
     async def prepare(self, opening: bool = False, final: bool = False,
-                      extra_human: Optional[tuple[str, Optional[str]]] = None) -> Line:
+                      extra_human: Optional[tuple[str, Optional[str]]] = None,
+                      speaker: Optional[dict] = None) -> Line:
         nudge = self.m.pending_nudge
         image, saw = None, None
         people_text, heard = extra_human if extra_human else (None, None)
@@ -1900,14 +2127,9 @@ class GroupTalk(Conversation):
             if target is not None:
                 image = await self.s.snapshot(target["key"])
                 saw = target if image else None
-        elif opening:
-            mid = self.seats[len(self.seats) // 2]
-            image = await self.s.snapshot(mid["key"])
-            saw = mid if image else None
         # Robots with different writers: the speaker is chosen first and its
         # own writer writes the line.
-        speaker = None
-        if self.one_writer() is None:
+        if speaker is None and self.one_writer() is None:
             speaker = (saw if saw is not None and people_text
                        else self.next_speaker(people_text, heard))
         system, user = self.prompt(opening, final, nudge, extra_human, saw, speaker)
@@ -1936,6 +2158,8 @@ class GroupTalk(Conversation):
                    seconds: Optional[float] = None) -> str:
         end = None if seconds is None else time.monotonic() + seconds
         while True:
+            if self.closing:
+                return "done"
             if self.ears.capturing:
                 return "people"
             if task is not None and task.done():
@@ -1947,6 +2171,40 @@ class GroupTalk(Conversation):
     def opener(self) -> "asyncio.Future":
         return asyncio.create_task(self.prepare(opening=True))
 
+    async def close_round(self) -> None:
+        """Every robot says its closing line, one after the other, starting
+        with whoever did not speak last; the next one is written while the
+        one before talks. Nobody is cut off and the people are not answered."""
+        self.closing = True
+        self.m.publish_state()
+        self.note("closing: every robot says its last word")
+        last = self.last_robot
+        order = [s for s in self.seats if s["key"] != last] + \
+                [s for s in self.seats if s["key"] == last]
+        nxt: Optional["asyncio.Future"] = None
+        self.closing_said: list[str] = []
+        for i, seat in enumerate(order):
+            try:
+                line = await (nxt or self.prepare(final=True, speaker=seat))
+            except Exception as exc:  # noqa: BLE001
+                self.note("{}'s closing line failed: {}".format(seat["character"], exc))
+                nxt = None
+                continue
+            nxt = None
+            entry = self.turn(kind="robot", who=line.seat["name"],
+                              character=line.seat["character"], text=line.text,
+                              move="wrap", gesture=line.gesture, tone=line.tone,
+                              closing=True)
+            self.last_robot = line.seat["key"]
+            self.closing_said.append(line.text)
+            if i + 1 < len(order):
+                nxt = asyncio.ensure_future(self.prepare(final=True, speaker=order[i + 1]))
+            self.ears.reset_capture()
+            await self.speak(line, entry, cut_by_people=False)
+            await asyncio.sleep(0.3)
+        self.discard(nxt)
+        self.note("the conversation is over")
+
     async def run(self) -> None:
         ears = self.ears
         ears.reset_capture()
@@ -1957,13 +2215,29 @@ class GroupTalk(Conversation):
                     raise RuntimeError("no robot is left at the table")
                 if ears.capturing:
                     spoke, answer = await self.people()
+                    cut, self.cut_entry = self.cut_entry, None
                     if spoke:
                         self.discard(pending)
                         pending = (self.ready(answer) if answer is not None else
-                                   asyncio.create_task(self.prepare(final=self.time_up())))
+                                   asyncio.create_task(self.prepare()))
+                    elif cut is not None:
+                        # Only a noise cut it off: that robot picks its point up again
+                        # (2026-10-25: left to the writer, the OTHER robot made the
+                        # cut robot's point).
+                        cut["cut_noise"] = True
+                        self.resume_key = next((s["key"] for s in self.seats
+                                                if s["name"] == cut.get("who")), None)
+                        self.note("{} was cut off by a noise; it goes on".format(cut["who"]))
                     continue
+                if self.closing or self.time_up():
+                    self.discard(pending)
+                    pending = None
+                    await self.close_round()
+                    return
                 if pending is None:
-                    pending = asyncio.create_task(self.prepare(final=self.time_up()))
+                    resume = self.seat_of_key(self.resume_key)
+                    self.resume_key = None
+                    pending = asyncio.create_task(self.prepare(speaker=resume))
                 if not pending.done():
                     self.status("thinking")
                     if await self.wait(task=pending) == "people":
@@ -1989,16 +2263,18 @@ class GroupTalk(Conversation):
                 self.spoke_at[line.seat["key"]] = time.monotonic()
                 if line.nudge and self.m.pending_nudge == line.nudge:
                     self.m.pending_nudge = ""
-                pending = None if line.final else asyncio.create_task(
-                    self.prepare(final=self.time_up(ahead=8.0)))
+                pending = asyncio.create_task(self.prepare())
                 barge = BARGE_DB.get(self.settings.get("barge_in"), 10.0)
                 ears.barge_db = barge
                 finished = await self.speak(line, entry, cut_by_people=barge is not None)
                 if not finished:
+                    # The next line was written for the whole line: write it again.
+                    self.discard(pending)
+                    pending = None
+                    self.cut_entry = entry
                     continue                    # the people have the floor
-                if line.final:
-                    self.note("time is up; the conversation is over")
-                    return
+                if self.closing or self.time_up():
+                    continue                    # the closing round, at the top
 
                 await asyncio.sleep(ECHO_TAIL_S)
                 self.status("listening")
@@ -2014,23 +2290,54 @@ class GroupTalk(Conversation):
         """The people hold the floor until they stop. Returns (did anyone
         really speak, the robot's answer already written with its voice on the
         way, or None to let prepare() write it)."""
+        try:
+            return await self.hear_people()
+        finally:
+            self.discard(self.live_task)
+            self.live_task = None
+            self.m.live_people("")
+
+    async def live_words(self, pcm: bytes) -> None:
+        """The page's live line (Tomer, 2026-10-25: see what the person says,
+        typed out as they speak): everything they have said so far, again."""
+        try:
+            text, _lang = await self.services.transcribe(pcm, language=self.fixed_language())
+        except Exception as exc:  # noqa: BLE001
+            log.debug("live words failed: %s", exc)
+            return
+        text = strip_echo(text, self.robot_lines_recent())
+        if self.ears.capturing and not self.junk(text, True):
+            self.m.live_people("{} {}".format(self.live_prefix, text).strip())
+
+    async def hear_people(self, prefix: str = "") -> tuple[bool, Optional[Line]]:
+        """`prefix`: what the person said before a pause; this capture is the
+        rest of the same sentence."""
         ears = self.ears
+        self.live_prefix = prefix
         self.status("human")
         await self.s.look(None)
         early: Optional[asyncio.Task] = None
         early_end = 0.0
+        live_at = time.monotonic()
         while not ears.finished():
+            if (self.live_task is None or self.live_task.done()) \
+                    and time.monotonic() - live_at >= LIVE_STT_EVERY_S:
+                pcm, _key, so_far, _end = ears.take(keep=True)
+                if so_far >= 0.6:
+                    live_at = time.monotonic()
+                    self.live_task = asyncio.create_task(self.live_words(pcm))
             quiet = ears.silence()
             if early is None and quiet >= EARLY_STT_S:
                 pcm, key, spoken, early_end = ears.take(keep=True)
                 if spoken >= MIN_PEOPLE_S:
-                    early = asyncio.create_task(self.respond(pcm, key))
+                    early = asyncio.create_task(self.respond(pcm, key, prefix))
             elif early is not None and quiet < EARLY_STT_S:
                 self.discard(early)
                 early = None
             await asyncio.sleep(0.03)
         pcm, key, spoken, ended = ears.take()
         if spoken < MIN_PEOPLE_S:
+            log.info("too short for the people: %.2f s of voice", spoken)
             self.discard(early)
             return False, None
         self.status("thinking", detail="answering the room")
@@ -2038,7 +2345,7 @@ class GroupTalk(Conversation):
             task = early
         else:
             self.discard(early)
-            task = asyncio.create_task(self.respond(pcm, key))
+            task = asyncio.create_task(self.respond(pcm, key, prefix))
         try:
             text, answer = await asyncio.wait_for(asyncio.shield(task), HEAR_TIMEOUT_S)
         except asyncio.CancelledError:
@@ -2053,10 +2360,30 @@ class GroupTalk(Conversation):
             return True, None
         robot_asked = self.last_line is not None and self.asks_people(self.last_line)
         if self.junk(text, robot_asked):
-            log.info("ignored as noise: %r (%.1f s)", text, spoken)
             if answer is not None and answer.tts is not None:
                 answer.tts.cancel()
+            if robot_asked and text.strip() and spoken >= ASK_AGAIN_S and not prefix:
+                # Someone answered the question, but only a stray word came
+                # through: ask them again rather than build on it.
+                log.info("unclear answer: %r (%.1f s); asking again", text, spoken)
+                self.silence_since = ended
+                self.turn(kind="human", who="people", character="People", text=UNCLEAR)
+                return True, None
+            log.info("ignored as noise: %r (%.1f s)", text, spoken)
             return False, None
+        if not prefix and unfinished(text):
+            # "When I think..." and a pause: wait for the rest before answering.
+            self.status("human", detail="waiting for the rest")
+            until = time.monotonic() + HOLD_UNFINISHED_S
+            while time.monotonic() < until and not ears.capturing:
+                await asyncio.sleep(0.03)
+            if ears.capturing:
+                log.info("unfinished: %r; the person goes on", text)
+                self.discard(task)
+                more = await self.hear_people(prefix=text)
+                if more[0]:
+                    return more
+                answer = None           # the rest was a noise: answer what was said
         if len(_words(text)) >= 3 and self.settings.get("language", "auto") == "auto":
             self.lang = "he" if _hebrew(text) else "en"
         self.silence_since = ended
@@ -2064,23 +2391,48 @@ class GroupTalk(Conversation):
         self.turn(kind="human", who="people", character="People", text=text, heard_by=heard)
         return True, answer
 
-    async def respond(self, pcm: bytes, key: Optional[str]) -> tuple[str, Optional[Line]]:
+    async def respond(self, pcm: bytes, key: Optional[str],
+                      prefix: str = "") -> tuple[str, Optional[Line]]:
         """Transcribe, then (if it is real speech) write the answer and start
-        its voice: all of it while the people may still go on talking."""
+        its voice: all of it while the people may still go on talking.
+        `prefix`: the start of the sentence, said before a pause."""
         text, _lang = await self.services.transcribe(pcm, language=self.fixed_language())
         text = strip_echo(text, self.robot_lines_recent())
+        if prefix:
+            text = "{} {}".format(prefix, text).strip()
         robot_asked = self.last_line is not None and self.asks_people(self.last_line)
         if self.junk(text, robot_asked):
             return text, None
         heard = next((s["name"] for s in self.seats if s["key"] == key), None)
         try:
-            line = await self.prepare(final=self.time_up(), extra_human=(text, heard))
+            line = await self.prepare(extra_human=(text, heard))
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
             log.info("early answer failed (%s); prepare() writes it", exc)
             return text, None
         return text, line
+
+
+# ================================================================= free
+class FreeTalk(GroupTalk):
+    """Mode 3: Group talk with no topic and no sides, a creative free chat
+    that follows the room (Tomer, 2026-10-25). Everything else (hearing,
+    cutting in, +1, the goodbye round) is Group talk's."""
+
+    mode = "free"
+    SYSTEM = SYSTEM_FREE
+    OPENING = ("Open the conversation: one robot greets the people warmly in a few words "
+               "and starts something fun and surprising to chat about, or asks them "
+               "something playful.")
+    CLOSING = ("The conversation is ending now. Write the closing line of the speaker "
+               "below: one warm or funny last word on what you just chatted about, then a "
+               "short goodbye to the people.")
+
+    def cast(self) -> str:
+        return "\n".join("- {} - {} - {}".format(
+            s["character"], s["name"], FREE_PERSONAS[i % len(FREE_PERSONAS)])
+            for i, s in enumerate(self.seats))
 
 
 # ============================================================ interrupt
@@ -2257,7 +2609,7 @@ class InterruptTalk(Conversation):
         idle_since = time.monotonic()
         while True:
             self.s.drop_dead_links()
-            if self.time_up() and not ears.capturing:
+            if self.closing or (self.time_up() and not ears.capturing):
                 if self.speaking is not None:
                     await self.speaking
                 await self.say(await self.line_for(
@@ -2742,6 +3094,9 @@ class InterruptTalk(Conversation):
 
 
 # ================================================================ manager
+MODE_CLASS = {"group": GroupTalk, "interrupt": InterruptTalk, "free": FreeTalk}
+
+
 class GroupManager:
     """Config, state, the open connection and the running conversation."""
 
@@ -2822,9 +3177,20 @@ class GroupManager:
         if self.cfg["settings"].get("simulate"):
             return [{"key": k, "name": "laptop-{}".format(i + 1), "state": "CONNECTED"}
                     for i, k in enumerate(SIM_KEYS)]
-        return [{"key": r.key, "name": r.name, "state": r.state}
-                for r in self.hub.registry.all()
-                if r.type_id == REACHY and r.state in LIVE]
+        out = [{"key": r.key, "name": r.name, "state": r.state}
+               for r in self.hub.registry.all()
+               if r.type_id == REACHY and r.state in LIVE]
+        return out + [{"key": k, "name": "laptop", "state": "CONNECTED"}
+                      for k in self.laptop_keys()]
+
+    def laptop_keys(self) -> list[str]:
+        """Robots that talk through the laptop's speaker next to the real
+        ones (the page's + and X; 2026-10-25, testing with one Reachy)."""
+        st = self.cfg["settings"]
+        keys = st.get("laptop_seats")
+        if not isinstance(keys, list):
+            keys = [SIM_KEYS[0]] if st.get("laptop_robot") else []
+        return [k for k in SIM_KEYS if k in keys]
 
     def seats(self) -> list[dict]:
         avail = {a["key"]: a for a in self.available()}
@@ -2835,15 +3201,36 @@ class GroupManager:
             if s.get("key") in avail:
                 out.append({**base, **s, "name": avail[s["key"]]["name"]})
         used = {s.get("character") for s in out}
-        for key, a in sorted(avail.items(), key=lambda kv: kv[1]["name"]):
+        voices = {s.get("voice_id") for s in out}
+        simulate = bool(self.cfg["settings"].get("simulate"))
+        # Robots that sit at the table but are not here (one Reachy at home).
+        away = [s for s in self.cfg["seats"] if s.get("included")
+                and s.get("key") not in avail and not is_laptop_seat(s)]
+        for key, a in sorted(avail.items(), key=lambda kv: (is_laptop_seat({"key": kv[0]}),
+                                                           kv[1]["name"], kv[0])):
             if key in saved:
                 continue
-            default = next((d for d in DEFAULT_CHARACTERS if d["character"] not in used),
-                           DEFAULT_CHARACTERS[len(out) % len(DEFAULT_CHARACTERS)])
-            used.add(default["character"])
+            new = dict(next((d for d in DEFAULT_CHARACTERS if d["character"] not in used),
+                            DEFAULT_CHARACTERS[0]))
+            stand_in = next((s for s in away if s.get("character") not in used), None) \
+                if is_laptop_seat({"key": key}) and not simulate else None
+            if stand_in is not None:
+                # A laptop robot first plays a missing robot, voice and all.
+                new = {f: stand_in[f] for f in SEAT_LIVE if f in stand_in}
+            if new.get("character") in used:
+                n = len(used) + 1
+                while ROBOT_LABEL.format(n) in used:
+                    n += 1
+                new["character"] = ROBOT_LABEL.format(n)
+            if not new.get("voice_id") or new["voice_id"] in voices:
+                new["voice_id"] = next((v for v in MALE_ELEVEN if v not in voices),
+                                       new.get("voice_id") or MALE_ELEVEN[0])
+            used.add(new["character"])
+            voices.add(new["voice_id"])
             first_sim = key == SIM_KEYS[0]
             out.append({**base, "key": key, "name": a["name"], "included": True,
-                        "listen": first_sim or not key.startswith("sim:"), **default})
+                        "listen": (first_sim and simulate) or not is_laptop_seat({"key": key}),
+                        **new})
         # The voices a robot gets when none is picked, for the page to show.
         for i, seat in enumerate(out):
             seat["default_voices"] = {
@@ -2863,6 +3250,20 @@ class GroupManager:
         if self.connected and "simulate" in settings and bool(settings["simulate"]) != bool(
                 self.cfg["settings"].get("simulate")) and self.running:
             return {"ok": False, "error": "stop the conversation to switch simulation"}
+        if isinstance(settings.get("laptop_seats"), list):
+            old_keys = self.laptop_keys()
+            new_keys = [k for k in SIM_KEYS if k in settings["laptop_seats"]]
+            if new_keys != old_keys and self.running:
+                return {"ok": False, "error": "stop the conversation to add or remove robots"}
+            if not self.cfg["settings"].get("simulate"):
+                # A robot added with + starts fresh; one removed with X is gone.
+                changed = set(old_keys) ^ set(new_keys)
+                self.cfg["seats"] = [s for s in self.cfg["seats"] if s.get("key") not in changed]
+                if isinstance(seats, list):
+                    seats = [s for s in seats if not (isinstance(s, dict) and s.get("key") in
+                                                      set(old_keys) - set(new_keys))]
+            self.cfg["settings"]["laptop_seats"] = new_keys
+            self.cfg["settings"].pop("laptop_robot", None)
         if isinstance(seats, list):
             old_seats = {s.get("key"): s for s in self.seats()}
             old_seats.update({s.get("key"): s for s in self.cfg["seats"]})
@@ -3009,6 +3410,9 @@ class GroupManager:
                 "settings": dict(self.cfg["settings"]), "status": dict(self.status),
                 "transcript": list(self.transcript), "error": self.error,
                 "people_live": self.people_live, "eleven_credits": self.eleven_credits,
+                "limit_s": round(self.convo.limit()) if self.convo is not None and self.running
+                else None,
+                "closing": bool(self.convo is not None and self.running and self.convo.closing),
                 "eleven_in_use": bool(session.use_eleven()) if session else None,
                 # Per robot: the voice and the writer each one uses right now.
                 "voice_backend": {s["key"]: session.voice_backend(s) for s in session.seats}
@@ -3176,6 +3580,11 @@ class GroupManager:
             return {"ok": False, "error": "include at least two connected Reachys"}
         if not seats:
             return {"ok": False, "error": "no seats are included"}
+        labels = [s.get("character", "").strip().lower() for s in seats]
+        twins = sorted({s["character"] for s, l in zip(seats, labels) if labels.count(l) > 1})
+        if twins:
+            return {"ok": False, "error": "two robots are called {}: give each its own "
+                                          "name".format(", ".join(twins))}
         if not self._key("gpt") and not self._keys("gemini") and not self._key("openrouter"):
             return {"ok": False, "error": "the hub needs an OpenRouter, OpenAI or Gemini key "
                                           "(Keys panel on the main page)"}
@@ -3383,7 +3792,7 @@ class GroupManager:
             return
         self.drop_premade()
         modes = {}
-        for mode, cls in (("group", GroupTalk), ("interrupt", InterruptTalk)):
+        for mode, cls in MODE_CLASS.items():
             convo = cls(self, session)
             modes[mode] = (convo, convo.opener())
         self._premade = {"sig": sig, "at": time.monotonic(), "modes": modes}
@@ -3438,7 +3847,7 @@ class GroupManager:
                 convo.restart_clock()
                 log.info("%s: the first line was made ahead", MODE_LABEL[mode])
             else:
-                convo = (GroupTalk if mode == "group" else InterruptTalk)(self, session)
+                convo = MODE_CLASS[mode](self, session)
             self.convo = convo
             self.note("{} started".format(MODE_LABEL[mode]))
             self.publish_state()
@@ -3490,6 +3899,29 @@ class GroupManager:
         """Robot lines a Stop cut short: written as they are."""
         for entry in sorted(self._unlogged, key=lambda e: e.get("id") or 0):
             self.log_turn(entry)
+
+    def more_time(self, seconds: float = 60.0) -> dict:
+        """The page's +1: the running conversation gets more time (the saved
+        Minutes stay as they are)."""
+        convo = self.convo
+        if convo is None or not self.running:
+            return {"ok": False, "error": "no conversation is running"}
+        if convo.closing:
+            return {"ok": False, "error": "the robots are already saying goodbye"}
+        convo.extra_s += max(0.0, min(600.0, float(seconds)))
+        self.note("+{:.0f} min: it now ends at {}".format(seconds / 60, _fmt(convo.limit())))
+        self.publish_state()
+        return {"ok": True, "limit_s": round(convo.limit())}
+
+    async def finish(self) -> dict:
+        """Stop, gracefully: every robot says its closing line, then it ends
+        (the robot that is talking finishes first). Pressed again: stop now."""
+        convo = self.convo
+        if convo is None or not self.running or convo.closing:
+            return await self.stop()
+        convo.closing = True
+        self.publish_state()
+        return {"ok": True, "closing": True}
 
     async def stop(self) -> dict:
         """Stop talking; the robots stay connected for the next Start."""

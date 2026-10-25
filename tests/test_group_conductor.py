@@ -47,7 +47,11 @@ def test_gesture_catalog():
     cmd, dur = moves.command("laughing1")
     assert cmd == {"type": "emotion", "name": "laughing1"} and dur > 1
     assert moves.command("not-a-move") is None
-    assert moves.command("yeah_nod")[0]["type"] == "dance"
+    # Dances are off until the robots have the dance library (2026-10-25:
+    # "dance ignored" on the robot, the head still for the dance's length).
+    assert moves.command("yeah_nod") is None and "headbanger_combo" not in moves.menu()
+    if moves.DANCES_ON_ROBOTS:
+        assert moves.command("yeah_nod")[0]["type"] == "dance"
     assert moves.reaction_for("Dor") in moves.EMOTIONS
     assert moves.reaction_for("Someone", "approve") in moves.EMOTIONS
 

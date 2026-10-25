@@ -30,6 +30,11 @@ def _load() -> tuple[dict, dict]:
 
 
 EMOTIONS, DANCES = _load()
+# The robots have no dance library (reachy_mini_dances_library is not
+# installed): every dance is "ignored" on the robot and the head stays still
+# for the dance's length (12 times in one 6-minute run, 2026-10-25). Off
+# until the library is on the robots; then set True.
+DANCES_ON_ROBOTS = False
 
 # Quiet reactions while someone else talks, by temperament. A character the
 # operator renamed falls back to GENERIC.
@@ -81,7 +86,7 @@ GROUPS = (
 
 def menu() -> str:
     """The gesture list for a director prompt, grouped by feeling."""
-    known = set(EMOTIONS) | set(DANCES)
+    known = set(EMOTIONS) | (set(DANCES) if DANCES_ON_ROBOTS else set())
     lines = []
     for label, names in GROUPS:
         names = [n for n in names if n in known]
@@ -95,7 +100,7 @@ def command(name: Optional[str]) -> Optional[tuple[dict, float]]:
     n = str(name or "").strip()
     if n in EMOTIONS:
         return {"type": "emotion", "name": n}, float(EMOTIONS[n].get("dur") or 3.0)
-    if n in DANCES:
+    if n in DANCES and DANCES_ON_ROBOTS:
         return {"type": "dance", "name": n}, float(DANCES[n].get("dur") or 3.0)
     return None
 
@@ -104,6 +109,47 @@ def reaction_for(character: str, stance: str = "", avoid: str = "") -> Optional[
     pool = list(STANCE_REACTIONS.get(stance) or REACTIONS.get(character) or GENERIC)
     pool = [m for m in pool if m in EMOTIONS and m != avoid] or [m for m in GENERIC if m in EMOTIONS]
     return random.choice(pool) if pool else None
+
+
+# While a robot talks, one move after the other until its line is over
+# (2026-10-25): first one more of the line's own feeling, then these quieter
+# "talking" moves, each picked to fit the speech that is left.
+TALKING = ("attentive1", "attentive2", "understanding1", "understanding2", "uh_huh_tilt",
+           "inquiring2", "thoughtful1", "thoughtful2", "side_glance_flick", "yes1")
+FOLLOW_MIN_S = 1.8      # less speech left than this: the speech sway carries the end
+FIT_SLACK_S = 0.4       # a move may run this much past the end of the line
+
+
+def duration(name: str) -> Optional[float]:
+    cmd = command(name)
+    return cmd[1] if cmd else None
+
+
+def filler(gesture: str, used: list, left: float, calm: bool = False) -> Optional[str]:
+    """The next move for a robot that is still talking, or None. `used`: the
+    moves this line already had after its own; `left`: seconds of speech left.
+    Calm robots get at most one, and only after a gesture of their own."""
+    if left < FOLLOW_MIN_S or (calm and (not gesture or used)):
+        return None
+
+    def fits(n: str) -> bool:
+        d = duration(n)
+        return d is not None and d <= left + FIT_SLACK_S and n != gesture and n not in used
+
+    pool: list = []
+    if gesture and not used:
+        for _label, names in GROUPS:
+            if gesture in names:
+                pool = [n for n in names if n in EMOTIONS and fits(n)]
+                break
+    if not pool:
+        pool = [n for n in TALKING if fits(n)]
+    if not pool:
+        return None
+    # Prefer a move that ends near the end of the line over one that leaves a
+    # stub too short for another.
+    closing = [n for n in pool if left - (duration(n) or 0) < FOLLOW_MIN_S]
+    return random.choice(closing or pool)
 
 
 # Small moves a listener makes on its own (keep_heads in conductor.py), so a
@@ -118,6 +164,6 @@ def similar(name: str) -> Optional[str]:
     """Another move of the same feeling as `name` (a long line's second gesture)."""
     for _label, names in GROUPS:
         if name in names:
-            pool = [n for n in names if n != name and (n in EMOTIONS or n in DANCES)]
+            pool = [n for n in names if n != name and command(n) is not None]
             return random.choice(pool) if pool else None
     return None
