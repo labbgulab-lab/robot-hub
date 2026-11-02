@@ -54,7 +54,7 @@ HFOV, VFOV = 1.0367, 0.8063
 # that ran (session transcript; profiles/pepper.md C). Nothing else is offered:
 # no other stock animation names, no tags, no Rest. Wheels only as "walk" (below).
 #   wave       ALAnimationPlayer.run(Hey_1)                       4.4 s
-# explain (Explain_1) and cheer were removed 2026-10-12: Tomer does not like them;
+# explain (Explain_1) and cheer were removed 2026-10-12: the user does not like them;
 # explain was also the talking gesture played every 4 s while Pepper spoke.
 #   yes / no   head pitch -0.40..+0.50 x3 / yaw +-0.90 x3          3.2 s / 4.1 s
 #   arms       angleInterpolationWithSpeed(.., 0.35), breathing off, then
@@ -76,7 +76,7 @@ ARM_HOLD_S = 1.0
 HEAD_YAW = {"left": 0.5, "center": 0.0, "right": -0.5}
 YES_PITCH = [-0.40, 0.50] * 3 + [0.0]
 NO_YAW = [0.9, -0.9] * 3 + [0.0]
-# "walk": a short demo of the wheels (Tomer, 2026-10-12): 1 m forward, turn 180
+# "walk": a short demo of the wheels (2026-10-12): 1 m forward, turn 180
 # degrees, 1 m forward, turn 180 degrees -- back where it started, facing the
 # same way. Slow, as tested on 2026-10-06 (profiles/pepper.md C, Base/wheels):
 # Pepper keeps 0.40 m from obstacles and stops by itself; it will not drive

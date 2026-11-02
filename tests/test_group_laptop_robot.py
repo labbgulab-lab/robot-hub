@@ -1,5 +1,5 @@
-"""Group conversation with one Reachy, and robots that are robots (Tomer,
-2026-10-25, the day before the demo).
+"""Group conversation with one Reachy, and robots that are robots
+(2026-10-25, the day before the demo).
 
 - The page's + adds a robot that talks through the laptop's speaker (a fresh
   one each time; the first plays a seated robot that is not here), X takes it

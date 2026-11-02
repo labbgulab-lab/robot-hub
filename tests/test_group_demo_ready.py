@@ -1,4 +1,4 @@
-"""Demo readiness (Tomer, 2026-10-22, for the 2026-10-26 demo).
+"""Demo readiness (2026-10-22, for the 2026-10-26 demo).
 
 - The hub finds the DJI mic itself; the group conversation and reachy_chat
   start with it. The robots' mics wait silently behind it, and one button

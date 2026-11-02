@@ -5,7 +5,7 @@ Build it after the 2026-10-13 Itai demo, not before.
 
 ## Goal
 
-A student arrives with their own phone hotspot. Tomer's hotspot is off, Tomer
+A student arrives with their own phone hotspot. The phone hotspot is off, the user
 is not in the room. The student powers on reachy1, opens the hub, and in about
 30 seconds the robot is on *their* hotspot and its card lights up. No Pollen
 desktop app, no joining a robot WiFi, no cable, no SSH.
@@ -50,7 +50,7 @@ Daemon 1.11 ships BLE WiFi provisioning (spec on the robot:
    Check reachy2, reachy3 and the 10 new units before relying on this.
 3. All units share one BLE name and the hostname `reachy-mini`; never trust a
    name, always read `...def7`.
-4. If Tomer's hotspot and the student's are both in range, both saved networks
+4. If the phone hotspot and the student's are both in range, both saved networks
    have priority 0. Verify which one NetworkManager prefers after a reboot
    (expected: most recently used).
 5. macOS asks for Bluetooth permission for the terminal/Python running the hub
@@ -134,7 +134,7 @@ Get the PIN with (SSH pollen/root, prints 5 chars; do not save it in a file):
 Coordinate first: this moves reachy1 off "Tomer Iphone".
 1. Laptop on hotspot B (2.4 GHz). reachy1 on "Tomer Iphone" → hub moves it to
    B → card lights → Launch works.
-2. Tomer's hotspot off, reachy1 rebooted (hunting) → moved to B.
+2. The phone hotspot off, reachy1 rebooted (hunting) → moved to B.
 3. Hotspot B on 5 GHz → refused before sending, robot untouched.
 4. Wrong PIN → clear message; correct PIN after → works.
 5. Reboot reachy1 with both hotspots on → note which it picks (trap 4).
@@ -145,11 +145,11 @@ Then commit + push; students `git pull` and start the hub as usual.
 - No-hub page: one static Web Bluetooth page (Chrome/Edge on Windows, Mac,
   Android; not iPhone browsers — Bluefy works) on GitHub Pages, QR on each robot.
 - "Forget a hotspot" button (`WIFI_FORGET`) to keep the robot's list short.
-- Label every robot with its name + PIN (Tomer, once per unit, incl. the 10 new ones).
+- Label every robot with its name + PIN (once per unit, incl. the 10 new ones).
 
 ## Until this is built (no-code fallback)
 
-Tomer's hotspot off → power on reachy1 → after ~1 min it opens WiFi
+The phone hotspot off → power on reachy1 → after ~1 min it opens WiFi
 `reachy-mini-ap` (password `reachy-mini`) → student joins it **from the
 laptop** (the iPhone must keep hosting its hotspot) → browser
 `http://10.42.0.1:8000/settings` → choose their hotspot, type the password →

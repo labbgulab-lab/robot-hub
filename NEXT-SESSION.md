@@ -8,7 +8,7 @@ hub over WiFi, **running at the same time**: the headline requirement.
 
 ## Every robot joins the lab hotspot — and must save it
 
-**SSID `Tomer Iphone`** (password: ask Tomer — it stays out of git). Each robot has to *save* it
+**SSID `Tomer Iphone`** (password: ask the user — it stays out of git). Each robot has to *save* it
 (auto-connect), or it comes up off-network next time and the hub sees nothing.
 On 2026-10-05 neither NAO nor Furhat had it saved.
 

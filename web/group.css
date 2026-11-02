@@ -2,8 +2,8 @@
  *
  * Loaded after style.css and built from its tokens, top bar, banner, buttons
  * and toast, so the page reads as part of the same app; only what is new
- * lives here. On a laptop screen the whole page is one screen (Tomer,
- * 2026-10-21): no page scroll; only the transcript scrolls, and the robot
+ * lives here. On a laptop screen the whole page is one screen
+ * (2026-10-21): no page scroll; only the transcript scrolls, and the robot
  * cards when there are more than fit. Smaller windows fall back to a normal
  * scrolling page. */
 
@@ -445,7 +445,7 @@
 }
 
 /* --------------------------------------------------------------- tooltips */
-/* Every control explains itself on hover (Tomer, 2026-10-25): one tooltip,
+/* Every control explains itself on hover (2026-10-25): one tooltip,
    shown fast, from the elements' titles (group.js moves them here). */
 .tip {
   position: fixed; z-index: 1000; max-width: 340px; padding: 8px 11px;

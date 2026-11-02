@@ -107,7 +107,7 @@ The hub launches each robot's own program. Clone the ones you need **next to
 - **Reachy Mini**: needs `reachy_chat`:
 
   ```bash
-  git clone -b multi-provider https://github.com/Tomer232/reachy-mini-conversation-app-bgu-lab.git reachy_chat
+  git clone -b multi-provider https://github.com/labbgulab-lab/reachy-mini-conversation-app-bgu-lab.git reachy_chat
   cd reachy_chat
   python -m venv .venv
   # Windows: .venv\Scripts\python -m pip install -r requirements.txt
@@ -116,16 +116,16 @@ The hub launches each robot's own program. Clone the ones you need **next to
 
   The first Launch on a robot installs it onto the robot (a few minutes).
 - **NAO** (Windows recommended): needs `NAO_LLM`. Follow its
-  [Quick Start](https://github.com/Tomer232/antagonistic-robot#quick-start):
+  [Quick Start](https://github.com/labbgulab-lab/antagonistic-robot#quick-start):
 
   ```bash
-  git clone https://github.com/Tomer232/antagonistic-robot.git NAO_LLM
+  git clone https://github.com/labbgulab-lab/antagonistic-robot.git NAO_LLM
   ```
 
   The NAO card also needs Python 2.7 and the pynaoqi 2.8.6 SDK. Set both paths in
   `config.toml` (copy `config.example.toml`); see `docs/SETUP.md`.
 
-**All four robots on Windows in one go:** get the *robot-lab kit* from Tomer
+**All four robots on Windows in one go:** get the *robot-lab kit* from the user
 (USB: the NAOqi SDK and the Python 2.7 installer, which are not on GitHub) and
 run `tools/setup-windows.ps1 -Kit <kit folder>`. It installs Git and Pythons
 3.12 + 2.7, clones everything into `%USERPROFILE%\robot-lab`, downloads NAO's

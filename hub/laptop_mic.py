@@ -1,6 +1,6 @@
 """The people's mic on the laptop, watched by the hub itself.
 
-Tomer, 2026-10-22: for the 2026-10-26 demo the people are heard through a DJI
+2026-10-22: for the 2026-10-26 demo the people are heard through a DJI
 Mic Mini (receiver in the laptop's USB-C, the mic on his boss's shirt). The
 hub, not the person running the demo, finds out whether it is plugged in, and
 the apps start with it: the group conversation hears the people through it,

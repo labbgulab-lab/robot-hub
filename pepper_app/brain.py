@@ -123,7 +123,7 @@ FEELINGS_STEPS = {
         "are.' This last turn needs no question. Then stay quiet."),
 }
 
-# Free conversation (Tomer, 2026-10-12): just the person and the model, as fast
+# Free conversation (2026-10-12): just the person and the model, as fast
 # as possible -- no tools, no screen, no gestures, no strict turns, one line.
 FREE = ("This is a free, natural conversation. Answer in ONE short sentence of at most 15 "
         "words, straight to the point, like a friendly person chatting: no lists, no emoji, "
@@ -141,7 +141,7 @@ EXPERIENCES: dict[str, tuple[str, str, int, bool]] = {
     "free": ("Free conversation", FREE, 0, False),
 }
 DEFAULT_EXPERIENCE = "feelings:script"
-# Shown greyed out and not selectable until after the 2026-10-13 demo (Tomer):
+# Shown greyed out and not selectable until after the 2026-10-13 demo:
 # only the scripted demo and free conversation are demo-ready.
 NOT_FOR_DEMO = {"feelings:emoji"}
 

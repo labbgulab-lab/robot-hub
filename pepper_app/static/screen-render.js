@@ -41,10 +41,10 @@ var PepperScreen = (function () {
     '.ps-slide img{width:100%;height:100%;-o-object-fit:contain;object-fit:contain}' +
     '.ps-blank{position:absolute;top:0;left:0;right:0;bottom:0;background:#000}' +
     // The lab logo, bottom centre on every page but blank, slides and the emoji test
-    // (Tomer chose it from data/logo-preview/preview.html, 2026-10-12). Taps pass through.
+    // (the user chose it from data/logo-preview/preview.html, 2026-10-12). Taps pass through.
     '.ps-logo{position:absolute;left:50%;bottom:.9em;-webkit-transform:translateX(-50%);transform:translateX(-50%);' +
     'background:#fff;border-radius:1em;padding:.4em .9em;box-shadow:0 .1em .5em rgba(0,0,0,.15);pointer-events:none}' +
-    '.ps-logo img{display:block;height:9.1em;width:auto}';   // 75% bigger than 5.2em (Tomer, 2026-10-12)
+    '.ps-logo img{display:block;height:9.1em;width:auto}';   // 75% bigger than 5.2em (2026-10-12)
   var LOGO = '<div class="ps-logo"><img src="/screen/logo.png" alt=""></div>';
 
   function addCss() {

@@ -9,7 +9,7 @@ the robot on, turn your hotspot on, then
     python tools/reachy_add_wifi.py --host 10.0.0.23 --ssid "Dana Phone"
 
 The robot moves to your hotspot now and remembers it; it prefers it from then
-on and falls back to the lab WiFi when it is off. Once per robot, Tomer saves
+on and falls back to the lab WiFi when it is off. Once per robot, the user saves
 the lab WiFi itself as that fallback (it does not move the robot):
 
     python tools/reachy_add_wifi.py --ssid "<lab WiFi>" --lab

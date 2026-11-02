@@ -2,7 +2,7 @@
 reaction is written here; the AI only re-words a written reaction so it sounds
 natural, and never decides what the visitor answered.
 
-Why (Tomer, 2026-10-12, after live runs): it is a presentation, a closed flow
+Why (2026-10-12, after live runs): it is a presentation, a closed flow
 that must always look right. The wording is ours; Pepper sounds like a relaxed
 researcher, not "thanks" and "you can tap or tell me" every turn; the screen
 changes WITH the question. An AI-written reaction once answered a tap on "My

@@ -53,7 +53,7 @@ from .reachy_common import DaemonError, DaemonRestarting, PollenDaemon
 
 DEFAULT_DAEMON_PORT = 8000
 
-# Tomer, 2026-09-23: every Reachy speaks at 100% by default. Robots ship at
+# 2026-09-23: every Reachy speaks at 100% by default. Robots ship at
 # whatever the last owner left (reachy2 was 62%). `volume` overrides it.
 DEFAULT_VOLUME = 100
 

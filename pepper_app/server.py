@@ -35,7 +35,7 @@ log = logging.getLogger("pepper.app")
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "static"
 LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
-# Said right before the Walking move (Tomer, 2026-10-12).
+# Said right before the Walking move (2026-10-12).
 WALK_LINES = {"he": "אני צריך למתוח קצת את הרגליים, יוצא להליכה.",
               "en": "I need to stretch my legs, going for a walk."}
 TABLET_RESHOW_S = 20.0

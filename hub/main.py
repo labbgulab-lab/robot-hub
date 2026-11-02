@@ -87,7 +87,7 @@ group = GroupManager(hub)
 async def lifespan(app: FastAPI):
     await hub.start()
     # The DJI mic watcher and the warm-up of every service the group
-    # conversation uses start with the hub (Tomer, 2026-10-22) -- from main()
+    # conversation uses start with the hub (2026-10-22) -- from main()
     # only: tests start this app too, and must not make paid API calls.
     if os.environ.get("HUB_WARM_AT_START") == "1":
         await group.startup()

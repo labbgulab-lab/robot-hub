@@ -71,7 +71,7 @@ otherwise overrides head commands. Animations and animated speech need no
 pausing. The stock library is under `animations/Stand/...` (Gestures,
 Emotions, ...).
 
-**Arms (tested, Tomer watched, all good):** both arms up, out to the
+**Arms (tested, the user watched, all good):** both arms up, out to the
 sides, a "V", hands open/close, one arm at a time and both together, via
 `ALMotion.angleInterpolationWithSpeed(names, angles, 0.35)` with
 `setBreathEnabled("Arms", False)` during the moves, then

@@ -249,7 +249,7 @@ talking; socket message `group.people {"text"}`.
   writer never picks "defend" for a first interruption.
 ## Each robot its own settings; one-screen page (2026-10-21, afternoon)
 
-Tomer: every robot configurable by itself, live, with a button to copy one
+every robot configurable by itself, live, with a button to copy one
 robot's settings to the others; voices chosen from the provider picked; the
 whole page one screen with no scrolling; the transcript follows the line
 being said.

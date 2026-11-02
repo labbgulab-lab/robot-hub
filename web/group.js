@@ -1496,8 +1496,8 @@ loadState();
 connect();
 
 /* --------------------------------------------------------------- tooltips */
-// Every control explains itself when the mouse rests on it (Tomer,
-// 2026-10-25). The explanations are the elements' titles; they move into
+// Every control explains itself when the mouse rests on it
+// (2026-10-25). The explanations are the elements' titles; they move into
 // data-tip so the browser's own slow tooltip never shows, and one quick
 // tooltip of ours shows them instead. Titles set later by the code are
 // caught the same way.

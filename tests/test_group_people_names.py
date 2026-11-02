@@ -1,4 +1,4 @@
-"""A person's name is said at most once per conversation (Tomer, 2026-10-25:
+"""A person's name is said at most once per conversation (2026-10-25:
 after a guest gave their name, ~every robot line opened with "<name>, ...")."""
 
 from hub import laptop_mic

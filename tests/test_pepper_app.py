@@ -136,7 +136,7 @@ def test_instructions_carry_language_pictures_slides_and_turn_rules():
 
 
 def test_demo_experience_list_is_short():
-    """Tomer, 2026-10-12: only the scripted demo, the AI-led Feelings Together and
+    """2026-10-12: only the scripted demo, the AI-led Feelings Together and
     free conversation stay; lab tour, dog-or-cat and words-only were removed."""
     from pepper_app.brain import DEFAULT_EXPERIENCE, EXPERIENCES
     assert set(EXPERIENCES) == {"feelings:script", "feelings:emoji", "free"}

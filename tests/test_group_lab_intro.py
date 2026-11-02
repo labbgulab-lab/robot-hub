@@ -1,4 +1,4 @@
-"""Group talk opens with a lab intro (Tomer, 2026-10-25): every robot one
+"""Group talk opens with a lab intro (2026-10-25): every robot one
 line about Laba Lab and Guy Laban's work, in seat order, then the first
 robot's second line is the usual opener on the topic. The robots answer
 questions about the lab from Pepper's lab facts."""
@@ -17,7 +17,7 @@ def test_lab_facts_come_from_peppers_file():
     facts = c.lab_facts()
     assert facts.startswith("## The lab")
     assert "Guy Laban" in facts and "Pepper may use" not in facts
-    # General only (Tomer): no joining/contact, no people list, no room.
+    # General only: no joining/contact, no people list, no room.
     assert "@" not in facts and "## People" not in facts and "room" not in facts
     assert "## Projects" in facts
 

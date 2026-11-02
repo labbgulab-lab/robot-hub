@@ -1,6 +1,6 @@
 """The speaking keys: stored here, on the laptop, and nowhere else.
 
-Tomer, 2026-09-24: there will be Gemini, GPT and Qwen keys for the robots'
+2026-09-24: there will be Gemini, GPT and Qwen keys for the robots'
 speech, and they are handled from the hub -- added, removed and assigned to a
 robot here, then *sent* at launch, never kept on a robot. So this file is the
 only place a secret lives. The page only ever sees a key's label and its last

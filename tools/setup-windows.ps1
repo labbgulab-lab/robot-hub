@@ -64,8 +64,8 @@ Step "Code from GitHub -> $Root"
 New-Item -ItemType Directory -Force $Root | Out-Null
 $repos = @(
     @{ dir = "robot-hub";   url = "https://github.com/labbgulab-lab/robot-hub.git"; branch = "" },
-    @{ dir = "reachy_chat"; url = "https://github.com/Tomer232/reachy-mini-conversation-app-bgu-lab.git"; branch = "multi-provider" },
-    @{ dir = "NAO_LLM";     url = "https://github.com/Tomer232/antagonistic-robot.git"; branch = "" }
+    @{ dir = "reachy_chat"; url = "https://github.com/labbgulab-lab/reachy-mini-conversation-app-bgu-lab.git"; branch = "multi-provider" },
+    @{ dir = "NAO_LLM";     url = "https://github.com/labbgulab-lab/antagonistic-robot.git"; branch = "" }
 )
 foreach ($r in $repos) {
     $path = Join-Path $Root $r.dir

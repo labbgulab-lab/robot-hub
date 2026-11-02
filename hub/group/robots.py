@@ -1102,7 +1102,7 @@ _LAPTOP_MIC = _LaptopMic()
 
 
 # --- the people's own mic, on the laptop ---------------------------------------
-# Tomer, 2026-10-22: for the 2026-10-26 demo the people are heard through a
+# 2026-10-22: for the 2026-10-26 demo the people are heard through a
 # DJI Mic Mini, its receiver in the laptop's USB-C port and the mic on his
 # boss's shirt, instead of the robots' mics (which hear the robots far louder
 # than any person). Ears treats it as one more mic: it learns how loud each

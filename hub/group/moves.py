@@ -4,7 +4,7 @@ The robots' player (robot_streaming_player.py) plays Pollen's recorded
 emotions and dances by name. The catalog is in assets/group_moves.json (61
 emotions of at most 7.5 s, a few dances), dumped from the same library the
 robots load. In the single-robot chat Gemini picks these itself, in context,
-and Tomer found that the best match between words and body (2026-10-21). The
+and the user found that the best match between words and body (2026-10-21). The
 group director does the same: it writes the line and picks the speaker's
 gesture and a listener's reaction in the same call, so the move fits what is
 said.

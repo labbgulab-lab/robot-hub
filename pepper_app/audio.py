@@ -1,8 +1,8 @@
 """Pepper's voice out, and the person's voice in -- always through Pepper.
 
 Pepper's front microphone and loudspeakers, through the agent on the robot.
-There is deliberately no laptop microphone or speaker route (Tomer,
-2026-10-07): the people in the demo talk to Pepper, not to a laptop.
+There is deliberately no laptop microphone or speaker route
+(2026-10-07): the people in the demo talk to Pepper, not to a laptop.
 
 Everything is PCM16 mono at 24 kHz, the rate both engines use. Pepper's mic
 arrives at 16 kHz and is resampled here.

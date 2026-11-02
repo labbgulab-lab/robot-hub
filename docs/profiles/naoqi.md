@@ -106,7 +106,7 @@ supported** on this version (raises). Volume reads fine.
 The hard constraint. NAOqi's Python SDK is **Python 2.7 only**:
 
 ```sh
-SDK="/c/Users/tomer/Documents/NAO_GROK/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649"
+SDK="$HOME/Documents/NAO_GROK/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649/pynaoqi-python2.7-2.8.6.23-win64-vs2015-20191127_152649"
 PYTHONPATH="$SDK/lib" PATH="$SDK/bin:$PATH" /c/Python27/python.exe "$@"
 ```
 (that doubled directory name is real — see `pepper/run_naoqi.sh`)

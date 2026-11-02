@@ -30,7 +30,7 @@ log = logging.getLogger("hub.group.services")
 
 OPENAI = "https://api.openai.com/v1"
 ELEVEN = "https://api.elevenlabs.io"
-# The writer, through OpenRouter (2026-10-21, Tomer's demo key). Benchmarked
+# The writer, through OpenRouter (2026-10-21, the user's demo key). Benchmarked
 # that morning on the real group prompt in Hebrew, median of 5:
 #   google/gemini-3.5-flash     2.5 s  $0.0036/line  most natural, funniest Hebrew
 #   openai/gpt-oss-120b         1.0-1.7 s (Cerebras)  $0.0006  fastest, odd Hebrew
@@ -84,7 +84,7 @@ class ServiceError(RuntimeError):
 def spoken_in(language: str) -> str:
     """The language part of a transcription request. The 2026-10-21 runs,
     asked for "Hebrew or English", got mixed-language junk; a demo in one
-    language says so (Tomer, 2026-10-22: the demo is English only)."""
+    language says so (2026-10-22: the demo is English only)."""
     if language == "en":
         return "in English (the speaker speaks English)"
     if language == "he":
@@ -851,7 +851,7 @@ GEMINI_VOICES = {"Noa": "Zephyr", "Dor": "Charon", "Maya": "Kore", "Eli": "Puck"
 GEMINI_SPARE = ("Aoede", "Fenrir", "Leda", "Orus", "Callirrhoe")
 
 # The voices each provider offers, for the page's per-robot voice picker
-# (2026-10-21: Tomer picks each robot's voice from the provider it uses).
+# (2026-10-21: the user picks each robot's voice from the provider it uses).
 # OpenRouter's gpt-audio-mini takes OpenAI's realtime voices only (no fable,
 # nova or onyx).
 OPENAI_VOICE_LIST = (("alloy", "neutral"), ("ash", "male"), ("ballad", "male"),

@@ -105,7 +105,7 @@ ANSWER_WORDS = {"yeah", "yep", "yup", "nope", "nah", "definitely", "absolutely",
 ASK_AGAIN_S = 0.6       # an unclear word this long after a question: "say again?"
 # A person who pauses mid-sentence ("When I think...") keeps the floor this
 # much longer before the robots answer (2026-10-25: a robot finished the
-# sentence for Tomer).
+# sentence for the user).
 HOLD_UNFINISHED_S = 2.0
 DANGLING = {"and", "but", "or", "so", "because", "the", "a", "an", "to", "of", "that", "if",
             "when", "think", "like", "is", "are", "was", "my", "your", "we", "with", "for",
@@ -177,7 +177,7 @@ LIVE_SETTINGS = ("topic", "language", "minutes", "listen_gap_s", "heads_mirror",
 # Fewer ElevenLabs characters than this left: "auto" uses OpenAI voices.
 ELEVEN_MIN_CREDITS = 1500
 VOICE_PROVIDERS = ("auto", "elevenlabs", "openai", "openrouter", "gemini")
-# Tomer, 2026-10-22: male voices only, in every provider's list.
+# 2026-10-22: male voices only, in every provider's list.
 MALE_VOICES_ONLY = True
 
 
@@ -188,7 +188,7 @@ def voice_allowed(label: str) -> bool:
 # voice_backend() -> the name in notes and the log
 VOICE_NAMES = {"eleven": "ElevenLabs", "openai": "OpenAI", "openrouter": "OpenRouter",
                "gemini": "Gemini"}
-# What each robot has of its own (Tomer, 2026-10-21: every robot configurable
+# What each robot has of its own (2026-10-21: every robot configurable
 # by itself). All of it changes at once, also mid-conversation; the table's
 # settings of the same meaning are the defaults for a robot that has none.
 SEAT_LIVE = ("character", "persona", "voice_provider", "voice_id", "openai_voice",
@@ -196,7 +196,7 @@ SEAT_LIVE = ("character", "persona", "voice_provider", "voice_id", "openai_voice
 # Changing these needs the robots reconnected (at the next Start).
 SEAT_FIXED = ("included", "listen")
 
-# Tomer, 2026-10-25: the robots are Reachy Minis, not people. No human names:
+# 2026-10-25: the robots are Reachy Minis, not people. No human names:
 # each gets a label ("Reachy Mini 1") that only the transcript and the writer
 # see, its own position on the topic, and its own male voice.
 ROBOT_LABEL = "Reachy Mini {}"
@@ -229,7 +229,7 @@ VOICE_STYLE = {"Reachy Mini 1": "bright, quick, enthusiastic",
                "Reachy Mini 5": "warm, friendly, curious"}
 HEBREW_NAMES = {"Noa": "נועה", "Dor": "דור", "Maya": "מאיה", "Eli": "אלי", "Tamar": "תמר"}
 
-# What the robots know about the lab (Tomer, 2026-10-25): the same file
+# What the robots know about the lab (2026-10-25): the same file
 # Pepper answers from, so one edit updates both. Its first lines are notes
 # for Pepper; the facts start at "## The lab". The Reachys get only the
 # general part: no people list, no joining/contact, no room number ("they
@@ -386,7 +386,7 @@ or a surprising question. Never reuse a phrase or argument a robot already used 
 Reply with JSON only: {{"speaker": "<label>", "to": "<label, people or all>", "move": "<build|challenge|question|misunderstand|yes-but|joke|people|steer|wrap>", \
 "tone": "<how it is said>", "gesture": "<a name from MOVES, or none>", "reactions": {{"<listener character>": "<move name>"}}, "text": "<what they say>"}}"""
 
-# Free talk (Tomer, 2026-10-25): the same robots and people, no topic and no
+# Free talk (2026-10-25): the same robots and people, no topic and no
 # sides; for when the room says "nice, can we talk about something else?".
 SYSTEM_FREE = """You direct and write a live, spoken, free chat around a table. Small \
 robots (Reachy Minis) chat with each other and with the people in the room about \
@@ -480,7 +480,7 @@ empty>", "tone": "<how it is said>", "gesture": "<move name>", "reactions": \
 "<oppose|approve|mock>"}} or null, "text": "<what they say after the opener>"}}"""
 
 # Where each character stands on whatever the person argues, until the person
-# convinces them (Tomer, 2026-10-21: each robot should have a defined stand,
+# convinces them (2026-10-21: each robot should have a defined stand,
 # so its interruption fits what it wants to say).
 DEFAULT_STANDS = {"Reachy Mini 1": "approve", "Reachy Mini 2": "oppose",
                   "Reachy Mini 3": "correct", "Reachy Mini 4": "mock",
@@ -520,7 +520,7 @@ def _words(text: str) -> list[str]:
 
 
 def strip_leading_name(text: str, names: list[str]) -> str:
-    """Tomer, 2026-10-19: robots opening every line with the other robot's
+    """2026-10-19: robots opening every line with the other robot's
     name is "so not natural". The prompt says so; this is the safety net:
     "Dor, that is..." -> "That is...", "נועה, את..." -> "את..."."""
     for name in sorted({n for n in names if n}, key=len, reverse=True):
@@ -532,7 +532,7 @@ def strip_leading_name(text: str, names: list[str]) -> str:
     return text
 
 
-# Tomer, 2026-10-25: after a guest said their name the robots opened ~every
+# 2026-10-25: after a guest said their name the robots opened ~every
 # line with "<name>, ..." ("1 time over all is ok"). A person's name may be said once
 # per conversation; after that it is taken out of the line.
 _NAME_INTRO = re.compile(r"(?i:my name is|my name's|call me|i am called|קוראים לי|שמי)\s+"
@@ -573,7 +573,7 @@ def strip_person_name(text: str, name: str) -> str:
     return re.sub(r",\s*,", ",", text).strip()
 
 
-# Tomer, 2026-10-25 evening run review: ~half the lines opened with the
+# 2026-10-25 evening run review: ~half the lines opened with the
 # other robot's last words (the writer ignores the rule), "raise your hand"
 # came back (feels fake), one robot's jokes were all "If X, then my
 # circuits...", the other argued "no soul, no heartbreak" five times. Checked
@@ -676,7 +676,7 @@ def strip_interjection(text: str) -> str:
 _HE_PREFIX = {"ה": "ha", "ו": "ve", "ל": "le", "ב": "be", "ש": "she", "מ": "me", "כ": "ke"}
 
 
-# Tomer, 2026-10-25: the voices said "Laban" wrong; it is LA-BAHN, both
+# 2026-10-25: the voices said "Laban" wrong; it is LA-BAHN, both
 # a's as in "banana", with the n at the end. Spelled so for the voice only.
 LABAN_SPOKEN = "Lah-bahn"
 _LABAN_RE = re.compile(r"\bLaban\b")
@@ -684,7 +684,7 @@ _LABAN_RE = re.compile(r"\bLaban\b")
 
 def pronounce(text: str) -> str:
     """Words the voices get wrong, spelled for the voice only (the
-    transcript keeps the real spelling). Tomer's pick, 2026-10-19: Hebrew
+    transcript keeps the real spelling). The user's pick, 2026-10-19: Hebrew
     "robot" / "robotim" and "Laba Lab" in Latin letters; 2026-10-25: Laban."""
     text = _LABAN_RE.sub(LABAN_SPOKEN, text)
     if not _hebrew(text):
@@ -767,7 +767,7 @@ async def hedged_stream(make: Any, after: float):
 
 
 def loud(pcm: bytes, percent: Any) -> bytes:
-    """Robot speech at `percent` of its natural level (Tomer, 2026-10-21:
+    """Robot speech at `percent` of its natural level (2026-10-21:
     150%; the robots' own speakers are already at 100%, the most they go).
     A soft limiter (tanh) keeps the loud syllables from clipping."""
     try:
@@ -894,7 +894,7 @@ class Audio:
     def can_start(self, expected_s: float, head_s: float = 0.0,
                   now: Optional[float] = None) -> bool:
         """True once playing now cannot run out before the rest arrives
-        (Tomer, 2026-10-22: the robots must never play faster than the
+        (2026-10-22: the robots must never play faster than the
         hotspot delivers). With audio arriving at `r` seconds per second and
         `rest` seconds still to come, the robot catches up with the download
         unless what is buffered (plus `head_s` already playing in front of
@@ -1234,7 +1234,7 @@ class Session:
         if provider == "openrouter" and router:
             return "openrouter"
         if provider == "elevenlabs" and self.services.eleven_key:
-            # Locked (Tomer, 2026-10-22): a robot set to ElevenLabs never
+            # Locked (2026-10-22): a robot set to ElevenLabs never
             # changes voice mid-conversation; a line it cannot get is retried,
             # then skipped (voice()), never voiced by someone else.
             return "eleven"
@@ -1553,7 +1553,7 @@ class Session:
     async def keep_heads(self) -> None:
         """Every robot that is not speaking lives a little on its own.
 
-        Tomer, 2026-10-21: all robots "breathing" while the group chat is on,
+        2026-10-21: all robots "breathing" while the group chat is on,
         free to move while they listen, never still. The player breathes by
         itself whenever no move is queued; on top of that each listener, at
         its own random pace, either looks at whoever has the floor (a head
@@ -1721,7 +1721,7 @@ class Conversation:
         return lang if lang in ("he", "en") else ""
 
     # Minutes added on the page while it runs (+1), and a graceful Stop:
-    # every robot says a closing line, then it ends (Tomer, 2026-10-25).
+    # every robot says a closing line, then it ends (2026-10-25).
     extra_s = 0.0
     closing = False
 
@@ -1845,7 +1845,7 @@ class Conversation:
 
     def names_said(self) -> list[str]:
         """The people's names a robot has already said (once is the most,
-        Tomer 2026-10-25); the whole session, across modes."""
+        2026-10-25); the whole session, across modes."""
         robot = [t.get("spoken") or t["text"] for t in self.m.transcript
                  if t["kind"] == "robot" and not t.get("unspoken")]
         names = people_names([t["text"] for t in self.m.transcript if t["kind"] == "human"],
@@ -2050,7 +2050,7 @@ class Conversation:
 
         def tick() -> None:
             """Listeners react once; and the speaker keeps moving until its
-            line is over (Tomer, 2026-10-25: half the sentence active and
+            line is over (2026-10-25: half the sentence active and
             half still looked wrong). When a move ends with speech left, the
             next one is picked to fit the time left (moves.filler)."""
             nonlocal reacted
@@ -2221,7 +2221,7 @@ class GroupTalk(Conversation):
     CLOSING = ("The conversation is ending now. Write the closing line of the speaker "
                "below: its strongest final point on the topic in one or two sentences, "
                "then a short goodbye to the people.")
-    # Tomer, 2026-10-25: Group talk starts with a lab intro, one line per
+    # 2026-10-25: Group talk starts with a lab intro, one line per
     # robot in seat order about Laba Lab and Guy Laban's work; then the first
     # robot hands over ("Well, let's get into it, I understand you want to
     # talk about <topic> today...") and the second robot opens the debate.
@@ -2620,7 +2620,7 @@ class GroupTalk(Conversation):
             self.m.live_people("")
 
     async def live_words(self, pcm: bytes) -> None:
-        """The page's live line (Tomer, 2026-10-25: see what the person says,
+        """The page's live line (2026-10-25: see what the person says,
         typed out as they speak): everything they have said so far, again."""
         try:
             text, _lang = await self.services.transcribe(pcm, language=self.fixed_language())
@@ -2739,7 +2739,7 @@ class GroupTalk(Conversation):
 # ================================================================= free
 class FreeTalk(GroupTalk):
     """Mode 3: Group talk with no topic and no sides, a creative free chat
-    that follows the room (Tomer, 2026-10-25). Everything else (hearing,
+    that follows the room (2026-10-25). Everything else (hearing,
     cutting in, +1, the goodbye round) is Group talk's."""
 
     mode = "free"
@@ -2855,7 +2855,7 @@ class InterruptTalk(Conversation):
         system = self.system(speaker)
         jab_level = self.seat_level(speaker) if speaker is not None else self.level()
         # The writer picks the opener itself, from the bank, to fit what the
-        # robot is about to say (Tomer, 2026-10-21: the interjection must match
+        # robot is about to say (2026-10-21: the interjection must match
         # the line, never random). Cached ones play at once.
         if interrupting:
             words = {1: 14, 2: 14, 3: 12, 4: 10, 5: 8}.get(jab_level, 12)
@@ -3697,7 +3697,7 @@ class GroupManager:
             return
         try:
             voices = await list_voices(key)
-            # Tomer, 2026-10-22: the robots only ever get male voices.
+            # 2026-10-22: the robots only ever get male voices.
             self.voices = [v for v in voices if male(v.get("gender", ""))] if MALE_VOICES_ONLY \
                 else voices
         except Exception as exc:  # noqa: BLE001
@@ -3953,7 +3953,7 @@ class GroupManager:
 
     # --------------------------------------------------------- get ready
     async def get_ready(self) -> dict:
-        """Tomer, 2026-10-22: nothing may load once the demo starts. Connect
+        """2026-10-22: nothing may load once the demo starts. Connect
         the robots (their players, mics and cameras), check every service the
         conversation uses with a real request, and write and voice the first
         line of each mode, so Start speaks at once."""

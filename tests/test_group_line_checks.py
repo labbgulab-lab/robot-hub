@@ -1,4 +1,4 @@
-"""Lines the writer gets wrong are written again once (Tomer, 2026-10-25
+"""Lines the writer gets wrong are written again once (2026-10-25
 evening run): openings that echo the other robot, "raise your hand", the
 same "If..., my circuits" joke, the same feelings argument again."""
 

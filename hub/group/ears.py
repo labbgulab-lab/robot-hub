@@ -2,7 +2,7 @@
 
 Until 2026-10-21 every mic was closed while a robot spoke, so a person who
 started mid-line lost the start of their sentence, and nobody could be heard
-over a robot at all. Tomer wants both: in the group mode people talk whenever
+over a robot at all. The user wants both: in the group mode people talk whenever
 they like, and in the interrupt mode the robots talk *over* the person, who
 keeps going.
 
