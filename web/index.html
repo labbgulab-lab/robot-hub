@@ -75,9 +75,11 @@
     </button>
   </div>
 
-  <!-- Network setup. Every lab member brings their own phone hotspot; the
-       robots only see it on 2.4 GHz and must be taught it once each. Opens by
-       itself on a first visit and whenever the check finds a problem. -->
+  <!-- Network setup. Since 2026-11-03 the robots live on the lab WiFi
+       ([network] lab_wifi; its name is filled in from the hub, never written
+       here: this repo is public). A phone hotspot is only for working outside
+       the lab. Opens by itself on a first visit and whenever the check finds a
+       problem. -->
   <section class="setup-section" aria-labelledby="setup-title">
     <details id="setup-details">
       <summary><h2 id="setup-title">Network setup</h2>
@@ -91,7 +93,53 @@
         <svg aria-hidden="true"><use href="#refresh"/></svg><span>Check again</span>
       </button>
 
-      <h3 class="setup-h">1. Set up your phone's hotspot</h3>
+      <h3 class="setup-h">1. Connect this laptop to <span class="lab-name">the lab WiFi</span></h3>
+      <ul class="setup-list">
+        <li>Every robot in the lab is on <strong class="lab-name">the lab WiFi</strong>. It has internet. No phone hotspot is needed.</li>
+        <li>Connect <strong>this laptop</strong> to it, then press <em>Check again</em>.
+          Switch off auto-join for other WiFi (e.g. campus), or the laptop will wander off mid-session.</li>
+        <li>Robots appear as cards within about 20 seconds. This network does not pass the robots' own name announcements (mDNS), so the hub looks for them by address, on this laptop's part of the network.</li>
+      </ul>
+
+      <h3 class="setup-h">2. Put each robot on <span class="lab-name">the lab WiFi</span> (once per robot)</h3>
+      <p class="keys-note">After this the robot rejoins it by itself every time it is powered on.</p>
+      <details class="setup-robot">
+        <summary>Reachy Mini</summary>
+        <ol>
+          <li><strong>A new robot:</strong> the bring-up does everything: <code>tools\reachy_bringup.py</code> (or <code>/reachy-set-up</code> in Claude Code), with this laptop on <span class="lab-name">the lab WiFi</span> and the robot powered on. It saves the lab WiFi as the robot's main network, updates it, names it and adds its card.</li>
+          <li><strong>An older robot that only knows a phone hotspot:</strong> power it on away from that hotspot; it opens its own WiFi <code>reachy-mini-ap</code>. Run the same bring-up with the robot's <strong>existing</strong> name (<code>--name reachyN</code>): it keeps its number and learns the lab WiFi.</li>
+          <li><strong>Or, while it is still on a hotspot you have:</strong> on its card press <em>Add WiFi…</em>, type the name of <span class="lab-name">the lab WiFi</span> (and its password, if it has one), tick <em>This is the lab WiFi</em>, and Join.</li>
+        </ol>
+      </details>
+      <details class="setup-robot">
+        <summary>NAO</summary>
+        <ol>
+          <li>Connect NAO with an Ethernet cable to the laptop (or to a network it already knows), and power it on.</li>
+          <li>Press the chest button once: NAO says its address. Open <code>http://nao.local/</code> (or that address) and sign in as <code>nao</code> / <code>nao</code>.</li>
+          <li>Network settings → WiFi → choose <span class="lab-name">the lab WiFi</span> → <strong>Connect</strong>. NAO saves it and rejoins on every boot. Unplug the cable.</li>
+          <li>If the web page won't connect: SSH in as <code>nao</code>, run <code>connmanctl</code>, then <code>agent on</code>, <code>scan wifi</code>, <code>services</code>, <code>connect wifi_…</code> (the lab WiFi's line).</li>
+        </ol>
+      </details>
+      <details class="setup-robot">
+        <summary>Furhat</summary>
+        <ol>
+          <li>On Furhat's own screen (plug in a keyboard) → WiFi settings → choose <span class="lab-name">the lab WiFi</span>. It remembers it.</li>
+          <li>Power-cycle Furhat: it only looks for WiFi while it boots. The hub finds it by itself.</li>
+        </ol>
+      </details>
+      <details class="setup-robot">
+        <summary>Pepper</summary>
+        <ol>
+          <li>On Pepper's tablet: six-dot menu → Settings → <strong>Wi-Fi</strong> → choose <span class="lab-name">the lab WiFi</span>.
+            Don't use “Advanced Settings” for WiFi, or the head and the tablet end up on different networks.</li>
+        </ol>
+      </details>
+
+      <h3 class="setup-h">3. Check</h3>
+      <p class="keys-note">A robot that has joined appears as a card below within about 20 seconds, and its address starts with the same numbers as this laptop's. Not there? Press <em>Scan now</em>, and power-cycle the robot. A robot whose address differs from this laptop's in the third number too (e.g. <code>…85.x</code> next to the laptop's <code>…84.x</code>) is outside the part of the network the hub searches.</p>
+
+      <details class="setup-robot">
+        <summary>Outside the lab: a phone hotspot</summary>
       <ul class="setup-list">
         <li><strong>iPhone:</strong> Settings → Personal Hotspot → <em>Allow Others to Join</em> on,
           and <em>Maximize Compatibility</em> on (that is what makes it 2.4 GHz).
@@ -104,50 +152,10 @@
           Switch off auto-join for other WiFi (e.g. campus), or the laptop will wander off mid-session.</li>
         <li><strong>Tip:</strong> robots remember a network by its <em>name and password</em>. If everyone
           gives their hotspot the same name and password, every robot that joined one already knows them all.</li>
+        <li><strong>Teach a robot your hotspot</strong> while both are on <span class="lab-name">the lab WiFi</span>: turn the hotspot on, press <em>Add WiFi…</em> on the robot's card, type the hotspot's name and password, and Join. The robot moves to it now and remembers it; connect this laptop to the hotspot to see it again. Back in the lab, with the hotspot off, it returns to the lab WiFi by itself.</li>
+        <li>On a hotspot the hub's check above says “not the lab WiFi”: that is expected outside the lab.</li>
       </ul>
-
-      <h3 class="setup-h">2. Teach each robot your hotspot (once per robot)</h3>
-      <p class="keys-note">After this the robot rejoins by itself whenever the hotspot is on. Turn the hotspot on <em>before</em> powering a robot.</p>
-      <details class="setup-robot">
-        <summary>Reachy Mini</summary>
-        <ol>
-          <li><strong>In the lab:</strong> connect this laptop to the <strong>lab WiFi</strong> (ask in the lab for its name and password; it has no internet, and that is fine) and power the robot on. Its card lights up here.</li>
-          <li>Turn your hotspot on. On the robot's card press <em>Add WiFi…</em>, type your hotspot's name and password, and Join. The robot moves to your hotspot now and remembers it. Connect this laptop to your hotspot to see it again.</li>
-          <li>From then on the robot picks your hotspot whenever it is on, and goes back to the lab WiFi when it is off.</li>
-          <li><strong>Already on a hotspot it knows?</strong> Same thing: <em>Add WiFi…</em> on its card, with your hotspot on.</li>
-          <li><strong>A new robot that knows no WiFi yet:</strong> power it on; it opens its own WiFi called <code>reachy-mini-ap</code>. Open the <strong>Reachy Mini Control</strong> desktop app, which joins it (or uses Bluetooth) and asks for the WiFi to use: pick the lab WiFi. Then, on its card here, <em>Add WiFi…</em> with the lab WiFi's name and password and tick <em>This is the lab WiFi</em>, so it stays the robot's fallback.</li>
-        </ol>
       </details>
-      <details class="setup-robot">
-        <summary>NAO</summary>
-        <ol>
-          <li><strong>Already on a hotspot it knows?</strong> Turn your hotspot on next to it, then on NAO's card press <em>Add WiFi…</em>, type its name and password, and Join. NAO moves to it now and remembers it. Connect this laptop to your hotspot to see NAO again.</li>
-          <li>Otherwise:</li>
-          <li>Connect NAO with an Ethernet cable to the laptop (or to a network it already knows), and power it on.</li>
-          <li>Press the chest button once: NAO says its address. Open <code>http://nao.local/</code> (or that address) and sign in as <code>nao</code> / <code>nao</code>.</li>
-          <li>Network settings → WiFi → choose your hotspot → enter the password → <strong>Connect</strong>. NAO saves it and rejoins on every boot. Unplug the cable.</li>
-          <li>If the web page won't connect: SSH in as <code>nao</code>, run <code>connmanctl</code>, then <code>agent on</code>, <code>scan wifi</code>, <code>services</code>, <code>connect wifi_…_managed_psk</code> (your hotspot's line) and type the password.</li>
-        </ol>
-      </details>
-      <details class="setup-robot">
-        <summary>Furhat</summary>
-        <ol>
-          <li>Turn the hotspot on <strong>first</strong>: Furhat only looks for WiFi while it boots.</li>
-          <li>On Furhat's own screen (plug in a keyboard) → WiFi settings → choose your hotspot → password. It remembers it.</li>
-          <li>Power-cycle Furhat with the hotspot on. The hub finds it by itself (Furhat has no network name to look up).</li>
-        </ol>
-      </details>
-      <details class="setup-robot">
-        <summary>Pepper</summary>
-        <ol>
-          <li><strong>Already on a hotspot it knows?</strong> Same as NAO: <em>Add WiFi…</em> on Pepper's card, with your hotspot on.</li>
-          <li>Otherwise, on Pepper's tablet: six-dot menu → Settings → <strong>Wi-Fi</strong> → choose your hotspot → password.
-            Don't use “Advanced Settings” for WiFi, or the head and the tablet end up on different networks.</li>
-        </ol>
-      </details>
-
-      <h3 class="setup-h">3. Check</h3>
-      <p class="keys-note">A robot that has joined appears as a card below within a few seconds, and its address starts with the same numbers as this laptop's. Not there? Press <em>Scan now</em>, check the hotspot is still on 2.4 GHz, and power-cycle the robot with the hotspot on.</p>
     </details>
   </section>
 

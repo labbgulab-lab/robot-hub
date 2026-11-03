@@ -529,9 +529,11 @@ keyForm.addEventListener('submit', async (event) => {
 });
 
 /* ---------------------------------------------------------- network setup */
-// Each lab member brings their own phone hotspot. The panel says whether this
-// laptop is on one the robots can join (2.4 GHz), and opens by itself on a
-// first visit or when something is wrong.
+// The robots live on the lab WiFi (config [network] lab_wifi); the panel says
+// whether this laptop is on it -- or, with no lab WiFi set, on a phone hotspot
+// the robots can join (2.4 GHz) -- and opens by itself on a first visit or
+// when something is wrong. The lab WiFi's name comes from the hub, never from
+// this public file.
 
 const setupDetails = document.getElementById('setup-details');
 const setupBadge = document.getElementById('setup-badge');
@@ -539,7 +541,7 @@ const setupStatus = document.getElementById('setup-status');
 const setupCheck = document.getElementById('setup-check');
 
 const HOTSPOT_KIND = { iphone: 'iPhone hotspot', android: 'Android hotspot', phone: 'phone hotspot',
-                       lab: 'lab WiFi, no internet' };
+                       lab: 'the lab WiFi' };
 
 function firstVisit() {
   try {
@@ -562,6 +564,12 @@ async function checkWifi() {
   }
   setupCheck.disabled = false;
   setupCheck.querySelector('svg').classList.remove('spinning');
+
+  if (info.lab_wifi) {
+    document.querySelectorAll('.lab-name').forEach((el) => {
+      el.textContent = `the lab WiFi “${info.lab_wifi}”`;
+    });
+  }
 
   const parts = [];
   if (info.ssid) parts.push(`“${info.ssid}”`);

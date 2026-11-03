@@ -63,6 +63,18 @@ def test_an_android_hotspot_is_known_by_its_name(monkeypatch):
     assert info["hotspot"] == "phone" and info["band"] == "2.4 GHz" and info["ok"]
 
 
+def test_with_a_lab_wifi_that_is_the_network_to_be_on(monkeypatch):
+    # 2026-11-03: the lab WiFi replaced the phone hotspots
+    _on(monkeypatch, "win32", NETSH.replace("Lab Hotspot", "Open Lab"))
+    info = wifi.status(["172.19.84.41/16"], lab_wifi="Open Lab")
+    assert info["ok"] and info["hotspot"] == "lab" and info["lab_wifi"] == "Open Lab"
+
+    _on(monkeypatch, "darwin", json.dumps(MAC))         # a fine 2.4 GHz hotspot...
+    info = wifi.status(["172.20.10.6/28"], lab_wifi="Open Lab")
+    assert not info["ok"], "...is not where the robots are"
+    assert "“Dana Phone”" in info["problem"] and "lab WiFi “Open Lab”" in info["problem"]
+
+
 def test_a_redacted_mac_name_still_reports_the_band(monkeypatch):
     redacted = json.loads(json.dumps(MAC))
     redacted["SPAirPortDataType"][0]["spairport_airport_interfaces"][0][

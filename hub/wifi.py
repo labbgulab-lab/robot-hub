@@ -1,6 +1,8 @@
 """Which WiFi this laptop is on, and whether the robots can join it.
 
-Every lab member brings their own phone hotspot, and the robots only see a
+With a lab WiFi configured ([network] lab_wifi) that is the robots' network
+and the one to be on; anything else is flagged. Without one -- or outside
+the lab -- each lab member brings their own phone hotspot, and the robots only see a
 hotspot that offers **2.4 GHz** (Furhat, NAO and Reachy were all measured on
 2.4 GHz; an iPhone uses 5 GHz unless *Maximize Compatibility* is on). The
 laptop's own link tells us the band: if the laptop is on the hotspot at
@@ -140,8 +142,8 @@ def status(addresses: list[str], lab_wifi: str = "") -> dict[str, Any]:
             pass
     ssid = info.get("ssid") or ""
     if lab_wifi and ssid == lab_wifi:
-        # No internet and not a phone, but the robots' fallback: the place to
-        # hand a robot your hotspot. Its band is the router's business.
+        # The robots' own network (since 2026-11-03 the main one, replacing
+        # the phone hotspots). Its band is the router's business.
         hotspot = "lab"
     elif any(ip in IPHONE_NET for ip in ips):
         hotspot = "iphone"
@@ -157,6 +159,12 @@ def status(addresses: list[str], lab_wifi: str = "") -> dict[str, Any]:
     problem = None
     if info.get("band") is None and not ssid and not ips:
         problem = "This laptop is not on any network."
+    elif lab_wifi and hotspot != "lab":
+        # With a lab WiFi configured, that is where the robots are: a phone
+        # hotspot is only for working outside the lab.
+        problem = ("This laptop is on {}. The robots are on the lab WiFi “{}” — connect "
+                   "this laptop to it.".format(
+                       "“{}”".format(ssid) if ssid else "a wired or unknown network", lab_wifi))
     elif info.get("band") in ("5 GHz", "6 GHz") and hotspot not in ("no", "lab"):
         problem = ("Your hotspot is on {} — the robots cannot see it. Turn on 2.4 GHz "
                    "(iPhone: Maximize Compatibility; Android: AP band 2.4 GHz), then "
@@ -166,5 +174,5 @@ def status(addresses: list[str], lab_wifi: str = "") -> dict[str, Any]:
                    "The robots join your phone's hotspot — connect the laptop to it "
                    "too.".format("“{}”".format(ssid) if ssid else "a wired or unknown network"))
     info.update({"hotspot": hotspot, "ok": problem is None, "problem": problem,
-                 "platform": sys.platform})
+                 "platform": sys.platform, "lab_wifi": lab_wifi or None})
     return info
