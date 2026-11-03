@@ -15,6 +15,15 @@ Identity is the MAC from the ARP table, never the IP: within one hour on
 2026-09-14 `172.20.10.10` was held by the wireless Reachy and then by Furhat
 (2.2). A sighting the hub cannot name is reported as a log sentence and
 dropped -- a card keyed on an address would be worse than no card.
+
+**Big networks.** A network larger than `discovery.netscan_max_hosts` is not
+swept whole: the laptop's own /24 inside it is. The lab's HOT-WiFi is a /16
+that drops all multicast, so mDNS finds nothing there; DHCP put the laptop and
+reachy6 in the same /24 (172.19.84.x, 2026-11-03).
+
+**Robots already found** are re-checked directly every `KNOWN_REFRESH_S`. A
+ping-gated /24 sweep takes longer than `discovery.lost_after_s`, so without
+this a robot only the sweep can see would drop off and come back every round.
 """
 
 from __future__ import annotations
@@ -40,6 +49,9 @@ NAOQI_PORT = 9559
 NAOQI_ID_TTL_S = 300.0
 NAOQI_MISS_TTL_S = 60.0
 MAX_CONCURRENCY = 64
+# How often a robot the sweep found is asked again, by address; well inside
+# discovery.lost_after_s (12 s).
+KNOWN_REFRESH_S = 3.0
 PING_TIMEOUT_S = 2.0
 HTTP_TIMEOUT_S = 2.5
 BODY_LIMIT = 20000
@@ -66,6 +78,7 @@ class NetscanDetector:
         self._sem = asyncio.Semaphore(MAX_CONCURRENCY)
         self._refused: set[str] = set()      # subnets already complained about
         self._nameless: set[str] = set()     # addresses already complained about
+        self._robots: dict[str, Found] = {}  # Reachy / NAO / Pepper the sweep found, by address
         self._wake = asyncio.Event()
 
     async def rescan(self) -> None:
@@ -94,26 +107,45 @@ class NetscanDetector:
         limits = httpx.Limits(max_connections=MAX_CONCURRENCY)
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_S, follow_redirects=True,
                                      limits=limits) as client:
-            while True:
-                try:
-                    await self._sweep(client)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:  # noqa: BLE001
-                    self.bus.emit_log(
-                        "warn",
-                        "network sweep for Furhat failed this round: {}".format(exc))
-                await self._idle(interval)
+            refresher = asyncio.create_task(self._refresh_known(client),
+                                            name="discovery:netscan-known")
+            try:
+                while True:
+                    try:
+                        await self._sweep(client)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001
+                        self.bus.emit_log(
+                            "warn",
+                            "network sweep for robots failed this round: {}".format(exc))
+                    await self._idle(interval)
+            finally:
+                refresher.cancel()
+                await asyncio.gather(refresher, return_exceptions=True)
 
     # ---------------------------------------------------------------- sweep
-    async def _sweep(self, client: Any) -> None:
+    def _targets(self) -> list[str]:
         targets: list[str] = []
+        limit = self.config.discovery.netscan_max_hosts
         for network, own in local_networks():
             hosts = max(network.num_addresses - 2, 1)
-            if hosts > self.config.discovery.netscan_max_hosts:
-                self._refuse(network, hosts)
-                continue
+            if hosts > limit:
+                near = _neighbourhood(network, own)
+                if near is None or near.num_addresses - 2 > limit:
+                    self._refuse(network, hosts)
+                    continue
+                self._refuse(network, hosts, near)
+                network = near
             targets += [str(h) for h in network.hosts() if str(h) != own]
+        # A robot found before is asked again even if it now sits outside
+        # what is swept (it can only have come from a sweep, so it is local).
+        swept = set(targets)
+        targets += [ip for ip in self._robots if ip not in swept]
+        return targets
+
+    async def _sweep(self, client: Any) -> None:
+        targets = self._targets()
         if not targets:
             return
 
@@ -121,9 +153,11 @@ class NetscanDetector:
         # gate (the gate exists for the VPN's fake port-80 answers, 2.9; the
         # page check below still demands a real reply). Over the iPhone
         # hotspot single pings get lost, and two in a row dropped a healthy
-        # Furhat off discovery every minute or so (2026-10-05).
+        # Furhat off discovery every minute or so (2026-10-05). A robot the
+        # sweep already knows skips it for the same reason.
         pinged = await asyncio.gather(*(
-            self._ping(ip) if ip not in self._studio_seen else _true()
+            self._ping(ip) if ip not in self._studio_seen and ip not in self._robots
+            else _true()
             for ip in targets))
         alive = [ip for ip, ok in zip(targets, pinged) if ok]
         if not alive:
@@ -188,8 +222,8 @@ class NetscanDetector:
                 if not hardware_id:
                     continue            # the Lite reports none; it is USB anyway
                 reachy_ips.add(ip)
-                self._emit(Found(type_id="reachy_wireless", address=ip, port=REACHY_PORT,
-                                 meta={"unit_id": str(hardware_id), "source": "netscan"}))
+                self._emit_robot(Found(type_id="reachy_wireless", address=ip, port=REACHY_PORT,
+                                       meta={"unit_id": str(hardware_id), "source": "netscan"}))
         if not naoqi_on:
             return
         rest = [ip for ip in ips if ip not in reachy_ips]
@@ -204,8 +238,39 @@ class NetscanDetector:
             type_id = "pepper" if pepper else "naoqi"
             if not self.config.robot(type_id).enabled:
                 continue
-            self._emit(Found(type_id=type_id, address=ip, port=NAOQI_PORT,
-                             meta={"server": "{}.local".format(name), "source": "netscan"}))
+            self._emit_robot(Found(type_id=type_id, address=ip, port=NAOQI_PORT,
+                                   meta={"server": "{}.local".format(name), "source": "netscan"}))
+
+    # ------------------------------------------------ robots already found
+    def _emit_robot(self, found: Found) -> None:
+        self._robots[found.address] = found
+        self._emit(found)
+
+    async def _refresh_known(self, client: Any) -> None:
+        while True:
+            await asyncio.sleep(KNOWN_REFRESH_S)
+            await self._refresh_once(client)
+
+    async def _refresh_once(self, client: Any) -> None:
+        known = list(self._robots.values())
+        if not known:
+            return
+        alive = await asyncio.gather(*(self._still_there(client, f) for f in known),
+                                     return_exceptions=True)
+        for found, ok in zip(known, alive):
+            if ok is True:
+                self._emit(found)
+            elif self._robots.get(found.address) is found:
+                # Gone or replaced: the full sweep finds it again, wherever it is.
+                self._robots.pop(found.address, None)
+
+    async def _still_there(self, client: Any, found: Found) -> bool:
+        if found.type_id == "reachy_wireless":
+            status = await self._reachy_status(client, found.address)
+            return str((status or {}).get("hardware_id") or "") == found.meta.get("unit_id")
+        # NAO / Pepper: the port is enough between sweeps; the sweep itself
+        # re-reads the identity (cached NAOQI_ID_TTL_S).
+        return await self._port_open(found.address, found.port)
 
     async def _reachy_status(self, client: Any, ip: str) -> Optional[dict]:
         async with self._sem:
@@ -255,23 +320,32 @@ class NetscanDetector:
         self._naoqi_ids = {**self._naoqi_ids, ip: (loop.time() + ttl, ident)}
         return ident
 
-    def _refuse(self, network: Any, hosts: int) -> None:
+    def _refuse(self, network: Any, hosts: int, near: Any = None) -> None:
         text = str(network)
         if text in self._refused:
             return
         self._refused.add(text)
+        limit = self.config.discovery.netscan_max_hosts
+        if near is None:
+            self.bus.emit_log(
+                "warn",
+                "Not sweeping {} for robots: {} hosts is more than "
+                "discovery.netscan_max_hosts ({}). Raise that setting, or put the "
+                "robot on a smaller subnet.".format(text, hosts, limit))
+            return
         self.bus.emit_log(
-            "warn",
-            "Not sweeping {} for Furhat: {} hosts is more than "
-            "discovery.netscan_max_hosts ({}). Raise that setting, or put the "
-            "robot on a smaller subnet.".format(
-                text, hosts, self.config.discovery.netscan_max_hosts))
+            "info",
+            "Not sweeping all of {} ({} hosts is more than "
+            "discovery.netscan_max_hosts, {}): sweeping {}, this laptop's part of "
+            "it, for robots that mDNS cannot reach. A robot elsewhere in {} still "
+            "appears through mDNS if this network passes it.".format(
+                text, hosts, limit, near, text))
 
     def _emit(self, found: Found) -> None:
         try:
             self.on_found(found)
         except Exception as exc:  # noqa: BLE001
-            log.warning("discovery callback raised for furhat: %s", exc)
+            log.warning("discovery callback raised for %s: %s", found.type_id, exc)
 
     # ---------------------------------------------------------------- probes
     async def _ping(self, ip: str) -> bool:
@@ -381,6 +455,13 @@ def _arp_from_proc() -> dict[str, str]:
     except OSError as exc:
         log.debug("could not read /proc/net/arp: %s", exc)
     return table
+
+
+def _neighbourhood(network: Any, own: str) -> Optional[Any]:
+    """The laptop's own /24 inside a bigger network; None if it is not bigger."""
+    if network.prefixlen >= 24:
+        return None
+    return ipaddress.ip_network("{}/24".format(own), strict=False)
 
 
 def _page_id(body: str) -> Optional[str]:

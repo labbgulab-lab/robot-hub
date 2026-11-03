@@ -155,6 +155,56 @@ def test_netscan_refuses_an_oversized_subnet(config):
     assert said.count("Not sweeping") == 1, "and say it once, not every cycle"
 
 
+def test_a_big_network_sweeps_the_laptops_own_slash_24(config, monkeypatch):
+    # 2026-11-03, the lab's HOT-WiFi: a /16 that drops all multicast. The
+    # laptop was 172.19.84.41 and reachy6 172.19.84.45.
+    import ipaddress
+    from hub.discovery import netscan as NS
+
+    config.discovery.netscan_max_hosts = 256
+    bus = EventBus()
+    det = NS.NetscanDetector(config, bus, lambda f: None)
+    monkeypatch.setattr(NS, "local_networks", lambda: [
+        (ipaddress.ip_network("172.19.0.0/16"), "172.19.84.41")])
+    det._robots["172.19.200.7"] = NS.Found(type_id="reachy_wireless",
+                                           address="172.19.200.7", port=8000, meta={})
+
+    targets = det._targets()
+    assert "172.19.84.45" in targets
+    assert "172.19.84.41" not in targets, "never itself"
+    assert "172.19.85.1" not in targets, "not the whole /16"
+    assert "172.19.200.7" in targets, "a robot found before is asked again"
+    assert len(targets) == 254
+    said = " ".join(e["text"] for e in bus.recent())
+    assert "sweeping 172.19.84.0/24" in said
+
+    det._targets()
+    assert " ".join(e["text"] for e in bus.recent()).count("Not sweeping all") == 1
+
+
+def test_known_robots_are_refreshed_between_sweeps(config):
+    # A ping-gated /24 sweep outlasts lost_after_s; the refresh keeps the card.
+    import asyncio
+    from hub.discovery import netscan as NS
+
+    found = []
+    det = NS.NetscanDetector(config, EventBus(), found.append)
+    here = NS.Found(type_id="reachy_wireless", address="10.0.0.5", port=8000,
+                    meta={"unit_id": "5488f5938df1c506"})
+    swapped = NS.Found(type_id="reachy_wireless", address="10.0.0.6", port=8000,
+                       meta={"unit_id": "aaaa"})
+    det._robots = {"10.0.0.5": here, "10.0.0.6": swapped}
+
+    async def status(client, ip):
+        # 10.0.0.6 now answers with another robot's id (DHCP gave it away)
+        return {"hardware_id": "5488f5938df1c506" if ip == "10.0.0.5" else "bbbb"}
+
+    det._reachy_status = status
+    asyncio.run(det._refresh_once(None))
+    assert found == [here]
+    assert list(det._robots) == ["10.0.0.5"], "the gone one is left to the sweep"
+
+
 def test_furhat_fingerprint_needs_the_real_title():
     """Port 80 answering is not proof: the Check Point adapter on this laptop
     makes connect() succeed for hosts that do not exist (2.9), so the only
