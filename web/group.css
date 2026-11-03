@@ -333,15 +333,16 @@
 .pair { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 6px; }
 .cfield-inline { grid-template-columns: 76px minmax(0, 1fr); }
 
-.card select, .card textarea, .session input, .session select {
+.card select, .card textarea, .session input, .session select, .group-top input, .group-top select {
   min-width: 0; width: 100%;
   font: inherit; font-size: 14px; font-weight: 400; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface); color: var(--ink);
 }
-.card select, .session select, .session input { height: 32px; }
+.card select, .session select, .session input, .group-top input, .group-top select { height: 32px; }
 .card textarea { resize: none; min-height: 58px; line-height: 1.4; font-size: 13px; }
-.card select:focus, .card textarea:focus, .session input:focus, .session select:focus, .nudge input:focus {
+.card select:focus, .card textarea:focus, .session input:focus, .session select:focus, .nudge input:focus,
+.group-top input:focus, .group-top select:focus {
   outline: 2px solid #a6c4fa; outline-offset: 0; border-color: #6094f8;
 }
 .card select:disabled, .card textarea:disabled, .card input:disabled,
@@ -475,3 +476,37 @@
 }
 .tip.on { opacity: 1; }
 .stop-button.closing { color: #fff; background: #b42318; border-color: #b42318; }
+
+/* ---------------------------------------------------------------- groups */
+/* Robot groups (2026-11-03): Choir and the Groups dialog in the robots'
+   header, a tag on each card that is in a group. */
+.groups-summary { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.robots-head .ghost-button { flex-shrink: 0; min-height: 28px; padding: 2px 12px; }
+.choir-button[aria-pressed="true"] { color: #fff; background: var(--blue); border-color: var(--blue); }
+.choir-button[aria-pressed="true"]:hover:not(:disabled) { background: #1d4fd8; }
+.card-meta .seat-group {
+  flex-shrink: 0; white-space: nowrap; font-size: 11px; font-weight: 700; color: #fff;
+  padding: 0 7px; border-radius: 999px; background: var(--group-color, var(--grey-ink));
+}
+.card-meta .seat-group[hidden] { display: none; }
+.groups-box { width: min(620px, 100%); }
+.groups-help { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.groups-list { display: grid; gap: 10px; margin-bottom: 12px; }
+.group-row {
+  display: grid; gap: 8px; padding: 10px 12px;
+  border: 1px solid var(--border); border-left: 5px solid var(--group-color, var(--border));
+  border-radius: var(--radius-sm); background: var(--surface);
+}
+.group-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 8px; align-items: center; }
+.group-top input, .group-top select { min-width: 0; }
+.group-members { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.group-members .check .seat-state { color: var(--muted); font-size: 12px; }
+.group-members .check.taken { opacity: .45; }
+.group-note { margin: 0; font-size: 12px; color: var(--amber); }
+.groups-actions { flex-wrap: wrap; }
+.groups-actions #groups-done { margin-left: auto; }
+@media (max-width: 600px) {
+  .group-top { grid-template-columns: minmax(0, 1fr) auto; }
+  .group-top select { grid-column: 1 / -1; grid-row: 2; }
+}
+.robots-head { align-items: center; }

@@ -27,6 +27,7 @@ import json
 import logging
 import random
 import re
+import statistics
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -60,6 +61,7 @@ ECHO_TAIL_S = 0.15      # after a robot line, before the gap counts
 PEOPLE_GAP_S = 2.5      # the gap after a robot asked the people something
 STIR_HOLD_S = 0.4       # extra wait when a voice is starting as the gap closes
 HEAD_HOLD_S = 0.8       # re-send a head turn this often, or it drifts back
+CLOCK_REFRESH_S = 300.0  # robot groups: re-measure the robots' clocks this often
 BARGE_HOLD_S = 0.3      # a voice over a robot must last this long to cut it
 # barge_in setting -> dB a voice must be over a robot's learned echo
 BARGE_DB = {"off": None, "careful": 14.0, "normal": 10.0, "eager": 7.0}
@@ -169,7 +171,9 @@ DEFAULT_SETTINGS = {"topic": "", "language": "auto", "minutes": 5,
                     "lab_intro": True,
                     # "auto" = a DJI mic on the laptop if one is plugged in,
                     # "robots" = the robots' own mics, else a laptop mic's name
-                    "people_mic": "auto"}
+                    "people_mic": "auto",
+                    # robot groups (clean_groups); used from the next Start
+                    "groups": []}
 # Settings the page may change while robots are connected or talking.
 LIVE_SETTINGS = ("topic", "language", "minutes", "listen_gap_s", "heads_mirror",
                  "voice_min_level", "voice_provider", "director_model", "barge_in",
@@ -812,6 +816,79 @@ def wants_eyes(text: str) -> bool:
     return any(p.search(t) for p in VISION_ASKS)
 
 
+# ------------------------------------------------------------ robot groups
+# 2026-11-03: robots can be put in groups. A group that TALKS together is one
+# speaker in the conversation (its line is said by every member at once, in
+# the voice and with the settings of its first robot, under the group's
+# name); a group that MOVES together does every gesture and head turn of any
+# member on all of them ("mirror the speaker"). "Choir" on the page is one
+# group of every robot that does both.
+GROUP_NAME_MAX = 30
+GROUPS_MAX = 12
+
+
+def clean_groups(value: Any) -> list[dict]:
+    """The page's groups, checked: a robot is in one group at most (the
+    first that lists it), and every group has an id, a name and both flags."""
+    out: list[dict] = []
+    taken: set = set()
+    if not isinstance(value, list):
+        return out
+    for i, g in enumerate(value[:GROUPS_MAX]):
+        if not isinstance(g, dict):
+            continue
+        members: list[str] = []
+        for k in g.get("members") or []:
+            k = str(k)
+            if k and k not in taken and k not in members:
+                members.append(k)
+        taken.update(members)
+        out.append({"id": str(g.get("id") or "g{}".format(i + 1))[:24],
+                    "name": str(g.get("name") or "").strip()[:GROUP_NAME_MAX],
+                    "members": members,
+                    "talk": bool(g.get("talk", True)),
+                    "move": bool(g.get("move", True))})
+    return out
+
+
+def plan_groups(seats: list[dict], groups: list[dict]) -> tuple[list[dict], dict, dict]:
+    """(speakers, together, mirror) for these seats (in table order).
+
+    speakers: who the conversation chooses between -- a talking group is
+      one entry (a copy of its first robot's seat, called by the group's
+      name, with "members"); its other robots are left out.
+    together: speaker key -> every robot that plays its lines.
+    mirror: robot key -> every robot of its moving group (first = the one
+      whose idle moves the others copy).
+    A group needs two robots at the table to count."""
+    order = [s["key"] for s in seats]
+    together: dict[str, list[str]] = {}
+    mirror: dict[str, list[str]] = {}
+    lead_of: dict[str, str] = {}
+    named: dict[str, str] = {}
+    for g in groups:
+        keys = [k for k in order if k in g.get("members", [])]
+        if len(keys) < 2:
+            continue
+        if g.get("move"):
+            for k in keys:
+                mirror[k] = keys
+        if g.get("talk"):
+            together[keys[0]] = keys
+            named[keys[0]] = g.get("name") or ""
+            for k in keys[1:]:
+                lead_of[k] = keys[0]
+    speakers: list[dict] = []
+    for s in seats:
+        if s["key"] in lead_of:
+            continue
+        if s["key"] in together:
+            s = {**s, "group_name": named[s["key"]], "members": together[s["key"]]}
+            s["character"] = s["group_name"] or s.get("character", "")
+        speakers.append(s)
+    return speakers, together, mirror
+
+
 def seat_defaults(settings: dict) -> dict:
     """A robot's own settings before anyone set them: the table's."""
     return {"loudness": DEFAULT_LOUDNESS,
@@ -986,6 +1063,13 @@ class Session:
         self.life_hold: dict[str, str] = {}    # the direction it is holding ("" = breathing)
         self.life_sent: dict[str, float] = {}
         self.busy_until: dict[str, float] = {}
+        # Robot groups, set by each conversation (plan_groups): speaker key ->
+        # robots that play its lines; robot key -> robots that move with it.
+        self.together: dict[str, list[str]] = {}
+        self.mirror: dict[str, list[str]] = {}
+        # Each robot's clock minus the laptop's (players that can say).
+        self.clock_offsets: dict[str, float] = {}
+        self._clocks: Optional[asyncio.Task] = None
         self.eleven_down = False
         self.phrases = Phrases()
         self.signature = self.make_signature(seats, settings)
@@ -1104,6 +1188,8 @@ class Session:
             if err:
                 self.note("{}: {}".format(link.name, err))
         self.ears.set_open(True)
+        await self.measure_clocks()
+        self._clocks = asyncio.create_task(self.keep_clocks())
         self._keeper = asyncio.create_task(self.keep_heads())
         self._mic_guard = asyncio.create_task(self.guard_people_mic())
         # rewarm, not a second task: OpenAI refusing during the warm-up above
@@ -1319,7 +1405,7 @@ class Session:
 
     # ------------------------------------------------------------ close
     async def close(self) -> None:
-        for task in (self._keeper, self._warm, self._mic_guard):
+        for task in (self._keeper, self._warm, self._mic_guard, self._clocks):
             if task is not None:
                 task.cancel()
         self.cancel_background()
@@ -1550,6 +1636,59 @@ class Session:
             line.audio.finish("{}: {}".format(type(exc).__name__, exc))
 
     # ------------------------------------------------------------- heads
+    # ------------------------------------------------------ robot groups
+    async def measure_clocks(self) -> None:
+        """How far each robot's clock is from the laptop's, for lines a group
+        says together (robots without a new enough player are skipped)."""
+        keys = list(self.links)
+        got = await asyncio.gather(*(self.links[k].clock_offset() for k in keys),
+                                   return_exceptions=True)
+        for key, off in zip(keys, got):
+            if isinstance(off, (int, float)):
+                self.clock_offsets[key] = float(off)
+
+    async def keep_clocks(self) -> None:
+        """The laptop's clock is not on internet time and drifts: measure again
+        now and then, so a group's start time stays right."""
+        while True:
+            await asyncio.sleep(CLOCK_REFRESH_S)
+            try:
+                await self.measure_clocks()
+            except Exception as exc:  # noqa: BLE001
+                log.info("clock check failed: %s", exc)
+
+    def group_offset(self, keys: list[str]) -> Optional[float]:
+        """One clock offset for these robots: the median of theirs (they all
+        keep internet time, so one figure serves them all and the
+        measurement noise of each cancels out). None if any is unknown."""
+        offs = [self.clock_offsets.get(k) for k in keys]
+        if any(o is None for o in offs) or not offs:
+            return None
+        return float(statistics.median(offs))
+
+    def speaker_link(self, seat: dict) -> Any:
+        """The link a speaker's lines go to: a GroupLink for a talking group."""
+        from .robots import GroupLink
+
+        keys = [k for k in self.together.get(seat["key"], []) if k in self.links]
+        if len(keys) > 1:
+            return GroupLink([self.links[k] for k in keys], self.group_offset(keys))
+        return self.links.get(seat["key"])
+
+    def speaking_now(self) -> set:
+        """The robots busy with the current line: the speaker, its talking
+        group, and the robots that move with it."""
+        key = self.speaking_key
+        if not key:
+            return set()
+        return set(self.together.get(key, [key])) | set(self.mirror.get(key, [key]))
+
+    async def motions(self, key: str, cmd: dict) -> None:
+        """A head command for this robot and every robot that moves with it."""
+        targets = [k for k in self.mirror.get(key, [key]) if k in self.links]
+        await asyncio.gather(*(self.links[k].motion(cmd) for k in targets),
+                             return_exceptions=True)
+
     async def keep_heads(self) -> None:
         """Every robot that is not speaking lives a little on its own.
 
@@ -1565,8 +1704,15 @@ class Session:
         while True:
             await asyncio.sleep(0.2)
             now = time.monotonic()
+            speaking = self.speaking_now()
             for key in list(self.links):
-                if key == self.speaking_key or self.busy_until.get(key, 0) > now:
+                group = self.mirror.get(key)
+                if group and (key != group[0] or speaking & set(group)):
+                    # A robot that moves with a group copies its first robot
+                    # (through motions/gesture); none of them idles while one
+                    # of them is talking.
+                    continue
+                if key in speaking or self.busy_until.get(key, 0) > now:
                     continue
                 target = self.heads.get(key, "front")
                 if now < self.life_next.get(key, 0):
@@ -1574,8 +1720,8 @@ class Session:
                     if (self.life_hold.get(key) and self.life_hold[key] != "front"
                             and now - self.life_sent.get(key, 0) >= HEAD_HOLD_S):
                         self.life_sent[key] = now
-                        self.spawn(self.links[key].motion(
-                            {"type": "head", "direction": self.life_hold[key]}))
+                        self.spawn(self.motions(
+                            key, {"type": "head", "direction": self.life_hold[key]}))
                     continue
                 self.life_next[key] = now + self.life_step(key, target, now)
 
@@ -1583,17 +1729,16 @@ class Session:
         """One idle action for a listener; returns how long it lasts."""
         talking = self.m.status.get("phase") in ("speaking", "human")
         r = random.random()
-        link = self.links[key]
         if talking and r < 0.45:
             # Look at whoever has the floor (front = the people).
             self.life_hold[key] = target
             self.life_sent[key] = now
-            self.spawn(link.motion({"type": "head", "direction": target}))
+            self.spawn(self.motions(key, {"type": "head", "direction": target}))
             return random.uniform(1.5, 3.5)
         if r < (0.75 if talking else 0.6):
             # Let go: the player's own breathing.
             self.life_hold[key] = ""
-            self.spawn(link.motion({"type": "stop"}))
+            self.spawn(self.motions(key, {"type": "stop"}))
             return random.uniform(1.8, 4.0)
         calm = self.seat_of(key).get("gestures") == "calm"
         if r < (0.92 if talking else 0.85) and not (calm and random.random() < 0.6):
@@ -1605,7 +1750,7 @@ class Session:
         others = [d for d in ("left", "right", "up", "down") if d != target]
         self.life_hold[key] = random.choice(others)
         self.life_sent[key] = now
-        self.spawn(link.motion({"type": "head", "direction": self.life_hold[key]}))
+        self.spawn(self.motions(key, {"type": "head", "direction": self.life_hold[key]}))
         return random.uniform(0.8, 1.6)
 
     async def look(self, speaker: Optional[dict]) -> None:
@@ -1617,12 +1762,25 @@ class Session:
         mirror = bool(self.settings.get("heads_mirror"))
         now = time.monotonic()
         sends = []
+        # The speaker's group (talking or moving with it) faces the room with
+        # it; another moving group turns as its first robot does.
+        own = set()
+        if speaker is not None:
+            own = (set(self.together.get(speaker["key"], [speaker["key"]]))
+                   | set(self.mirror.get(speaker["key"], [speaker["key"]])))
+        dirs: dict[str, str] = {}
         for i, key in enumerate(order):
-            if speaker is None or key == speaker["key"] or speaker["key"] not in order:
-                d = "front"
+            if speaker is None or key in own or speaker["key"] not in order:
+                dirs[key] = "front"
             else:
                 j = order.index(speaker["key"])
-                d = "left" if (j > i) != mirror else "right"
+                dirs[key] = "left" if (j > i) != mirror else "right"
+        for key in order:
+            group = self.mirror.get(key)
+            if group and key not in own and group[0] in dirs:
+                dirs[key] = dirs[group[0]]
+        for key in order:
+            d = dirs[key]
             if self.heads.get(key) != d and key in self.links:
                 self.heads[key] = d
                 if self.busy_until.get(key, 0) < now:
@@ -1635,19 +1793,24 @@ class Session:
         if sends:
             await asyncio.gather(*sends, return_exceptions=True)
 
-    async def gesture(self, key: str, name: str) -> bool:
+    async def gesture(self, key: str, name: str, delay: float = 0.0) -> bool:
+        """A gesture on this robot and every robot that moves with it."""
         cmd = moves.command(name)
-        link = self.links.get(key)
-        if cmd is None or link is None:
+        targets = [k for k in self.mirror.get(key, [key]) if k in self.links]
+        if cmd is None or not targets:
             return False
         motion, dur = cmd
-        self.busy_until[key] = time.monotonic() + dur
-        try:
-            await link.motion(motion)
-        except Exception as exc:  # noqa: BLE001
-            log.info("gesture %s on %s failed: %s", name, key, exc)
-            return False
-        return True
+        until = time.monotonic() + delay + dur
+        for k in targets:
+            self.busy_until[k] = max(self.busy_until.get(k, 0.0), until)
+        if delay > 0:
+            await asyncio.sleep(delay)
+        results = await asyncio.gather(*(self.links[k].motion(motion) for k in targets),
+                                       return_exceptions=True)
+        failed = [k for k, r in zip(targets, results) if isinstance(r, Exception)]
+        for k in failed:
+            log.info("gesture %s on %s failed", name, k)
+        return len(failed) < len(targets)
 
     def seat_of(self, key: Optional[str]) -> dict:
         return next((s for s in self.seats if s["key"] == key), {})
@@ -1685,7 +1848,12 @@ class Conversation:
         self.lang = {"he": "he", "en": "en"}.get(self.settings.get("language")) or (
             "he" if (_hebrew(topic) or not topic) else "en")
         self.last_robot: Optional[str] = None
-        self.spoke_at: dict[str, float] = {s["key"]: 0.0 for s in session.seats}
+        # Robot groups (page: Groups), fixed for this conversation: a talking
+        # group is one speaker; the session plays and moves the members.
+        cfg = getattr(manager, "cfg", None) or {}
+        groups = clean_groups((cfg.get("settings") or {}).get("groups"))
+        self._speakers, session.together, session.mirror = plan_groups(session.seats, groups)
+        self.spoke_at: dict[str, float] = {s["key"]: 0.0 for s in self._speakers}
         self.silence_since = time.monotonic()
         self.failures = 0
         self.last_line: Optional[Line] = None
@@ -1705,7 +1873,17 @@ class Conversation:
 
     @property
     def seats(self) -> list[dict]:
-        return self.s.seats
+        """Who can speak: the robots, with each talking group as one (a copy
+        of its first robot's seat, kept up to date with it here, so a voice
+        or volume changed mid-conversation applies to the group at once)."""
+        live = {s["key"]: s for s in self.s.seats}
+        for sp in self._speakers:
+            if "members" in sp and sp["key"] in live:
+                lead = live[sp["key"]]
+                if lead is not sp:
+                    sp.update({k: v for k, v in lead.items() if k != "character"})
+                    sp["character"] = sp.get("group_name") or lead.get("character", "")
+        return self._speakers
 
     @property
     def ears(self) -> Ears:
@@ -2012,11 +2190,21 @@ class Conversation:
     async def speak(self, line: Line, entry: dict, cut_by_people: bool) -> bool:
         """Play a line (its interjection first, if any) with its gestures.
         Returns False when the people cut it off (only if `cut_by_people`)."""
+        from .robots import GROUP_START_LEAD_S
+
         s = self.s
-        link = s.links.get(line.seat["key"])
+        link = s.speaker_link(line.seat)
         if link is None:
             return True
         key = line.seat["key"]
+        # A talking group: every member plays the line (its echo counts on
+        # each one's mic); a synced group starts GROUP_START_LEAD_S from now.
+        voices = list(getattr(link, "keys", [key]))
+        lead_s = GROUP_START_LEAD_S if getattr(link, "synced", False) else 0.0
+        # Members of a group that talks but does not move together each pick
+        # their own gestures (the first robot does the line's own).
+        own_moves = [k for k in voices if k != key and k not in s.mirror]
+        own_fillers: dict[str, list[str]] = {k: [] for k in own_moves}
         self.status("speaking", speaker=line.seat)
         s.speaking_key = key
         await s.look(line.seat)
@@ -2041,12 +2229,23 @@ class Conversation:
             return got if line.audio.done else max(
                 got, head_s + len(line.text) / SPEECH_CHARS_PER_S)
 
-        def move(name: str) -> None:
+        def move(name: str, who: Optional[str] = None, delay: float = 0.0) -> None:
+            who = who or key
             cmd = moves.command(name)
             if cmd is None:
                 return
-            s.busy_until[key] = time.monotonic() + cmd[1]   # before the task runs
-            s.spawn(s.gesture(key, name))
+            s.busy_until[who] = time.monotonic() + delay + cmd[1]   # before the task runs
+            s.spawn(s.gesture(who, name, delay) if delay else s.gesture(who, name))
+
+        def own_tick(now: float, delay: float = 0.0) -> None:
+            left = start_t + PLAY_LATENCY_S + line_seconds() - now
+            for k in own_moves:
+                if s.busy_until.get(k, 0) > now:
+                    continue
+                pick = moves.filler(line.gesture, own_fillers[k], left, calm=calm)
+                if pick:
+                    own_fillers[k].append(pick)
+                    move(pick, k, delay)
 
         def tick() -> None:
             """Listeners react once; and the speaker keeps moving until its
@@ -2058,7 +2257,11 @@ class Conversation:
             if not reacted and now - start_t > 0.8:
                 reacted = True
                 s.spawn(self.react(line))
-            if first or s.busy_until.get(key, 0) > now:
+            if first:
+                return
+            if own_moves and now >= start_t:
+                own_tick(now)
+            if s.busy_until.get(key, 0) > now:
                 return
             left = start_t + PLAY_LATENCY_S + line_seconds() - now
             pick = moves.filler(line.gesture, fillers, left, calm=calm)
@@ -2073,12 +2276,14 @@ class Conversation:
                 # The robot ran dry: the voice arrived slower than it plays.
                 entry["gaps"] = entry.get("gaps", 0) + 1
                 entry["gap_ms"] = entry.get("gap_ms", 0) + int((now - play_end) * 1000)
-            start = max(now, play_end)
+            start = max(now + (lead_s if total == 0 else 0.0), play_end)
             dur = len(chunk) / 32000.0
             play_end = start + dur
             total += dur
             chunk = loud(chunk, line.seat.get("loudness", DEFAULT_LOUDNESS))
-            ears.add_reference(key, start + PLAY_LATENCY_S, rms_blocks(chunk))
+            levels = rms_blocks(chunk)
+            for k in voices:
+                ears.add_reference(k, start + PLAY_LATENCY_S, levels)
             await link.play(chunk)
 
         async def chunks():
@@ -2119,12 +2324,14 @@ class Conversation:
                     if first:
                         first = False
                         line.playing = True
-                        start_t = time.monotonic()
+                        start_t = time.monotonic() + lead_s
                         entry["latency_ms"] = int((start_t - self.silence_since) * 1000)
                         self.timings(line, entry)
                         self.m.add_turn(entry)
                         if line.gesture:
-                            move(line.gesture)
+                            move(line.gesture, delay=lead_s)
+                        if own_moves:
+                            own_tick(start_t, delay=lead_s)
                     await send(piece)
                     tick()
                     if cut_now():
@@ -2152,7 +2359,8 @@ class Conversation:
             if was_cut:
                 played = max(0.0, time.monotonic() - start_t - PLAY_LATENCY_S)
                 await link.stop_audio()
-                ears.drop_reference(key, time.monotonic() + 0.3)
+                for k in voices:
+                    ears.drop_reference(k, time.monotonic() + 0.3)
                 if line.tts is not None:
                     line.tts.cancel()
                 words = line.text.split()
@@ -3387,11 +3595,12 @@ class InterruptTalk(Conversation):
             self.discard(self.ready(mine))
             return
         victim, entry = current
-        link = self.s.links.get(victim.seat["key"])
+        link = self.s.speaker_link(victim.seat)
         self.speaking.cancel()
         if link is not None:
             await link.stop_audio()
-        self.ears.drop_reference(victim.seat["key"], time.monotonic() + 0.3)
+        for k in getattr(link, "keys", [victim.seat["key"]]):
+            self.ears.drop_reference(k, time.monotonic() + 0.3)
         entry["cut"] = True
         entry["spoken"] = " ".join(entry["text"].split()[:4]) + "..."
         self.m.add_turn(entry)
@@ -3401,14 +3610,15 @@ class InterruptTalk(Conversation):
     async def pile_on(self, seat: dict, stance: str, delay: float) -> None:
         await asyncio.sleep(delay)
         phrase = self.s.phrases.get(self.s.voice_key(seat), self.lang, stance, seat["character"])
-        link = self.s.links.get(seat["key"])
+        link = self.s.speaker_link(seat)
         if phrase is None or link is None:
             return
         text, pcm = phrase
         name = moves.reaction_for(seat["character"], stance)
         if name:
             self.s.spawn(self.s.gesture(seat["key"], name))
-        self.ears.add_reference(seat["key"], time.monotonic() + PLAY_LATENCY_S, rms_blocks(pcm))
+        for k in getattr(link, "keys", [seat["key"]]):
+            self.ears.add_reference(k, time.monotonic() + PLAY_LATENCY_S, rms_blocks(pcm))
         self.turn(kind="robot", who=seat["name"], character=seat["character"], text=text,
                   move=stance, gesture=name or "", hold=False)
         self.recent_robot.append((time.monotonic(), text))
@@ -3468,6 +3678,7 @@ class GroupManager:
         except (OSError, ValueError):
             data = {}
         settings = {**DEFAULT_SETTINGS, **(data.get("settings") or {})}
+        settings["groups"] = clean_groups(settings.get("groups"))
         if settings.get("voice_provider") == "elevenlabs" and "voice_provider_v2" not in (
                 data.get("settings") or {}):
             # 2026-10-19 configs said "elevenlabs" by default; "auto" falls back
@@ -3617,6 +3828,9 @@ class GroupManager:
                     self.cfg["settings"][name] = kind(settings[name])
                 except (TypeError, ValueError):
                     pass
+        if "groups" in settings:
+            # Robot groups: saved now, used from the next Start.
+            self.cfg["settings"]["groups"] = clean_groups(settings["groups"])
         st = self.cfg["settings"]
         if st["voice_provider"] not in ("auto", "elevenlabs", "openai", "openrouter", "gemini"):
             st["voice_provider"] = "auto"
@@ -3907,8 +4121,11 @@ class GroupManager:
             return {"ok": False, "error": "include at least two connected Reachys"}
         if not seats:
             return {"ok": False, "error": "no seats are included"}
-        labels = [s.get("character", "").strip().lower() for s in seats]
-        twins = sorted({s["character"] for s, l in zip(seats, labels) if labels.count(l) > 1})
+        # Only the speakers need different names: a talking group speaks
+        # under its own, its members' labels are not used.
+        speakers = plan_groups(seats, clean_groups(settings.get("groups")))[0]
+        labels = [s.get("character", "").strip().lower() for s in speakers]
+        twins = sorted({s["character"] for s, l in zip(speakers, labels) if labels.count(l) > 1})
         if twins:
             return {"ok": False, "error": "two robots are called {}: give each its own "
                                           "name".format(", ".join(twins))}

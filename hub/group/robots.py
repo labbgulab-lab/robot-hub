@@ -30,6 +30,7 @@ import asyncio
 import collections
 import json
 import logging
+import re
 import shlex
 import struct
 import threading
@@ -57,6 +58,15 @@ MIC_BLOCK = 512                # samples per on_mic call (32 ms)
 # = ~0.1-0.2 s. reachy_chat's opener uses a 0.5 s margin for the same wait
 # (OPENER_PLAYBACK_MARGIN_S), measured from the laptop's first chunk.
 PLAYBACK_LATENCY_S = 0.4
+
+# Robot groups (2026-11-03): several robots saying one line together. The
+# player (reachy_chat robot_streaming_player.py) announces what it can do and
+# answers clock questions; a line is then started on all of them at one
+# moment of their own clocks (they keep internet time within a few ms).
+FEATURES_LINE = re.compile(r"player\.features ([a-z_ ]+)")
+CLOCK_LINE = re.compile(r"player\.clock id=(\d+) t=([0-9.]+)")
+CLOCK_TRIES = 5
+CLOCK_TIMEOUT_S = 1.0
 
 ROBOT_PYTHON = "/venvs/mini_daemon/bin/python"
 PLAYER_PATH = "/home/pollen/scripts/robot_streaming_player.py"
@@ -378,6 +388,16 @@ class _Link:
     def _latency_s(self) -> float:
         return PLAYBACK_LATENCY_S
 
+    # Playing together (robot groups): a link that cannot schedule just
+    # starts when its audio arrives.
+    features: set = frozenset()
+
+    async def clock_offset(self) -> Optional[float]:
+        return None
+
+    async def start_at(self, robot_time: float, start_mono: float) -> None:
+        return None
+
     def seconds_left(self, now: Optional[float] = None) -> float:
         """Seconds until the speaker is quiet (0 when nothing was sent)."""
         if self._play_until <= 0.0:
@@ -517,6 +537,11 @@ class RobotLink(_Link):
         self._cam_lock = threading.Lock()
         self._cam_buf = bytearray()
         self._cam_err: collections.deque = collections.deque(maxlen=4)
+        # What this robot's player can do beyond speech and moves ("clock",
+        # "start_at"), from its "player.features" line; empty = an older one.
+        self.features: set = set()
+        self._clock_waits: dict[int, Any] = {}   # id -> [threading.Event, robot time]
+        self._clock_id = 0
 
     @property
     def connected(self) -> bool:
@@ -667,7 +692,17 @@ class RobotLink(_Link):
 
         def on_stderr(data: bytes) -> None:
             for s in lines.feed(data):
+                clock = CLOCK_LINE.search(s)
+                if clock:
+                    wait = self._clock_waits.get(int(clock.group(1)))
+                    if wait is not None:
+                        wait[1] = float(clock.group(2))
+                        wait[0].set()
+                    continue
                 self._stderr_tail.append(s)
+                feats = FEATURES_LINE.search(s)
+                if feats:
+                    self.features = set(feats.group(1).split())
                 if is_ready_line(s):
                     log.info("%s player: %s", self.name, s)
                     self._ready.set()
@@ -956,6 +991,106 @@ class RobotLink(_Link):
     def _send_frame(self, frame: bytes) -> None:
         with self._send_lock:
             self._send(frame)
+
+    # ----- playing together (robot groups) -----
+
+    def _clock_once(self) -> Optional[tuple[float, float]]:
+        """(robot time - laptop time, round trip) from one question, or None."""
+        self._clock_id += 1
+        ident = self._clock_id
+        wait = [threading.Event(), 0.0]
+        self._clock_waits[ident] = wait
+        try:
+            frame = encode_motion({"type": "clock", "id": ident})
+            sent = time.time()
+            self._send_frame(frame)
+            if not wait[0].wait(CLOCK_TIMEOUT_S):
+                return None
+            back = time.time()
+        finally:
+            self._clock_waits.pop(ident, None)
+        return wait[1] - (sent + back) / 2.0, back - sent
+
+    async def clock_offset(self) -> Optional[float]:
+        """How far this robot's clock is ahead of the laptop's (seconds),
+        from the quickest of a few round trips; None if the player cannot say."""
+        if "clock" not in self.features or not self.connected:
+            return None
+        best: Optional[tuple[float, float]] = None
+        for _ in range(CLOCK_TRIES):
+            got = await asyncio.to_thread(self._clock_once)
+            if got is not None and (best is None or got[1] < best[1]):
+                best = got
+        if best is not None:
+            log.info("%s: clock %+.1f ms from the laptop (round trip %.0f ms)",
+                     self.name, best[0] * 1000, best[1] * 1000)
+        return None if best is None else best[0]
+
+    async def start_at(self, robot_time: float, start_mono: float) -> None:
+        """The next audio plays at `robot_time` on this robot's clock, which
+        is `start_mono` on the laptop's monotonic clock (for pacing)."""
+        await self.motion({"type": "start_at", "t": robot_time})
+        with self._send_lock:
+            self._play_until = max(self._play_until, start_mono)
+
+
+# --- several robots as one voice (robot groups) ---------------------------------
+
+# How far ahead a group's line is scheduled: enough for the start command to
+# reach every robot over the lab WiFi (SSH, ~20-100 ms) with room to spare.
+GROUP_START_LEAD_S = 0.35
+
+
+class GroupLink:
+    """The links of a group that talks together, driven as one speaker.
+
+    Each line starts on every member at one moment: `offset` is the robots'
+    clock minus the laptop's (they keep internet time; the median of the
+    members' measurements). Without it, or with a member whose player cannot
+    schedule, every member starts when its audio arrives (tens of ms apart)."""
+
+    def __init__(self, links: list, offset: Optional[float]) -> None:
+        self.links = list(links)
+        self.key = self.links[0].key
+        self.name = self.links[0].name
+        self.offset = offset
+        self._started = False
+        self.synced = offset is not None and all(
+            "start_at" in getattr(link, "features", ()) for link in self.links)
+
+    @property
+    def keys(self) -> list[str]:
+        return [link.key for link in self.links]
+
+    async def _all(self, make: Callable[[Any], Any]) -> None:
+        results = await asyncio.gather(*(make(link) for link in self.links),
+                                       return_exceptions=True)
+        for link, res in zip(self.links, results):
+            if isinstance(res, BaseException) and not isinstance(res, asyncio.CancelledError):
+                log.warning("%s (in a group): %s", link.name, _why(res))
+
+    async def play(self, pcm: bytes) -> None:
+        if not self._started:
+            self._started = True
+            if self.synced:
+                start_mono = time.monotonic() + GROUP_START_LEAD_S
+                robot_time = time.time() + GROUP_START_LEAD_S + float(self.offset or 0.0)
+                await self._all(lambda link: link.start_at(robot_time, start_mono))
+        await self._all(lambda link: link.play(pcm))
+
+    async def end_line(self) -> None:
+        self._started = False
+        await self._all(lambda link: link.end_line())
+
+    async def stop_audio(self) -> None:
+        self._started = False
+        await self._all(lambda link: link.stop_audio())
+
+    async def motion(self, cmd: dict) -> None:
+        await self._all(lambda link: link.motion(cmd))
+
+    def seconds_left(self, now: Optional[float] = None) -> float:
+        return max((link.seconds_left(now) for link in self.links), default=0.0)
 
 
 # --- the laptop instead of a robot ----------------------------------------------

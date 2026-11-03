@@ -108,6 +108,11 @@
       <h2 id="robots-title">Robots</h2>
       <span class="robots-sub" id="robots-sub">left to right, as the people see the table. Everything here changes at once, also mid-conversation.</span>
       <span class="save-state" id="save-state" role="status"></span>
+      <span class="groups-summary" id="groups-summary"></span>
+      <button type="button" class="ghost-button choir-button" id="choir-button" aria-pressed="false"
+              title="Choir: every robot says the same line at the same moment and moves the same way, as one voice. Press again to make them individuals. Used from the next Start.">Choir</button>
+      <button type="button" class="ghost-button" id="groups-button"
+              title="Put robots in groups: a group can talk as one voice, move as one, or both. Used from the next Start.">Groups&hellip;</button>
     </div>
     <ol class="cards" id="seats"></ol>
     <p class="config-empty hidden" id="seats-empty">No Reachys yet. Connect them on the Robot Hub page and they appear here.</p>
@@ -159,6 +164,22 @@
   </section>
 </main>
 
+<!-- Robot groups: robots that talk as one voice, move as one, or both. -->
+<div class="modal hidden" id="groups-modal" role="dialog" aria-modal="true" aria-labelledby="groups-title">
+  <div class="modal-box groups-box">
+    <h2 id="groups-title">Groups</h2>
+    <p class="groups-help">A group that <b>talks together</b> is one voice in the conversation: every robot in it says the same line at the same moment, in the voice and settings of its first robot, under the group's name. A group that <b>moves together</b> does every gesture and head turn as one. Changes are used from the next Start.</p>
+    <div class="groups-list" id="groups-list"></div>
+    <p class="config-empty" id="groups-empty">No groups: every robot is on its own.</p>
+    <div class="modal-actions groups-actions">
+      <button type="button" class="ghost-button" id="groups-add">Add group</button>
+      <button type="button" class="ghost-button" id="groups-choir">Everyone: one Choir</button>
+      <button type="button" class="ghost-button" id="groups-clear">No groups</button>
+      <button type="button" class="nudge-send" id="groups-done">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- Copy one robot's settings to others. -->
 <div class="modal hidden" id="copy-modal" role="dialog" aria-modal="true" aria-labelledby="copy-title">
   <form class="modal-box" id="copy-form">
@@ -202,6 +223,7 @@
          whole width (with them beside it, "Reachy Mini 6" showed as "Reachy"). -->
     <div class="card-meta">
       <span class="seat-robot" title="The robot's own name in the hub, whatever its label says."></span>
+      <span class="seat-group" hidden></span>
       <span class="seat-state">Not connected</span>
       <span class="level" title="Microphone level"><span class="level-fill"></span></span>
       <div class="seat-order">

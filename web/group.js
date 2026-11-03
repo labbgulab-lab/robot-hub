@@ -73,6 +73,12 @@ const nudgeText = document.getElementById('nudge-text');
 const nudgeSend = document.getElementById('nudge-send');
 const nudgeLast = document.getElementById('nudge-last');
 
+const groupsModal = document.getElementById('groups-modal');
+const groupsList = document.getElementById('groups-list');
+const groupsEmpty = document.getElementById('groups-empty');
+const groupsSummary = document.getElementById('groups-summary');
+const choirBtn = document.getElementById('choir-button');
+const groupsBtn = document.getElementById('groups-button');
 const copyModal = document.getElementById('copy-modal');
 const copyForm = document.getElementById('copy-form');
 const copyTitle = document.getElementById('copy-title');
@@ -119,7 +125,7 @@ const VOICE_FIELD = { auto: 'voice_id', elevenlabs: 'voice_id', openai: 'openai_
                       openrouter: 'openai_voice', gemini: 'gemini_voice' };
 // Session settings the hub takes while they talk.
 const LIVE_KEYS = ['topic', 'language', 'minutes', 'listen_gap_s', 'heads_mirror', 'voice_min_level',
-                   'barge_in', 'slow_network', 'lab_intro'];
+                   'barge_in', 'slow_network', 'lab_intro', 'groups'];
 // The session clock runs only while the conversation itself does.
 const LIVE_PHASES = ['speaking', 'listening', 'human', 'thinking'];
 // One colour per seat, kept for the whole session, so a robot's lines and its
@@ -132,7 +138,11 @@ const DEFAULT_SETTINGS = { topic: '', language: 'auto', minutes: 5, listen_gap_s
                            voice_min_level: 0.3, heads_mirror: false, barge_in: 'normal',
                            slow_network: true, lab_intro: true, voice_provider: 'auto',
                            director_model: 'google/gemini-3.5-flash', interrupt_level: 3,
-                           vision: true, gestures: 'lively', people_mic: 'auto' };
+                           vision: true, gestures: 'lively', people_mic: 'auto', groups: [] };
+// Robot groups: one colour each (the cards' tags and the dialog's rows).
+const GROUP_COLORS = ['#7c3aed', '#be185d', '#0e7490', '#b4521a', '#14884a', '#2563eb'];
+const GROUP_KINDS = [['both', 'Talk and move together'], ['talk', 'Talk together, each moves its own way'],
+                     ['move', 'Move together, each says its own lines']];
 const DEFAULT_STATUS = { phase: 'idle', speaker: null, elapsed_s: 0, detail: '' };
 
 let S = normalize({});           // the hub's last word on everything
@@ -302,7 +312,7 @@ function withAvailable(seats) {
 
 function loadDraft() {
   draft = {
-    settings: { ...S.settings },
+    settings: { ...S.settings, groups: copyGroups(S.settings.groups) },
     seats: withAvailable(S.seats.map(s => ({ ...s }))),
   };
 }
@@ -758,6 +768,7 @@ function renderSeats() {
   seatList.closest('.board').dataset.robots = String(n);
   // Two rows of cards do not fit one screen: let the page grow (group.css).
   document.documentElement.toggleAttribute('data-two-rows', n > 5);
+  renderGroupsHead();
   seatsEmpty.classList.toggle('hidden', n > 0);
   paintLevels();
   renderSpeaking();
@@ -799,6 +810,16 @@ function fillSeatRow(row, seat, i) {
   const squash = (t) => str(t).toLowerCase().replace(/[\s_-]+/g, '');
   real.textContent = robotName;
   real.hidden = !!seat.character && squash(seat.character) === squash(robotName);
+  // Its group, if it is in one that counts (two included robots).
+  const tag = row.querySelector('.seat-group');
+  const mine = groupOf(seat.key);
+  const counts = mine && arr(mine.g.members).filter(k => includedKeys().includes(k)).length > 1;
+  tag.hidden = !counts || !seat.included;
+  if (counts) {
+    tag.textContent = groupLabel(mine.g, mine.i);
+    tag.style.setProperty('--group-color', GROUP_COLORS[mine.i % GROUP_COLORS.length]);
+    tag.title = `In ${groupLabel(mine.g, mine.i)}: ${GROUP_KINDS.find(([id]) => id === groupKind(mine.g))[1].toLowerCase()}.`;
+  }
 
   const a = S.available.find(x => x.key === seat.key);
   const stateEl = row.querySelector('.seat-state');
@@ -996,6 +1017,178 @@ function moveSeat(key, step) {
     (same && !same.disabled ? same : other).focus();
   }
 }
+
+/* ----------------------------------------------------------------- groups */
+// Robot groups (2026-11-03). A group that talks together is one voice in the
+// conversation; one that moves together does every gesture as one; Choir is
+// one group of every robot doing both. The hub uses them from the next Start.
+
+function copyGroups(list) {
+  return arr(list).map(g => ({ ...obj(g), members: arr(obj(g).members).map(str) }));
+}
+
+function groups() {
+  if (!Array.isArray(draft.settings.groups)) draft.settings.groups = [];
+  return draft.settings.groups;
+}
+
+function groupKind(g) {
+  if (g.talk && g.move) return 'both';
+  return g.talk ? 'talk' : 'move';
+}
+
+function groupLabel(g, i) {
+  return str(g.name).trim() || `Group ${i + 1}`;
+}
+
+function groupOf(key) {
+  const list = groups();
+  const i = list.findIndex(g => arr(g.members).includes(key));
+  return i < 0 ? null : { g: list[i], i };
+}
+
+function includedKeys() {
+  return draft.seats.filter(s => s.included).map(s => s.key);
+}
+
+function isChoir() {
+  const list = groups();
+  const keys = includedKeys();
+  return list.length === 1 && list[0].talk && list[0].move && keys.length > 1
+    && keys.every(k => list[0].members.includes(k));
+}
+
+function setGroups(list, message) {
+  draft.settings.groups = list;
+  markDirty(QUICK_SAVE_MS);
+  renderSeats();
+  if (!groupsModal.classList.contains('hidden')) renderGroupsModal();
+  if (message) announce(message);
+}
+
+function choirGroups() {
+  return [{ id: 'choir', name: 'Choir', members: includedKeys(), talk: true, move: true }];
+}
+
+function renderGroupsHead() {
+  const list = groups().filter(g => arr(g.members).length > 1);
+  const choir = isChoir();
+  choirBtn.setAttribute('aria-pressed', choir ? 'true' : 'false');
+  choirBtn.textContent = choir ? 'Choir: on' : 'Choir';
+  groupsSummary.textContent = choir ? 'all robots as one voice'
+    : list.map((g, i) => `${groupLabel(g, groups().indexOf(g))} (${g.members.length})`).join(', ');
+  const later = S.running ? ' Used from the next Start.' : '';
+  groupsSummary.title = list.length ? `Groups.${later}` : '';
+}
+
+function renderGroupsModal() {
+  groupsList.textContent = '';
+  const list = groups();
+  groupsEmpty.classList.toggle('hidden', list.length > 0);
+  list.forEach((g, i) => {
+    const row = el('div', 'group-row');
+    row.style.setProperty('--group-color', GROUP_COLORS[i % GROUP_COLORS.length]);
+    const top = el('div', 'group-top');
+    const name = el('input');
+    name.type = 'text';
+    name.maxLength = 30;
+    name.dir = 'auto';
+    name.placeholder = `Group ${i + 1}`;
+    name.value = str(g.name);
+    name.setAttribute('aria-label', 'Group name');
+    name.title = "The group's name in the transcript and for the writer, when it talks as one.";
+    name.addEventListener('input', () => { g.name = name.value; markDirty(); renderSeats(); });
+    const kind = el('select');
+    kind.setAttribute('aria-label', 'What the group does together');
+    GROUP_KINDS.forEach(([id, label]) => {
+      const o = el('option', '', label);
+      o.value = id;
+      kind.append(o);
+    });
+    kind.value = groupKind(g);
+    kind.addEventListener('change', () => {
+      g.talk = kind.value !== 'move';
+      g.move = kind.value !== 'talk';
+      setGroups(list);
+    });
+    const remove = el('button', 'seat-move', '×');
+    remove.type = 'button';
+    remove.title = 'Remove this group (its robots go back to being on their own)';
+    remove.setAttribute('aria-label', 'Remove group');
+    remove.addEventListener('click', () => setGroups(list.filter(x => x !== g)));
+    top.append(name, kind, remove);
+
+    const members = el('div', 'group-members');
+    draft.seats.forEach(seat => {
+      const other = groupOf(seat.key);
+      const label = el('label', 'check');
+      const box = el('input');
+      box.type = 'checkbox';
+      box.checked = arr(g.members).includes(seat.key);
+      label.append(box, ` ${seat.character || seat.name}`);
+      if (seat.character && seat.name) label.append(el('span', 'seat-state', ` ${seat.name}`));
+      if (other && other.g !== g) {
+        label.classList.add('taken');
+        label.title = `In ${groupLabel(other.g, other.i)}: ticking it here moves it to this group.`;
+      }
+      if (!seat.included) label.title = 'Not included in the conversation: it sits this one out.';
+      box.addEventListener('change', () => {
+        list.forEach(x => { x.members = arr(x.members).filter(k => k !== seat.key); });
+        if (box.checked) {
+          // In seat order, so the group's first robot (its voice) is clear.
+          const order = draft.seats.map(s => s.key);
+          g.members = order.filter(k => k === seat.key || arr(g.members).includes(k));
+        }
+        setGroups(list);
+      });
+      members.append(label);
+    });
+    row.append(top, members);
+    const inTable = arr(g.members).filter(k => includedKeys().includes(k));
+    if (inTable.length < 2) {
+      row.append(el('p', 'group-note', 'Needs two included robots to count.'));
+    } else if (g.talk) {
+      const lead = draftSeat(inTable[0]);
+      row.append(el('p', 'groups-help',
+        `Talks in ${lead ? (lead.character || lead.name) : 'its first robot'}'s voice and settings.`));
+    }
+    groupsList.append(row);
+  });
+}
+
+function openGroups() {
+  renderGroupsModal();
+  groupsModal.classList.remove('hidden');
+  const first = groupsModal.querySelector('input, button');
+  if (first) first.focus();
+}
+
+function closeGroups() {
+  groupsModal.classList.add('hidden');
+  groupsBtn.focus();
+}
+
+groupsBtn.addEventListener('click', openGroups);
+choirBtn.addEventListener('click', () => {
+  if (isChoir()) setGroups([], 'Choir off: every robot is on its own (from the next Start).');
+  else if (includedKeys().length < 2) announce('Choir needs at least two included robots.');
+  else setGroups(choirGroups(), 'Choir on: every robot says the same line at once (from the next Start).');
+});
+document.getElementById('groups-add').addEventListener('click', () => {
+  const list = groups();
+  const id = `g${Date.now().toString(36)}`;
+  setGroups([...list, { id, name: '', members: [], talk: true, move: true }]);
+});
+document.getElementById('groups-choir').addEventListener('click', () => {
+  if (includedKeys().length < 2) { announce('Choir needs at least two included robots.'); return; }
+  setGroups(choirGroups());
+});
+document.getElementById('groups-clear').addEventListener('click', () => setGroups([]));
+document.getElementById('groups-done').addEventListener('click', closeGroups);
+groupsModal.addEventListener('click', (event) => { if (event.target === groupsModal) closeGroups(); });
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !groupsModal.classList.contains('hidden')) closeGroups();
+});
 
 /* ------------------------------------------------------------------- copy */
 

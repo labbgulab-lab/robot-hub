@@ -361,3 +361,39 @@ robots, writes and voices the first line of both modes (`premake`; again
 after every Stop and settings change) and records the interjections for the
 robots' voices (first time only; kept on disk). Start then speaks at once.
 STT is told the fixed language ("en") instead of "Hebrew or English".
+
+## Robot groups and Choir (2026-11-03)
+
+Robots can be put in **groups** (Robots header: **Groups…**; **Choir** is the
+one-click case of every included robot in one group doing both). Groups are
+saved any time and used from the next Start.
+
+- **Talk together**: the group is ONE speaker. The conductor sees one seat
+  (a copy of the group's first robot, under the group's name; `plan_groups`
+  in `conductor.py`), so the writer, turn-taking and transcript are unchanged.
+  Its line goes to every member through `robots.GroupLink`, in the first
+  robot's voice, loudness and writer (changed live, the group follows).
+- **Move together**: every gesture, head turn and idle move of any member goes
+  to all of them (`Session.mirror`, `Session.gesture`, `Session.motions`); the
+  group's first robot drives the idle life, and while one member talks the
+  others do its moves ("mirror the speaker").
+- **Talk together, own moves**: members play the same line; the first robot
+  does the line's gesture, each other member picks its own (`moves.filler`).
+
+**Starting together.** Audio over SSH reaches robots tens of ms apart, which
+sounds like an echo. The player (reachy_chat `robot_streaming_player.py`)
+therefore takes two more motion-frame commands: `{"type":"clock","id":N}`
+(answers `player.clock id=N t=<time.time()>` on stderr) and
+`{"type":"start_at","t":T}` (the next audio waits for `time.time() >= T`). It
+announces them on startup (`player.features clock start_at`). The robots keep
+internet time (timesyncd, offsets of a few ms); the laptop's clock does not, so
+the hub measures each robot's offset at connect and every 5 min
+(`Session.measure_clocks`), uses the median for a group, and schedules each line
+`GROUP_START_LEAD_S` (0.35 s) ahead. The speech sway is now fed as audio is
+pushed to the speaker (not as it arrives), so a held line does not sway early.
+A robot with an older player makes the group fall back to "start on arrival".
+Measured 2026-11-03 on reachy6/7/8: clock offsets within 15 ms (measurement
+noise), every robot `start_at late_ms=0`.
+
+Deploy the player after changing it: `reachy_chat\tools\deploy_robot_player.py
+--robot-host <ip,ip,...>`.
