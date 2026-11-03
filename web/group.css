@@ -181,6 +181,13 @@
 .mode-button.active, .mode-button.active:disabled { background: var(--green); color: #fff; border-color: transparent; opacity: 1; }
 #start-interrupt:not(.active):not(:disabled) { background: #b4521a; }
 #start-interrupt:not(.active):not(:disabled):hover { background: #96420f; }
+.talk-button { display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: 0; text-align: left; min-width: 0; padding: 4px 10px; }
+.talk-button[hidden] { display: none; }
+.talk-button .mode-name { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.talk-button .mode-sub { font-size: 11.5px; font-weight: 500; opacity: .85; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.stage-actions.solo { grid-template-columns: auto 1fr 1fr 1fr 1fr auto auto; }
 #start-free:not(.active):not(:disabled) { background: #0e7490; }
 #start-free:not(.active):not(:disabled):hover { background: #0b5f76; }
 .stop-button { font-size: 16px; color: #a4322a; background: var(--red-light); border-color: #f3c9c5; }

@@ -28,6 +28,7 @@ import logging
 import random
 import re
 import statistics
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -115,6 +116,9 @@ DANGLING = {"and", "but", "or", "so", "because", "the", "a", "an", "to", "of", "
             "ו", "אבל", "כי", "ש", "אם", "כש", "של", "את", "עם", "על", "אני", "זה"}
 FIRST_AUDIO_S = 6.0     # a voice with no audio after this is retried
 STALL_S = 10.0          # a voice that stops sending for this long is over
+AUDIO_WAIT_S = 45.0     # the speaker waits this long at most for a line's voice to start
+AUDIO_GAP_S = 20.0      # ... and this long for the next piece of it
+HANG_S = 60.0           # a conversation with no sign of life this long is stuck
 HEDGE_TTS_S = 1.8       # no voice audio yet: race a second request
 # Playback never outruns the download (Audio.can_start): at least this much
 # buffered; 1 s when the arrival rate is not known yet (first 0.25 s); start
@@ -703,6 +707,32 @@ def pronounce(text: str) -> str:
     return re.sub(r"לאבה ?לאב|לבה ?לב(?=[\s,.!?]|$)", "Laba Lab", text)
 
 
+def stuck_report(max_chars: int = 20000) -> str:
+    """Where every asyncio task and every thread is waiting right now: the
+    log line a stuck conversation leaves, so the cause can be found."""
+    import io
+    import sys
+    import traceback
+    out = io.StringIO()
+    try:
+        tasks = asyncio.all_tasks()
+    except RuntimeError:
+        tasks = set()
+    for task in sorted(tasks, key=lambda t: t.get_name()):
+        out.write("--- task {} ({})\n".format(task.get_name(), getattr(
+            task.get_coro(), "__qualname__", "?")))
+        try:
+            task.print_stack(limit=12, file=out)
+        except Exception as exc:  # noqa: BLE001
+            out.write("  (no stack: {})\n".format(exc))
+    names = {t.ident: t.name for t in threading.enumerate()}
+    for ident, frame in sys._current_frames().items():
+        out.write("--- thread {}\n".format(names.get(ident, ident)))
+        out.write("".join(traceback.format_stack(frame, limit=8)))
+    text = out.getvalue()
+    return text if len(text) <= max_chars else text[:max_chars] + "\n... (cut)"
+
+
 async def hedged_stream(make: Any, after: float):
     """A stream that races a second, identical request when the first has
     sent nothing after `after` seconds; the first to send wins, the other is
@@ -827,9 +857,19 @@ GROUP_NAME_MAX = 30
 GROUPS_MAX = 12
 
 
+def whole_table(g: dict) -> bool:
+    """A Choir: the group is every robot at the table, whoever is ticked
+    when Start is pressed (2026-11-03: a Choir saved its members when it was
+    switched on, and robots ticked later were left out of it). The page's
+    Choir has id "choir"; editing its members by hand ends that."""
+    flag = g.get("whole_table")
+    return bool(flag) if flag is not None else g.get("id") == "choir"
+
+
 def clean_groups(value: Any) -> list[dict]:
     """The page's groups, checked: a robot is in one group at most (the
-    first that lists it), and every group has an id, a name and both flags."""
+    first that lists it), and every group has an id, a name and both flags.
+    A whole-table group (Choir) never takes a robot another group lists."""
     out: list[dict] = []
     taken: set = set()
     if not isinstance(value, list):
@@ -837,17 +877,23 @@ def clean_groups(value: Any) -> list[dict]:
     for i, g in enumerate(value[:GROUPS_MAX]):
         if not isinstance(g, dict):
             continue
+        whole = whole_table(g)
         members: list[str] = []
         for k in g.get("members") or []:
             k = str(k)
             if k and k not in taken and k not in members:
                 members.append(k)
-        taken.update(members)
+        if not whole:
+            taken.update(members)
         out.append({"id": str(g.get("id") or "g{}".format(i + 1))[:24],
                     "name": str(g.get("name") or "").strip()[:GROUP_NAME_MAX],
                     "members": members,
                     "talk": bool(g.get("talk", True)),
-                    "move": bool(g.get("move", True))})
+                    "move": bool(g.get("move", True)),
+                    "whole_table": whole})
+    for g in out:
+        if g["whole_table"]:
+            g["members"] = [k for k in g["members"] if k not in taken]
     return out
 
 
@@ -866,8 +912,13 @@ def plan_groups(seats: list[dict], groups: list[dict]) -> tuple[list[dict], dict
     mirror: dict[str, list[str]] = {}
     lead_of: dict[str, str] = {}
     named: dict[str, str] = {}
+    listed = {k for g in groups if not whole_table(g) for k in g.get("members", [])}
     for g in groups:
-        keys = [k for k in order if k in g.get("members", [])]
+        if whole_table(g):
+            # Every robot at the table that no other group has.
+            keys = [k for k in order if k not in listed]
+        else:
+            keys = [k for k in order if k in g.get("members", [])]
         if len(keys) < 2:
             continue
         if g.get("move"):
@@ -995,13 +1046,21 @@ class Audio:
         need = rest * (1.0 / max(rate, 0.05) - 1.0) * 1.25 + PREBUFFER_MIN_S
         return have + head_s >= need
 
-    async def playable(self, expected_s: float, head_s: float = 0.0) -> None:
-        """Wait until can_start (head_s counts down while it plays)."""
+    async def playable(self, expected_s: float, head_s: float = 0.0,
+                       limit_s: float = AUDIO_WAIT_S) -> None:
+        """Wait until can_start (head_s counts down while it plays). Never
+        longer than `limit_s`: a voice that never comes ends the line
+        (2026-10-26 a conversation hung 22 min with no log line)."""
         t0 = time.monotonic()
         while not self.can_start(expected_s, max(0.0, head_s - (time.monotonic() - t0))):
+            if time.monotonic() - t0 >= limit_s:
+                log.warning("voice: nothing playable after %.0f s; the line is given up", limit_s)
+                self.finish("no audio after {:.0f} s".format(limit_s))
+                return
             await asyncio.sleep(0.02)
 
-    async def stream(self):
+    async def stream(self, gap_s: float = AUDIO_GAP_S):
+        """The chunks as they come; a gap over `gap_s` ends the line."""
         i = 0
         while True:
             while i < len(self.chunks):
@@ -1010,7 +1069,13 @@ class Audio:
             if self.done:
                 return
             self._event.clear()
-            await self._event.wait()
+            try:
+                await asyncio.wait_for(self._event.wait(), gap_s)
+            except asyncio.TimeoutError:
+                if not self.done:
+                    log.warning("voice: no audio for %.0f s mid-line; the line ends", gap_s)
+                    self.finish("stalled for {:.0f} s".format(gap_s))
+
 
 
 @dataclass
@@ -1531,6 +1596,20 @@ class Session:
                      type(err).__name__, str(err)[:120], attempt)
             await asyncio.sleep(0.3 * attempt)
 
+    def start_voice(self, line: Line) -> asyncio.Task:
+        """The line's voice as a task. However it ends, the line's audio is
+        marked finished: a task cancelled before it ever ran skips voice()'s
+        own handlers, and the speaker then waited for audio forever."""
+        task = asyncio.create_task(self.voice(line))
+
+        def _ended(t: asyncio.Task) -> None:
+            if not line.audio.done:
+                line.audio.finish("cancelled" if t.cancelled() else "the voice ended early")
+
+        task.add_done_callback(_ended)
+        line.tts = task
+        return task
+
     async def voice(self, line: Line) -> None:
         """ElevenLabs or OpenAI (settings + credits); ElevenLabs refusing
         before the first audio moves the whole session to OpenAI. A voice that
@@ -1855,6 +1934,7 @@ class Conversation:
         self._speakers, session.together, session.mirror = plan_groups(session.seats, groups)
         self.spoke_at: dict[str, float] = {s["key"]: 0.0 for s in self._speakers}
         self.silence_since = time.monotonic()
+        self.alive_at = time.monotonic()    # last sign of life (GroupManager._watch)
         self.failures = 0
         self.last_line: Optional[Line] = None
         self.recent_robot: list[tuple[float, str]] = []   # (time, text) for strip_echo
@@ -1864,8 +1944,13 @@ class Conversation:
 
     def restart_clock(self) -> None:
         """A conversation made ahead of time starts now."""
-        self.t0 = self.silence_since = time.monotonic()
+        self.t0 = self.silence_since = self.alive_at = time.monotonic()
         self.first = len(self.m.transcript)
+
+    def beat(self) -> None:
+        """A sign of life: the conversation is moving (a status, a turn, a
+        note, audio going out, someone being heard)."""
+        self.alive_at = time.monotonic()
 
     def opener(self) -> "asyncio.Future":
         """The task that writes (and voices) this mode's first line."""
@@ -1910,6 +1995,7 @@ class Conversation:
         return self.elapsed() + ahead >= self.limit()
 
     def status(self, phase: str, speaker: Optional[dict] = None, detail: str = "") -> None:
+        self.beat()
         sig = (phase, speaker["key"] if speaker else None, detail)
         if sig == getattr(self, "_status_sig", None) and self.m.status.get("phase") == phase:
             return
@@ -1921,6 +2007,7 @@ class Conversation:
                            "mode": self.mode})
 
     def turn(self, **fields: Any) -> dict:
+        self.beat()
         entry = {"id": len(self.m.transcript) + 1, "t": round(self.elapsed(), 1),
                  "who": None, "character": None, "kind": "robot", "text": "",
                  "move": "", "latency_ms": None, "cut": False, "heard_by": None,
@@ -1951,6 +2038,7 @@ class Conversation:
         self.m.log_turn(entry)
 
     def note(self, text: str) -> None:
+        self.beat()
         self.m.note(text)
 
     def mine(self) -> list[dict]:
@@ -2163,7 +2251,7 @@ class Conversation:
             other = moves.similar(line.gesture)
             line.gesture = other if other and other not in recent else ""
         if voice:
-            line.tts = asyncio.create_task(self.s.voice(line))
+            self.s.start_voice(line)
         return line
 
     @staticmethod
@@ -2281,6 +2369,7 @@ class Conversation:
             play_end = start + dur
             total += dur
             chunk = loud(chunk, line.seat.get("loudness", DEFAULT_LOUDNESS))
+            self.beat()
             levels = rms_blocks(chunk)
             for k in voices:
                 ears.add_reference(k, start + PLAY_LATENCY_S, levels)
@@ -2630,8 +2719,10 @@ class GroupTalk(Conversation):
     def opener(self) -> "asyncio.Future":
         if not self.wants_intro():
             return asyncio.create_task(self.prepare(opening=True))
-        self.intro_task = asyncio.ensure_future(self.make_intro())
-        return asyncio.create_task(self.open_after_intro())
+        intro = self.intro_task = asyncio.ensure_future(self.make_intro())
+        # The task itself, not self.intro_task: say_intro() clears that before
+        # this runs (it was `await None` when started without Get ready).
+        return asyncio.create_task(self.open_after_intro(intro))
 
     def wants_intro(self) -> bool:
         return (self.mode == "group" and bool(self.seats)
@@ -2669,9 +2760,12 @@ class GroupTalk(Conversation):
         """Who starts the debate after the hand-over: the second robot."""
         return self.seats[1] if len(self.seats) > 1 else self.seats[0]
 
-    async def open_after_intro(self) -> Line:
+    async def open_after_intro(self, intro: Optional["asyncio.Future"] = None) -> Line:
+        intro = intro if intro is not None else self.intro_task
         try:
-            await self.intro_task
+            if intro is None:
+                raise ServiceError("no lab intro was made")
+            await asyncio.shield(intro)
         except Exception as exc:  # noqa: BLE001
             log.info("lab intro failed (%s): plain opener", exc)
             return await self.prepare(opening=True)
@@ -2850,6 +2944,7 @@ class GroupTalk(Conversation):
         early_end = 0.0
         live_at = time.monotonic()
         while not ears.finished():
+            self.beat()
             if (self.live_task is None or self.live_task.done()) \
                     and time.monotonic() - live_at >= LIVE_STT_EVERY_S:
                 pcm, _key, so_far, _end = ears.take(keep=True)
@@ -3124,7 +3219,7 @@ class InterruptTalk(Conversation):
             line.pre_text, line.use_pre = "", False
         if line.pre_text:
             self.s.phrases.used(line.pre_text)
-        line.tts = asyncio.create_task(self.s.voice(line))
+        self.s.start_voice(line)
         return line
 
     # -------------------------------------------------------------- loop
@@ -3585,7 +3680,7 @@ class InterruptTalk(Conversation):
             mine.pre_text, mine.pre_pcm = text, pcm
             mine.audio.finish()
         else:
-            mine.tts = asyncio.create_task(self.s.voice(mine))
+            self.s.start_voice(mine)
         self.s.phrases.used(text)
         # Let the interrupter get a few words out first.
         await asyncio.sleep(random.uniform(1.2, 2.2))
@@ -4397,7 +4492,7 @@ class GroupManager:
             self.convo = convo
             self.note("{} started".format(MODE_LABEL[mode]))
             self.publish_state()
-            await convo.run()
+            await self._watch(convo)
         except asyncio.CancelledError:
             pass
         except Exception as exc:  # noqa: BLE001
@@ -4409,7 +4504,7 @@ class GroupManager:
                 asyncio.create_task(self.disconnect())
         finally:
             try:
-                await asyncio.shield(session.quiet())
+                await asyncio.wait_for(asyncio.shield(session.quiet()), 15)
             except Exception:  # noqa: BLE001
                 pass
             self.set_status({"phase": "ready" if self.session is not None else "idle",
@@ -4418,6 +4513,33 @@ class GroupManager:
             self.publish_state()
             if self.session is not None:
                 self.schedule_premake()     # the next Start speaks at once too
+
+    async def _watch(self, convo: "Conversation", hang_s: float = HANG_S) -> None:
+        """Run the conversation; if it shows no sign of life for `hang_s`
+        (2026-10-26: 22 minutes of silence, nothing in any log), write where
+        every task is waiting to the hub log, end it, and say so on the page.
+        The robots stay connected: a mode button starts again."""
+        run = asyncio.ensure_future(convo.run())
+        try:
+            while True:
+                done, _ = await asyncio.wait({run}, timeout=min(5.0, hang_s / 4))
+                if done:
+                    run.result()            # its error, if it failed
+                    return
+                quiet = time.monotonic() - getattr(convo, "alive_at", time.monotonic())
+                if quiet < hang_s:
+                    continue
+                log.warning("group conversation stuck for %.0f s; where it waits:\n%s",
+                            quiet, stuck_report())
+                msg = ("the conversation was stuck for {:.0f} s and was stopped (details in "
+                       "the hub log); press a mode to go on".format(quiet))
+                self.note(msg)
+                self.error = msg
+                return
+        finally:
+            if not run.done():
+                run.cancel()
+                await asyncio.wait({run}, timeout=10)
 
     async def _levels(self) -> None:
         while True:

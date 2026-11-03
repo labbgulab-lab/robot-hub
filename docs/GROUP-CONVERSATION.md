@@ -43,7 +43,7 @@ robot mics (SSH, 16 kHz) ──> VAD per robot ──> floor control ──> STT
 | `hub/group/conductor.py` | engine | floor, VAD, STT, director, TTS, transcript |
 | `hub/group/api.py` | engine | FastAPI routes + `/ws/group`, mounted by `hub/main.py` |
 | `web/group.html`, `web/group.js`, `web/group.css` | page | the group dashboard |
-| `web/app.js` / `web/index.html` | page | the "Group conversation" button |
+| `web/app.js` / `web/index.html` | page | a Reachy card's Launch opens this page |
 
 ## Contract 1: `hub/group/robots.py`
 
@@ -108,12 +108,24 @@ class LaptopLink(RobotLink-compatible):  # simulation, no robot
   `group.status` (`{"status": {...}}`), `group.levels` (`{"levels": {"<key>": 0..1}}`,
   ~8/s), and `heartbeat`.
 
-## The hub button
+## The way in: a Reachy card's Launch (2026-11-03)
 
-"Group conversation" on the main page, enabled when at least two Reachy
-(`reachy_wireless`) cards are connected (CONNECTED, RUNNING or DEGRADED).
-It opens `/group.html` in a new tab. Starting a group session stops each
-robot's own conversation app first, because both would use the speaker.
+There is one way in: **Launch** on any connected Reachy (`reachy_wireless`)
+card on the main page opens `/group.html` (one named tab, so a second
+click brings the same page back). The top-bar "Group conversation" button
+is gone.
+
+The page adapts to the count:
+- **One Reachy connected**: a **Talk** button starts that robot's own
+  one-robot app (reachy_chat, through the hub's `/api/robots/<key>/launch`,
+  `override` after a conflict) and opens its dashboard in a new tab; when it
+  already runs, Talk just opens it. The group modes need a second Reachy or
+  a laptop robot (+).
+- **Two or more**: the group modes and Choir, as below.
+
+Starting a group session stops each robot's own conversation app first,
+because both would use the speaker. Talk is disabled while the group
+session holds the robots (Disconnect first).
 
 ## Two modes, one connection (2026-10-21)
 

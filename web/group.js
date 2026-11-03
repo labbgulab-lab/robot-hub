@@ -30,6 +30,7 @@ const timerBar = document.getElementById('timer-bar');
 const timerFill = document.getElementById('timer-fill');
 const modeBtns = Array.from(document.querySelectorAll('.mode-button'));
 const readyBtn = document.getElementById('get-ready');
+const talkBtn = document.getElementById('talk-one');
 const micStateEl = document.getElementById('mic-state');
 const micSwitchBtn = document.getElementById('mic-switch');
 const readyChecksEl = document.getElementById('ready-checks');
@@ -156,6 +157,8 @@ let localError = '';             // a refused request; the hub's own error wins
 let linkError = '';              // the hub could not be asked at all
 let loaded = false;              // a first state has arrived
 let starting = '';               // the mode being started, '' when none
+let talkBusy = false;            // Talk: the one robot's own app is starting
+let talkConflict = '';           // Talk: key of a robot whose launch hit a conflict
 let stopping = false;
 let gettingReady = false;        // Get ready pressed, not answered yet
 let micSwitching = false;        // the mic button pressed, not answered yet
@@ -431,7 +434,88 @@ function renderTimer() {
   timerBar.classList.toggle('over', total > 0 && elapsed >= total);
 }
 
+// Exactly one real Reachy connected on the hub (laptop robots do not count):
+// the page offers Talk, that robot's own one-robot app.
+function soloReachy() {
+  if (draft.settings.simulate) return null;
+  const real = S.available.filter(a => !LAPTOP_KEYS.includes(a.key));
+  return real.length === 1 ? real[0] : null;
+}
+
+function renderTalk() {
+  const solo = soloReachy();
+  talkBtn.hidden = !solo;
+  talkBtn.parentElement.classList.toggle('solo', !!solo);
+  if (!solo) return;
+  talkBtn.disabled = talkBusy || !!starting || S.connected || S.running;
+  const sub = talkBtn.querySelector('.mode-sub');
+  if (talkBusy) sub.textContent = 'starting its app…';
+  else if (talkConflict === solo.key) sub.textContent = 'in use: press to take over';
+  else if (solo.state === 'RUNNING') sub.textContent = 'open its app';
+  else sub.textContent = 'one robot, its own app';
+  talkBtn.title = S.connected
+    ? 'Disconnect first: the group conversation is holding the robot.'
+    : `Start ${solo.name || 'this Reachy'}'s own app: one robot talking with the people `
+      + '(Gemini Live and the other voices, persona, Show mode). It opens in a new tab.';
+}
+
+// The tab is opened inside the click (a tab opened after a long await is a
+// blocked pop-up), then pointed at the robot's app when the hub answers.
+async function talkOne() {
+  const solo = soloReachy();
+  if (!solo || talkBusy) return;
+  const key = solo.key;
+  const tab = window.open('about:blank', '_blank');
+  if (tab) {
+    try {
+      tab.opener = null;
+      tab.document.title = `Starting ${solo.name}…`;
+      tab.document.body.style.cssText = 'font: 16px "Segoe UI", Arial, sans-serif; color: #65738a; padding: 40px;';
+      tab.document.body.textContent = `Starting ${solo.name}'s app… This tab opens it as soon as it is ready.`;
+    } catch (err) { /* the message is cosmetic */ }
+  }
+  const go = url => {
+    if (tab && !tab.closed) tab.location.href = url;
+    else if (!window.open(url, '_blank', 'noopener')) announce('The browser blocked the new tab. Allow pop-ups for the hub.');
+  };
+  talkBusy = true;
+  renderButtons();
+  try {
+    // Already running: open it, do not start it again.
+    const list = await fetch('/api/robots').then(r => r.json()).catch(() => ({}));
+    const now = arr(obj(list).robots).find(r => obj(r).key === key);
+    if (now && now.state === 'RUNNING' && now.system_url) {
+      go(now.system_url);
+      return;
+    }
+    const action = talkConflict === key ? 'override' : 'launch';
+    const res = await fetch(`/api/robots/${encodeURIComponent(key)}/${action}`, { method: 'POST' });
+    const body = obj(await res.json().catch(() => ({})));
+    if (body.url) {
+      talkConflict = '';
+      go(str(body.url));
+      return;
+    }
+    if (tab) tab.close();
+    if (body.conflict) {
+      talkConflict = key;
+      announce(`${str(body.error)} Press Talk again to take it over.`);
+    } else {
+      announce(str(body.error) || "The robot's app did not start.");
+    }
+  } catch (err) {
+    if (tab) tab.close();
+    announce(`Talk failed: ${err}`);
+  } finally {
+    talkBusy = false;
+    renderButtons();
+  }
+}
+
+talkBtn.addEventListener('click', talkOne);
+
 function renderButtons() {
+  renderTalk();
   const seats = draft.seats.filter(s => s.included);
   const simulate = !!draft.settings.simulate;
   const enough = seats.length >= 2 || simulate;
@@ -469,7 +553,8 @@ function renderButtons() {
   let hint = '';
   if (S.connected && !S.running && !starting) hint = 'Robots connected and listening. A mode button starts at once.';
   else if (!S.running && !starting) {
-    if (!enough) hint = 'Include at least two Reachys, or press + on a card to add a laptop robot.';
+    if (!enough && soloReachy()) hint = 'One Reachy: Talk starts its own app. For the group modes, include a second Reachy or press + on its card for a laptop robot.';
+    else if (!enough) hint = 'Include at least two Reachys, or press + on a card to add a laptop robot.';
     else if (simulate) hint = 'Simulation: this laptop speaks and listens.';
     else {
       const away = seats.filter(s => !connectedKey(s.key)).map(s => s.name || s.key);
@@ -744,6 +829,7 @@ simulateEl.addEventListener('change', () => editSetting('simulate', simulateEl.c
 const seatRows = new Map();      // seat key -> card element
 
 function renderSeats() {
+  if (syncChoir()) markDirty(QUICK_SAVE_MS);
   const keep = new Set();
   draft.seats.forEach((seat, i) => {
     let row = seatRows.get(seat.key);
@@ -1051,11 +1137,33 @@ function includedKeys() {
   return draft.seats.filter(s => s.included).map(s => s.key);
 }
 
+// A Choir is every robot at the table, whoever is ticked (the hub decides
+// at Start: hub/group/conductor.py whole_table). Editing its members by hand
+// makes it an ordinary group.
+function wholeTable(g) {
+  return g.whole_table !== undefined ? !!g.whole_table : g.id === 'choir';
+}
+
 function isChoir() {
   const list = groups();
-  const keys = includedKeys();
-  return list.length === 1 && list[0].talk && list[0].move && keys.length > 1
-    && keys.every(k => list[0].members.includes(k));
+  return list.length === 1 && wholeTable(list[0]) && list[0].talk && list[0].move
+    && includedKeys().length > 1;
+}
+
+// The Choir's member list follows the ticks, so its cards and the groups
+// dialog show what the hub will do. True when it changed.
+function syncChoir() {
+  const list = groups();
+  const listed = new Set(list.filter(g => !wholeTable(g)).flatMap(g => arr(g.members)));
+  let changed = false;
+  list.filter(wholeTable).forEach(g => {
+    const want = includedKeys().filter(k => !listed.has(k));
+    if (want.join('|') !== arr(g.members).join('|')) {
+      g.members = want;
+      changed = true;
+    }
+  });
+  return changed;
 }
 
 function setGroups(list, message) {
@@ -1067,7 +1175,8 @@ function setGroups(list, message) {
 }
 
 function choirGroups() {
-  return [{ id: 'choir', name: 'Choir', members: includedKeys(), talk: true, move: true }];
+  return [{ id: 'choir', name: 'Choir', members: includedKeys(), talk: true, move: true,
+           whole_table: true }];
 }
 
 function renderGroupsHead() {
@@ -1133,6 +1242,8 @@ function renderGroupsModal() {
       }
       if (!seat.included) label.title = 'Not included in the conversation: it sits this one out.';
       box.addEventListener('change', () => {
+        // Picked by hand: no longer "every robot at the table".
+        g.whole_table = false;
         list.forEach(x => { x.members = arr(x.members).filter(k => k !== seat.key); });
         if (box.checked) {
           // In seat order, so the group's first robot (its voice) is clear.
@@ -1172,7 +1283,7 @@ groupsBtn.addEventListener('click', openGroups);
 choirBtn.addEventListener('click', () => {
   if (isChoir()) setGroups([], 'Choir off: every robot is on its own (from the next Start).');
   else if (includedKeys().length < 2) announce('Choir needs at least two included robots.');
-  else setGroups(choirGroups(), 'Choir on: every robot says the same line at once (from the next Start).');
+  else setGroups(choirGroups(), 'Choir on: every robot at the table says the same line at once, also robots you tick later (from the next Start).');
 });
 document.getElementById('groups-add').addEventListener('click', () => {
   const list = groups();

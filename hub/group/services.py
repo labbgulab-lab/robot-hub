@@ -293,6 +293,10 @@ class Services:
         self.eleven_gate = ElevenGate(ELEVEN_SLOTS)
         # False once OpenAI refuses for billing or the key: Gemini from then on.
         self.openai_ok = bool(openai_key)
+        # Why OpenRouter was dropped for good (expired key, no credits), or "".
+        # 2026-11-03: the key had expired, every line paid a refused call first
+        # and the warm-up still said "all ok" (the writer check fell to Gemini).
+        self.openrouter_gone = ""
         self.on_switch = None           # called with a sentence when that happens
 
     @property
@@ -339,6 +343,25 @@ class Services:
             self.openai_ok = False
             msg = ("OpenAI refused ({}): the robots use OpenRouter and Gemini instead".format(
                 "no credits" if status == 429 else "key rejected"))
+            log.warning("%s", msg)
+            if self.on_switch is not None:
+                self.on_switch(msg)
+        return dead
+
+    def openrouter_refused(self, status: int, text: str) -> bool:
+        """An OpenRouter refusal that retrying will not fix (expired or bad
+        key, no credits): OpenRouter is left out from then on, when Gemini or
+        OpenAI can stand in. True when it is that kind of refusal."""
+        t = (text or "").lower()
+        dead = status in (401, 402) or (status == 403 and "key" in t) or any(
+            w in t for w in ("key expired", "api key expired", "insufficient credits"))
+        if dead and self.openrouter_key and (self.gemini_key or self.openai_ok):
+            why = ("key expired" if "expired" in t else
+                   "no credits" if status == 402 or "credit" in t else "key rejected")
+            self.openrouter_gone = why
+            self.openrouter_key = ""
+            msg = ("OpenRouter refused ({}): the robots use {} instead; put a new OpenRouter "
+                   "key in the Keys panel".format(why, "Gemini" if self.gemini_key else "OpenAI"))
             log.warning("%s", msg)
             if self.on_switch is not None:
                 self.on_switch(msg)
@@ -401,7 +424,17 @@ class Services:
         await asyncio.gather(*(get(u, h) for u, h in gets))
 
     async def ping_writer(self, model: str) -> None:
-        """One real, tiny request to a writer model (ServiceError if it fails)."""
+        """One real, tiny request to a writer model (ServiceError if it fails).
+        An OpenRouter model is asked through OpenRouter only: through
+        director() a dead key passed the check on Gemini's answer."""
+        if "/" in model:
+            if not self.openrouter_key:
+                raise ServiceError("OpenRouter is not usable ({}); this writer runs on {} "
+                                   "instead".format(self.openrouter_gone or "no key",
+                                                    "Gemini" if self.gemini_key else "OpenAI"))
+            await self.openrouter_director(model, "You answer with a JSON object only.",
+                                           'Answer exactly {"ok": true}', None, 15.0)
+            return
         await self.director("You answer with a JSON object only.",
                             'Answer exactly {"ok": true}', timeout=15.0, max_tokens=20,
                             model=model)
@@ -475,6 +508,7 @@ class Services:
             raise ServiceError("the writer ({}) could not be reached: {}".format(
                 model, type(exc).__name__)) from exc
         if r.status_code != 200:
+            self.openrouter_refused(r.status_code, r.text)
             raise ServiceError("the writer ({}) answered {}: {}".format(
                 model, r.status_code, r.text[:200]), r.status_code, r.text)
         try:
@@ -509,6 +543,7 @@ class Services:
             raise ServiceError("transcription (OpenRouter) failed: {}".format(
                 type(exc).__name__)) from exc
         if r.status_code != 200:
+            self.openrouter_refused(r.status_code, r.text)
             raise ServiceError("transcription (OpenRouter) answered {}".format(r.status_code))
         text = (r.json()["choices"][0]["message"].get("content") or "").strip().strip('"')
         return text, ("he" if re.search(r"[\u0590-\u05FF]", text) else ("en" if text else None))

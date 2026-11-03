@@ -24,6 +24,8 @@ const template = document.getElementById('card-template');
 const ORDER = ['furhat', 'reachy_wireless', 'reachy_lite', 'naoqi', 'pepper'];
 const PRESENT = ['DETECTED', 'CONNECTING', 'CONNECTED', 'RUNNING', 'DEGRADED', 'ERROR'];
 const CONNECTED = ['CONNECTED', 'RUNNING', 'DEGRADED'];
+// A wireless Reachy's Launch opens the Reachy page (openReachyPage below).
+const REACHY_PAGE_TYPES = ['reachy_wireless'];
 
 const STATUS_TEXT = {
   ABSENT: 'Absent',
@@ -155,8 +157,12 @@ function renderLaunch(el, r) {
   launch.disabled = busy || !CONNECTED.includes(r.state);
   launch.querySelector('use').setAttribute('href', busy ? '#spinner' : '#launch');
   launch.querySelector('svg').classList.toggle('spinning', busy);
-  launch.querySelector('span').textContent =
-    busy ? 'Launching…' : (r.state === 'RUNNING' ? 'Open' : 'Launch');
+  launch.querySelector('span').textContent = busy ? 'Launching…'
+    : (r.state === 'RUNNING' && !REACHY_PAGE_TYPES.includes(r.type_id) ? 'Open' : 'Launch');
+  if (REACHY_PAGE_TYPES.includes(r.type_id)) {
+    launch.title = 'Open the Reachy page: one Reachy talks on its own there, two or more '
+      + 'hold a group conversation (also Choir).';
+  }
 
   let elapsed = launch.querySelector('.elapsed');
   if (!elapsed) {
@@ -880,33 +886,19 @@ function updateSummary() {
   document.getElementById('running-count').textContent =
     all.filter(r => r.state === 'RUNNING').length;
   document.getElementById('robots-count').textContent = `(${all.length})`;
-  updateGroupButton();
 }
 
-/* ---------------------------------------------------- group conversation */
-// Several Reachys and the people in the room (docs/GROUP-CONVERSATION.md).
-// It runs on its own page; this button opens it once a Reachy is connected
-// (one Reachy plus the page's "Laptop robot" is enough to try it), from the
-// same robot events that draw the cards.
-const groupOpen = document.getElementById('group-open');
-const groupHint = document.getElementById('group-hint');
-
-function updateGroupButton() {
-  const reachys = [...state.values()].filter(
-    r => r.type_id === 'reachy_wireless' && CONNECTED.includes(r.state)).length;
-  const ready = reachys >= 1;
-  groupOpen.disabled = !ready;
-  groupOpen.title = ready
-    ? `Open the group conversation (${reachys} Reachys connected)`
-    : 'Connect a Reachy first';
-  groupHint.classList.toggle('hidden', ready);
-}
-
+/* --------------------------------------------------------- Reachy page */
+// 2026-11-03: one Reachy system. A wireless Reachy's Launch opens the
+// Reachy page (/group.html): with one Reachy its Talk button starts that
+// robot's own app (reachy_chat), with two or more it has the group modes
+// and Choir. The page used to have its own "Group conversation" button
+// at the top, next to each card's Launch.
 // One named tab: a second click brings back the same page, not a twin.
-groupOpen.addEventListener('click', () => {
+function openReachyPage() {
   const tab = window.open('/group.html', 'robot-hub-group');
   if (!tab) announce('The browser blocked the new tab. Allow pop-ups for the hub.');
-});
+}
 
 function renderLog(entry) {
   const li = document.createElement('li');
@@ -1020,6 +1012,10 @@ function onCardClick(event) {
     const form = el.querySelector('.wifi-form');
     form.classList.toggle('hidden');
     if (!form.classList.contains('hidden')) form.querySelector('.wifi-ssid').focus();
+    return;
+  }
+  if (action === 'launch' && REACHY_PAGE_TYPES.includes(el.dataset.typeId)) {
+    openReachyPage();
     return;
   }
   // Already running: just reopen the tab, do not restart the system.

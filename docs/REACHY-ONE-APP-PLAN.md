@@ -24,6 +24,12 @@ groups/Choir are there whenever there are two or more.
   "Robot groups and Choir"); the player's `clock` / `start_at` commands.
 - Cards show the robot's real name under its label; the page grows with the
   number of robots.
+- Step 3, simple form: the main page has no "Group conversation" button any
+  more; a Reachy card's Launch opens the Reachy page, which shows **Talk**
+  (that robot's reachy_chat, started and opened from the page) when exactly
+  one Reachy is connected, and the group modes with two or more.
+- Choir is every robot at the table, also robots ticked after it was
+  switched on (`whole_table`).
 
 ## Target shape
 

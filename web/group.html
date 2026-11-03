@@ -58,6 +58,11 @@
     <div class="timer-bar" id="timer-bar"><span id="timer-fill"></span></div>
     <div class="stage-actions">
       <button type="button" class="ready-button" id="get-ready" disabled title="Before the audience arrives: connect the robots, check every service with a real request and prepare the first line of each mode, so a mode button speaks at once.">Get ready</button>
+      <!-- One Reachy: its own app (reachy_chat) on the robot, as the main
+           page's Launch did before 2026-11-03. Shown with exactly one Reachy. -->
+      <button type="button" class="start-button talk-button" id="talk-one" hidden disabled
+              title="Start this Reachy's own app: one robot talking with the people (Gemini Live and the other voices, persona, Show mode). It opens in a new tab.">
+        <span class="mode-name">Talk</span><span class="mode-sub">one robot, its own app</span></button>
       <button type="button" class="start-button mode-button" id="start-group" data-mode="group" disabled
               title="The robots debate the topic with each other, and anyone in the room can join in at any time. Talking over a robot cuts it off. While the other mode runs, this switches at once.">
         <span class="mode-name">Group talk</span><span class="mode-sub">robots + people</span></button>
@@ -110,7 +115,7 @@
       <span class="save-state" id="save-state" role="status"></span>
       <span class="groups-summary" id="groups-summary"></span>
       <button type="button" class="ghost-button choir-button" id="choir-button" aria-pressed="false"
-              title="Choir: every robot says the same line at the same moment and moves the same way, as one voice. Press again to make them individuals. Used from the next Start.">Choir</button>
+              title="Choir: every robot says the same line at the same moment and moves the same way, as one voice; robots you tick later join it too. Press again to make them individuals. Used from the next Start.">Choir</button>
       <button type="button" class="ghost-button" id="groups-button"
               title="Put robots in groups: a group can talk as one voice, move as one, or both. Used from the next Start.">Groups&hellip;</button>
     </div>

@@ -81,19 +81,6 @@ svg {
 }
 .toggle input { accent-color: var(--blue); width: 16px; height: 16px; cursor: pointer; }
 
-/* The group conversation's door: the one solid button in the bar. */
-.group-hint { font-size: 13px; color: var(--muted); }
-.group-button {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: 36px; padding: 6px 14px;
-  border: 1px solid transparent; border-radius: var(--radius-sm);
-  color: #fff; background: var(--blue);
-  font-size: 14px; font-weight: 600; white-space: nowrap;
-  transition: background .2s;
-}
-.group-button:hover:not(:disabled) { background: var(--blue-dark); }
-.group-button:disabled { color: #90a0b5; background: var(--grey-light); border-color: var(--border); }
-
 .hub-link { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
 .hub-link .dot { background: #c2ccd9; }
 .hub-link.live .dot { background: var(--green); }

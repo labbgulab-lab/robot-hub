@@ -154,3 +154,46 @@ def test_a_talking_group_speaks_one_line_on_all_its_robots():
     asyncio.run(convo.speak(line, {"id": 1}, cut_by_people=False))
     assert sess.links["1"].played and sess.links["1"].played == sess.links["2"].played
     assert set(sess.ears.refs) == {"1", "2"}, "each robot's mic knows the line is ours"
+
+
+SIX = [{"key": k, "name": "reachy" + k, "character": "Reachy Mini " + k} for k in "123456"]
+
+
+def test_a_choir_takes_robots_ticked_after_it_was_switched_on():
+    """2026-11-03: Choir saved its members when pressed; reachy1 and reachy3,
+    ticked later, would have sat outside it. The page's Choir (id "choir",
+    also the old saved ones with no flag) is every robot at the table."""
+    saved = [{"id": "choir", "name": "Choir", "members": ["2", "3"], "talk": True, "move": True}]
+    seats = [dict(s) for s in SIX[:4]]          # 1 and 4 ticked after Choir was on
+    speakers, together, mirror = c.plan_groups(seats, c.clean_groups(saved))
+    assert [s["character"] for s in speakers] == ["Choir"]
+    assert together == {"1": ["1", "2", "3", "4"]}
+    assert mirror["4"] == ["1", "2", "3", "4"]
+
+
+def test_a_choir_shrinks_to_the_robots_at_the_table():
+    saved = [{"id": "choir", "name": "Choir", "members": list("123456"),
+              "talk": True, "move": True, "whole_table": True}]
+    seats = [dict(s) for s in SIX[:2]]
+    speakers, together, _ = c.plan_groups(seats, c.clean_groups(saved))
+    assert together == {"1": ["1", "2"]} and len(speakers) == 1
+
+
+def test_a_choir_leaves_robots_of_other_groups_alone():
+    groups = c.clean_groups([
+        {"id": "choir", "name": "Choir", "members": list("1234"), "whole_table": True},
+        {"id": "g2", "name": "Pair", "members": ["3", "4"]}])
+    assert groups[0]["members"] == ["1", "2"] and groups[1]["members"] == ["3", "4"]
+    seats = [dict(s) for s in SIX]
+    speakers, together, _ = c.plan_groups(seats, groups)
+    assert together == {"1": ["1", "2", "5", "6"], "3": ["3", "4"]}
+    assert [s["character"] for s in speakers] == ["Choir", "Pair"]
+
+
+def test_a_choir_edited_by_hand_is_an_ordinary_group():
+    groups = c.clean_groups([{"id": "choir", "name": "Choir", "members": ["1", "2"],
+                              "whole_table": False}])
+    seats = [dict(s) for s in SIX[:3]]
+    _, together, _ = c.plan_groups(seats, groups)
+    assert together == {"1": ["1", "2"]}, "robot 3 stays on its own"
+    assert c.clean_groups([{"id": "g1", "members": ["1", "2"]}])[0]["whole_table"] is False
