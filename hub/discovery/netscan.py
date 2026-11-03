@@ -54,6 +54,8 @@ MAX_CONCURRENCY = 64
 # How often a robot the sweep found is asked again, by address; well inside
 # discovery.lost_after_s (12 s).
 KNOWN_REFRESH_S = 3.0
+# Silent this many refreshes in a row (~9 s) before the sweep has to find it again.
+KNOWN_MISSES = 3
 PING_TIMEOUT_S = 2.0
 HTTP_TIMEOUT_S = 2.5
 BODY_LIMIT = 20000
@@ -78,6 +80,11 @@ class NetscanDetector:
         self.bus = bus
         self.on_found = on_found
         self._sem = asyncio.Semaphore(MAX_CONCURRENCY)
+        # The known-robot refresh has its own lane (and HTTP client): behind
+        # a nine-/24 sweep's pings in the shared one it waited past
+        # lost_after_s, and every card dropped off every round (2026-11-03).
+        self._known_sem = asyncio.Semaphore(8)
+        self._misses: dict[str, int] = {}    # refresh misses in a row, by address
         self._refused: set[str] = set()      # subnets already complained about
         self._nameless: set[str] = set()     # addresses already complained about
         self._robots: dict[str, Found] = {}  # Reachy / NAO / Pepper the sweep found, by address
@@ -108,8 +115,9 @@ class NetscanDetector:
         interval = max(1.0, float(self.config.discovery.netscan_interval_s))
         limits = httpx.Limits(max_connections=MAX_CONCURRENCY)
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_S, follow_redirects=True,
-                                     limits=limits) as client:
-            refresher = asyncio.create_task(self._refresh_known(client),
+                                     limits=limits) as client, \
+                httpx.AsyncClient(timeout=HTTP_TIMEOUT_S, follow_redirects=True) as known_client:
+            refresher = asyncio.create_task(self._refresh_known(known_client),
                                             name="discovery:netscan-known")
             try:
                 while True:
@@ -263,21 +271,35 @@ class NetscanDetector:
                                      return_exceptions=True)
         for found, ok in zip(known, alive):
             if ok is True:
+                self._misses.pop(found.address, None)
                 self._emit(found)
-            elif self._robots.get(found.address) is found:
-                # Gone or replaced: the full sweep finds it again, wherever it is.
+                continue
+            if self._robots.get(found.address) is not found:
+                continue
+            misses = self._misses.get(found.address, 0) + 1
+            if ok is False or misses >= KNOWN_MISSES:
+                # Replaced by another robot (False), or silent KNOWN_MISSES times
+                # in a row: the full sweep finds it again, wherever it is.
                 self._robots.pop(found.address, None)
+                self._misses.pop(found.address, None)
+            else:
+                self._misses[found.address] = misses
 
-    async def _still_there(self, client: Any, found: Found) -> bool:
+    async def _still_there(self, client: Any, found: Found) -> Optional[bool]:
+        """True: still there. False: another robot answers at that address.
+        None: no answer (one lost reply is not a lost robot)."""
         if found.type_id == "reachy_wireless":
-            status = await self._reachy_status(client, found.address)
-            return str((status or {}).get("hardware_id") or "") == found.meta.get("unit_id")
+            status = await self._reachy_status(client, found.address, self._known_sem)
+            if not status:
+                return None
+            return str(status.get("hardware_id") or "") == found.meta.get("unit_id")
         # NAO / Pepper: the port is enough between sweeps; the sweep itself
         # re-reads the identity (cached NAOQI_ID_TTL_S).
-        return await self._port_open(found.address, found.port)
+        return (await self._port_open(found.address, found.port, self._known_sem)) or None
 
-    async def _reachy_status(self, client: Any, ip: str) -> Optional[dict]:
-        async with self._sem:
+    async def _reachy_status(self, client: Any, ip: str,
+                             sem: Optional[asyncio.Semaphore] = None) -> Optional[dict]:
+        async with sem or self._sem:
             try:
                 response = await client.get(
                     "http://{}:{}/api/daemon/status".format(ip, REACHY_PORT))
@@ -286,8 +308,9 @@ class NetscanDetector:
                 return None
         return data if isinstance(data, dict) else None
 
-    async def _port_open(self, ip: str, port: int) -> bool:
-        async with self._sem:
+    async def _port_open(self, ip: str, port: int,
+                         sem: Optional[asyncio.Semaphore] = None) -> bool:
+        async with sem or self._sem:
             try:
                 _r, w = await asyncio.wait_for(asyncio.open_connection(ip, port), 1.5)
             except (OSError, asyncio.TimeoutError):

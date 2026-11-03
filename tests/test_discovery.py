@@ -207,7 +207,7 @@ def test_known_robots_are_refreshed_between_sweeps(config):
                        meta={"unit_id": "aaaa"})
     det._robots = {"10.0.0.5": here, "10.0.0.6": swapped}
 
-    async def status(client, ip):
+    async def status(client, ip, sem=None):
         # 10.0.0.6 now answers with another robot's id (DHCP gave it away)
         return {"hardware_id": "5488f5938df1c506" if ip == "10.0.0.5" else "bbbb"}
 
@@ -215,6 +215,59 @@ def test_known_robots_are_refreshed_between_sweeps(config):
     asyncio.run(det._refresh_once(None))
     assert found == [here]
     assert list(det._robots) == ["10.0.0.5"], "the gone one is left to the sweep"
+
+
+def test_the_refresh_does_not_wait_behind_the_sweep(config):
+    # 2026-11-03: a nine-/24 sweep held every slot of the shared semaphore
+    # with pings; the refresh waited past lost_after_s and every card dropped
+    # off every round.
+    import asyncio
+    from hub.discovery import netscan as NS
+
+    found = []
+    det = NS.NetscanDetector(config, EventBus(), found.append)
+    here = NS.Found(type_id="reachy_wireless", address="10.0.0.5", port=8000,
+                    meta={"unit_id": "5488f5938df1c506"})
+    det._robots = {"10.0.0.5": here}
+
+    class Reply:
+        status_code = 200
+
+        def json(self):
+            return {"hardware_id": "5488f5938df1c506"}
+
+    class Client:
+        async def get(self, url):
+            return Reply()
+
+    async def run():
+        for _ in range(NS.MAX_CONCURRENCY):
+            await det._sem.acquire()                # the sweep has every slot
+        await asyncio.wait_for(det._refresh_once(Client()), 1.0)
+
+    asyncio.run(run())
+    assert found == [here]
+
+
+def test_one_lost_reply_is_not_a_lost_robot(config):
+    import asyncio
+    from hub.discovery import netscan as NS
+
+    found = []
+    det = NS.NetscanDetector(config, EventBus(), found.append)
+    here = NS.Found(type_id="reachy_wireless", address="10.0.0.5", port=8000,
+                    meta={"unit_id": "5488f5938df1c506"})
+    det._robots = {"10.0.0.5": here}
+
+    async def silent(client, ip, sem=None):
+        return None
+
+    det._reachy_status = silent
+    for _ in range(NS.KNOWN_MISSES - 1):
+        asyncio.run(det._refresh_once(None))
+        assert "10.0.0.5" in det._robots
+    asyncio.run(det._refresh_once(None))
+    assert "10.0.0.5" not in det._robots, "silent KNOWN_MISSES times: left to the sweep"
 
 
 def test_furhat_fingerprint_needs_the_real_title():
