@@ -792,7 +792,13 @@ function fillSeatRow(row, seat, i) {
   row.style.setProperty('--seat-color', seatColor(seat));
   row.classList.toggle('excluded', !seat.included);
   row.querySelector('.seat-pos').textContent = String(i + 1);
-  row.querySelector('.seat-robot').textContent = seat.name || seat.key;
+  // The real robot name, small beside the label, whenever the label is
+  // something else ("Reachy Mini 1" on reachy6): who is who stays clear.
+  const real = row.querySelector('.seat-robot');
+  const robotName = str(seat.name || seat.key);
+  const squash = (t) => str(t).toLowerCase().replace(/[\s_-]+/g, '');
+  real.textContent = robotName;
+  real.hidden = !!seat.character && squash(seat.character) === squash(robotName);
 
   const a = S.available.find(x => x.key === seat.key);
   const stateEl = row.querySelector('.seat-state');

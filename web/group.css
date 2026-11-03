@@ -304,13 +304,19 @@
 .seat-add { margin-left: 4px; }
 
 .card-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--muted); }
-.seat-robot { font-weight: 650; color: var(--ink); }
+/* The robot's real name, as a tag under its label (hidden when the label is the name). */
+.card-meta .seat-robot {
+  flex-shrink: 0; white-space: nowrap;
+  font-size: 12px; font-weight: 650; color: var(--ink);
+  padding: 0 7px; border-radius: 999px; background: var(--grey-light); border: 1px solid var(--border);
+}
+.card-meta .seat-robot[hidden] { display: none; }
 .seat-state.ok { color: var(--blue); }
 .card-meta .level { flex: 1; min-width: 24px; max-width: 140px; margin-left: auto; }
 /* The robot's name and state never shrink; on a narrow card the seat
    buttons wrap under them instead. */
 .card-meta { flex-wrap: wrap; row-gap: 4px; }
-.card-meta .seat-robot, .card-meta .seat-state { white-space: nowrap; flex-shrink: 0; }
+.card-meta .seat-state { white-space: nowrap; flex-shrink: 0; }
 .card-meta .seat-order { flex-shrink: 0; margin-left: auto; }
 
 .card-checks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
