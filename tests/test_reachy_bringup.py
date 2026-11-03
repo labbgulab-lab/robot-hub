@@ -185,6 +185,28 @@ def test_an_open_lab_wifi_is_saved_with_an_empty_password(world, tmp_path):
     assert sent == ["root\n\n", "root\nhotpass12\n"]
 
 
+def test_set_up_on_the_open_lab_wifi_saves_it_once_as_main(world, tmp_path):
+    # 2026-11-03: the lab WiFi replaced the hotspot as the set-up network
+    details = {"name": "reachy4", "pollen_sn": "SN4", "hotspot": HOME["ssid"]}
+    ok = B.bring_up(_args(tmp_path), details, HOME, "pollen", "root",
+                    "", None, B.OPEN_WIFI, tmp_path, tmp_path / "python.exe")
+    assert ok and "lab_wifi" not in details
+    saves = [(cmd, s) for _ip, cmd, s in FakeRobot.log if s]
+    assert [s for _c, s in saves] == ["root\n\n"], "one save, open, no password"
+    assert details["hotspot"].endswith("(priority 0)")
+
+
+def test_a_big_network_is_searched_in_the_laptops_own_slash_24(monkeypatch):
+    import ipaddress
+    monkeypatch.setattr(B, "local_networks", lambda: [
+        (ipaddress.ip_network("172.19.0.0/16"), "172.19.84.41")])
+    asked = []
+    monkeypatch.setattr(B, "_port_open", lambda ip, timeout=0.8: asked.append(ip) or ip == "172.19.84.45")
+    monkeypatch.setattr(B, "daemon_status", lambda ip, timeout=3.0: {"hardware_id": HW})
+    assert list(B.sweep()) == ["172.19.84.45"]
+    assert len(asked) == 253 and "172.19.84.41" not in asked
+
+
 def test_a_robot_registered_under_another_name_is_refused(world, tmp_path, monkeypatch):
     world["on_hotspot"] = True
     world["version"] = "1.11.0"

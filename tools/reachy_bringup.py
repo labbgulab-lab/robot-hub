@@ -204,11 +204,17 @@ def version_tuple(v: str) -> tuple[int, ...]:
 
 
 def sweep() -> dict[str, dict]:
-    """ip -> daemon status for every Reachy daemon on this laptop's networks."""
+    """ip -> daemon status for every Reachy daemon on this laptop's networks.
+
+    A network bigger than a /24 (the lab WiFi is a /16) is searched only in
+    the laptop's own /24, as the hub does (hub/discovery/netscan.py)."""
     hosts: list[str] = []
     for network, own in local_networks():
-        if network.num_addresses <= 256 and network.version == 4:
-            hosts += [str(h) for h in network.hosts() if str(h) != own]
+        if network.version != 4:
+            continue
+        if network.num_addresses > 256:
+            network = ipaddress.ip_network("{}/24".format(own), strict=False)
+        hosts += [str(h) for h in network.hosts() if str(h) != own]
     found: dict[str, dict] = {}
     with cf.ThreadPoolExecutor(64) as pool:
         open_ = [h for h, up in zip(hosts, pool.map(_port_open, hosts)) if up]
@@ -385,6 +391,13 @@ def main() -> int:
     if lab_ssid and config.network.lab_wifi_open:
         lab_pass = OPEN_WIFI
     hot_pass = config.secret("HOTSPOT_PASSWORD")
+    # Set up on the lab WiFi itself (2026-11-03: the lab WiFi replaced the
+    # hotspot): one network, saved once, as the robot's main one -- not
+    # also as its -10 fallback.
+    home_is_lab = bool(hot_ssid) and hot_ssid == lab_ssid
+    if home_is_lab:
+        hot_pass = lab_pass
+        lab_ssid, lab_pass = "", None
     chat_root = config.path("reachy_wireless", "reachy_chat_path")
     chat_py = None
     if chat_root:
@@ -406,9 +419,12 @@ def main() -> int:
         notes.append("{} is already registered (unit {}): a re-run finishes its setup".format(
             args.name, next(k for k, v in known.items() if v == args.name)))
     if not hot_pass:
-        problems.append('HOTSPOT_PASSWORD is not in robot-hub/.env (the password of "{}")'.format(
+        problems.append('{} is not in robot-hub/.env (the password of "{}")'.format(
+            "LAB_WIFI_PASSWORD (or lab_wifi_open = true)" if home_is_lab else "HOTSPOT_PASSWORD",
             hot_ssid or "your hotspot"))
-    if not lab_ssid or not lab_pass:
+    if home_is_lab:
+        notes.append('set up on the lab WiFi "{}": saved as the robot\'s main network'.format(hot_ssid))
+    elif not lab_ssid or not lab_pass:
         notes.append("lab WiFi not set ([network] lab_wifi in config.toml + LAB_WIFI_PASSWORD "
                      "in .env, or lab_wifi_open = true): the robot will not learn it now")
     if not args.skip_app and not (chat_py and chat_py.exists()):
@@ -419,10 +435,12 @@ def main() -> int:
     if LOCK.exists():
         problems.append("another bring-up is running ({}); delete it if that is "
                         "stale".format(LOCK))
-    print("Hotspot: {}   (this laptop is on: {})".format(hot_ssid or "(not set)",
-                                                        here.get("ssid") or "no WiFi"))
-    print("Lab WiFi: {}{}".format(lab_ssid or "(not set)",
-                                  " (open, no password)" if lab_ssid and lab_pass is OPEN_WIFI else ""))
+    print("Set-up network: {}{}   (this laptop is on: {})".format(
+        hot_ssid or "(not set)", " (open, no password)" if hot_pass is OPEN_WIFI else "",
+        here.get("ssid") or "no WiFi"))
+    print("Lab WiFi: {}{}".format(
+        "same network" if home_is_lab else (lab_ssid or "(not set)"),
+        " (open, no password)" if lab_ssid and lab_pass is OPEN_WIFI else ""))
     for n in notes:
         print("note: " + n)
     for p in problems:
@@ -663,7 +681,7 @@ def via_access_point(args, details, home, user, login, lab_ssid, lab_pass, hot_p
                     details["hotspot"] = "{} (priority {})".format(home["ssid"], HOTSPOT_PRIORITY)
                     step("saved WiFi “{}”".format(home["ssid"]), True,
                          "no reply, but it joined it")
-                step("back on the hotspot", True, ip)
+                step("back on “{}”".format(home["ssid"]), True, ip)
                 return ip
         time.sleep(6)
 
@@ -678,7 +696,7 @@ def via_access_point(args, details, home, user, login, lab_ssid, lab_pass, hot_p
 
 
 def update_daemon(ip: str, details: dict) -> None:
-    status("update", message="updating the daemon from {} (10-30 min over a hotspot)".format(
+    status("update", message="updating the daemon from {} (10-30 min)".format(
         details["daemon"]))
     try:
         avail = get(ip, "/update/available")
