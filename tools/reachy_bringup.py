@@ -140,8 +140,54 @@ def wlan_now() -> dict[str, str]:
     return {"ssid": fields.get("ssid", ""), "profile": fields.get("profile", "")}
 
 
+def wlan_scan(wait: float = 4.0) -> None:
+    """Ask Windows to scan now (WlanScan). Without it, netsh shows a cached
+    list that a connected laptop may not refresh for minutes: on 2026-11-03
+    reachy8's reachy-mini-ap was up but the list held only the lab WiFi
+    until a scan was asked for. Best effort; any failure is ignored."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _Guid(ctypes.Structure):
+            _fields_ = [("d1", wintypes.DWORD), ("d2", wintypes.WORD),
+                        ("d3", wintypes.WORD), ("d4", ctypes.c_ubyte * 8)]
+
+        class _Iface(ctypes.Structure):
+            _fields_ = [("guid", _Guid), ("desc", ctypes.c_wchar * 256),
+                        ("state", wintypes.DWORD)]
+
+        class _List(ctypes.Structure):
+            _fields_ = [("n", wintypes.DWORD), ("i", wintypes.DWORD),
+                        ("items", _Iface * 1)]
+
+        api = ctypes.windll.wlanapi
+        handle, version = wintypes.HANDLE(), wintypes.DWORD()
+        if api.WlanOpenHandle(2, None, ctypes.byref(version), ctypes.byref(handle)):
+            return
+        try:
+            lst = ctypes.POINTER(_List)()
+            if api.WlanEnumInterfaces(handle, None, ctypes.byref(lst)):
+                return
+            n = lst.contents.n
+            items = ctypes.cast(ctypes.byref(lst.contents.items),
+                                ctypes.POINTER(_Iface * max(n, 1))).contents
+            for k in range(n):
+                api.WlanScan(handle, ctypes.byref(items[k].guid), None, None, None)
+            api.WlanFreeMemory(lst)
+        finally:
+            api.WlanCloseHandle(handle, None)
+        if n:
+            time.sleep(wait)
+    except Exception:
+        pass
+
+
 def wlan_visible() -> dict[str, str]:
     """ssid -> authentication, after asking Windows for a fresh list."""
+    wlan_scan()
     out: dict[str, str] = {}
     ssid = None
     for line in _netsh("show", "networks", "mode=bssid").splitlines():
@@ -441,6 +487,14 @@ def main() -> int:
     print("Lab WiFi: {}{}".format(
         "same network" if home_is_lab else (lab_ssid or "(not set)"),
         " (open, no password)" if lab_ssid and lab_pass is OPEN_WIFI else ""))
+    if sys.platform == "win32":
+        # A fresh scan every time (wlan_visible asks Windows for one): the
+        # cached list once hid a robot's reachy-mini-ap for 8 minutes.
+        seen = wlan_visible()
+        aps = [s for s in seen if s.lower().startswith(AP_PREFIX)]
+        print("WiFi scan (fresh, {} networks): {}".format(
+            len(seen), "{} IS UP -- a new robot is waiting".format(", ".join(aps)) if aps
+            else "no reachy-mini-ap (fine before the robot is switched on)"))
     for n in notes:
         print("note: " + n)
     for p in problems:
