@@ -4409,10 +4409,17 @@ class GroupManager:
     def premade_sig(self) -> str:
         st = self.cfg["settings"]
         seats = self.session.seats if self.session is not None else []
+        # The groups too (2026-11-03): a first line made while Choir was off
+        # was used after it was switched on, with the old plan (a laptop
+        # robot opened on its own instead of the Choir).
+        groups = [[g["id"], g["talk"], g["move"], g["whole_table"],
+                   [] if g["whole_table"] else g["members"]]
+                  for g in clean_groups(st.get("groups"))]
         return json.dumps([st.get("topic"), st.get("language"), st.get("lab_intro", True),
                            [[s["key"], s.get("character"), s.get("persona"),
                              s.get("voice_provider"), s.get("voice_id"), s.get("writer"),
-                             s.get("interrupt_level")] for s in seats]], ensure_ascii=False)
+                             s.get("interrupt_level")] for s in seats], groups],
+                          ensure_ascii=False)
 
     def drop_premade(self) -> None:
         made, self._premade = self._premade, None

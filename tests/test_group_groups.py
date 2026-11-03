@@ -197,3 +197,19 @@ def test_a_choir_edited_by_hand_is_an_ordinary_group():
     _, together, _ = c.plan_groups(seats, groups)
     assert together == {"1": ["1", "2"]}, "robot 3 stays on its own"
     assert c.clean_groups([{"id": "g1", "members": ["1", "2"]}])[0]["whole_table"] is False
+
+
+def test_a_first_line_made_ahead_is_not_used_after_the_groups_change():
+    """2026-11-03: a first line made while Choir was off was used after it
+    was switched on: a laptop robot opened on its own, not the Choir."""
+    import types
+    seats = [dict(s) for s in FOUR]
+    m = types.SimpleNamespace(cfg={"settings": {"topic": "x", "groups": []}},
+                              session=types.SimpleNamespace(seats=seats))
+    off = c.GroupManager.premade_sig(m)
+    m.cfg["settings"]["groups"] = [{"id": "choir", "name": "Choir", "members": ["1", "2"]}]
+    on = c.GroupManager.premade_sig(m)
+    assert on != off
+    # A Choir's saved member list does not matter (it is the whole table).
+    m.cfg["settings"]["groups"][0]["members"] = list("1234")
+    assert c.GroupManager.premade_sig(m) == on
