@@ -196,15 +196,18 @@ def test_set_up_on_the_open_lab_wifi_saves_it_once_as_main(world, tmp_path):
     assert details["hotspot"].endswith("(priority 0)")
 
 
-def test_a_big_network_is_searched_in_the_laptops_own_slash_24(monkeypatch):
+def test_a_big_network_is_searched_around_the_laptops_own_slash_24(monkeypatch):
+    # reachy8 came back at 172.19.85.33 with the laptop on 84.41 (2026-11-03)
     import ipaddress
     monkeypatch.setattr(B, "local_networks", lambda: [
         (ipaddress.ip_network("172.19.0.0/16"), "172.19.84.41")])
+    monkeypatch.setattr(B, "NEARBY_24S", 1)
     asked = []
-    monkeypatch.setattr(B, "_port_open", lambda ip, timeout=0.8: asked.append(ip) or ip == "172.19.84.45")
+    monkeypatch.setattr(B, "_port_open", lambda ip, timeout=0.8: asked.append(ip) or ip == "172.19.85.33")
     monkeypatch.setattr(B, "daemon_status", lambda ip, timeout=3.0: {"hardware_id": HW})
-    assert list(B.sweep()) == ["172.19.84.45"]
-    assert len(asked) == 253 and "172.19.84.41" not in asked
+    assert list(B.sweep()) == ["172.19.85.33"]
+    assert len(asked) == 3 * 254 - 1 and "172.19.84.41" not in asked
+    assert "172.19.86.1" not in asked
 
 
 def test_a_robot_registered_under_another_name_is_refused(world, tmp_path, monkeypatch):

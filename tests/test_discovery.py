@@ -155,13 +155,14 @@ def test_netscan_refuses_an_oversized_subnet(config):
     assert said.count("Not sweeping") == 1, "and say it once, not every cycle"
 
 
-def test_a_big_network_sweeps_the_laptops_own_slash_24(config, monkeypatch):
+def test_a_big_network_sweeps_the_laptops_own_slash_24_and_its_neighbours(config, monkeypatch):
     # 2026-11-03, the lab WiFi: a /16 that drops all multicast. The
-    # laptop was 172.19.84.41 and reachy6 172.19.84.45.
+    # laptop was 172.19.84.41, reachy6 172.19.84.45, reachy8 172.19.85.33.
     import ipaddress
     from hub.discovery import netscan as NS
 
     config.discovery.netscan_max_hosts = 256
+    config.discovery.netscan_nearby_24s = 2
     bus = EventBus()
     det = NS.NetscanDetector(config, bus, lambda f: None)
     monkeypatch.setattr(NS, "local_networks", lambda: [
@@ -170,16 +171,27 @@ def test_a_big_network_sweeps_the_laptops_own_slash_24(config, monkeypatch):
                                            address="172.19.200.7", port=8000, meta={})
 
     targets = det._targets()
-    assert "172.19.84.45" in targets
+    assert targets[0].startswith("172.19.84."), "its own /24 first"
+    assert "172.19.84.45" in targets and "172.19.85.33" in targets and "172.19.82.9" in targets
     assert "172.19.84.41" not in targets, "never itself"
-    assert "172.19.85.1" not in targets, "not the whole /16"
+    assert "172.19.87.1" not in targets and "172.19.81.1" not in targets, "not the whole /16"
     assert "172.19.200.7" in targets, "a robot found before is asked again"
-    assert len(targets) == 254
+    assert len(targets) == 5 * 254 - 1 + 1
     said = " ".join(e["text"] for e in bus.recent())
-    assert "sweeping 172.19.84.0/24" in said
+    assert "sweeping 172.19.82.0/24 to 172.19.86.0/24" in said
 
     det._targets()
     assert " ".join(e["text"] for e in bus.recent()).count("Not sweeping all") == 1
+
+
+def test_the_neighbourhood_stays_inside_the_network():
+    import ipaddress
+    from hub.discovery.netscan import _neighbourhood
+
+    net = ipaddress.ip_network("10.0.0.0/22")              # 10.0.0.x - 10.0.3.x
+    blocks = [str(b) for b in _neighbourhood(net, "10.0.0.7", 4)]
+    assert blocks == ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+    assert _neighbourhood(ipaddress.ip_network("10.0.0.0/24"), "10.0.0.7", 4) == []
 
 
 def test_known_robots_are_refreshed_between_sweeps(config):

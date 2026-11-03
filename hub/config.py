@@ -47,6 +47,9 @@ class DiscoveryCfg(BaseModel):
     netscan: bool = True
     # netscan refuses anything larger than /24 unless widened here (6)
     netscan_max_hosts: int = 256
+    # on a network bigger than that: this laptop's /24 plus this many /24s on
+    # each side (DHCP on a big lab WiFi spreads robots over neighbouring /24s)
+    netscan_nearby_24s: int = 4
     netscan_interval_s: float = 5.0
     selfnet_interval_s: float = 3.0
     lost_after_s: float = 12.0

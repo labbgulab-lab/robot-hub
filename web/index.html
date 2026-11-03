@@ -98,7 +98,7 @@
         <li>Every robot in the lab is on <strong class="lab-name">the lab WiFi</strong>. It has internet. No phone hotspot is needed.</li>
         <li>Connect <strong>this laptop</strong> to it, then press <em>Check again</em>.
           Switch off auto-join for other WiFi (e.g. campus), or the laptop will wander off mid-session.</li>
-        <li>Robots appear as cards within about 20 seconds. This network does not pass the robots' own name announcements (mDNS), so the hub looks for them by address, on this laptop's part of the network.</li>
+        <li>Robots appear as cards within about half a minute. This network does not pass the robots' own name announcements (mDNS), so the hub looks for them by address, in this laptop's part of the network.</li>
       </ul>
 
       <h3 class="setup-h">2. Put each robot on <span class="lab-name">the lab WiFi</span> (once per robot)</h3>
@@ -136,7 +136,7 @@
       </details>
 
       <h3 class="setup-h">3. Check</h3>
-      <p class="keys-note">A robot that has joined appears as a card below within about 20 seconds, and its address starts with the same numbers as this laptop's. Not there? Press <em>Scan now</em>, and power-cycle the robot. A robot whose address differs from this laptop's in the third number too (e.g. <code>…85.x</code> next to the laptop's <code>…84.x</code>) is outside the part of the network the hub searches.</p>
+      <p class="keys-note">A robot that has joined appears as a card below within about half a minute. Its address starts with the same two numbers as this laptop's, and the third is close (e.g. <code>…85.x</code> next to the laptop's <code>…84.x</code>). Not there? Press <em>Scan now</em>, and power-cycle the robot. The hub searches 4 numbers on each side of the laptop's third number (<code>netscan_nearby_24s</code> in config.toml); a robot further away needs that raised.</p>
 
       <details class="setup-robot">
         <summary>Outside the lab: a phone hotspot</summary>

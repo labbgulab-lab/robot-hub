@@ -17,9 +17,11 @@ Identity is the MAC from the ARP table, never the IP: within one hour on
 dropped -- a card keyed on an address would be worse than no card.
 
 **Big networks.** A network larger than `discovery.netscan_max_hosts` is not
-swept whole: the laptop's own /24 inside it is. The lab WiFi is a /16
-that drops all multicast, so mDNS finds nothing there; DHCP put the laptop and
-reachy6 in the same /24 (172.19.84.x, 2026-11-03).
+swept whole: the laptop's own /24 inside it is, plus
+`discovery.netscan_nearby_24s` /24s on each side. The lab WiFi is a /16 that
+drops all multicast, so mDNS finds nothing there. DHCP hands out several
+neighbouring /24s: on 2026-11-03 the laptop was 172.19.84.41, reachy6 and
+reachy7 84.x, reachy8 85.33, and live devices sat in 80.x-85.x.
 
 **Robots already found** are re-checked directly every `KNOWN_REFRESH_S`. A
 ping-gated /24 sweep takes longer than `discovery.lost_after_s`, so without
@@ -131,12 +133,14 @@ class NetscanDetector:
         for network, own in local_networks():
             hosts = max(network.num_addresses - 2, 1)
             if hosts > limit:
-                near = _neighbourhood(network, own)
-                if near is None or near.num_addresses - 2 > limit:
+                near = _neighbourhood(network, own, self.config.discovery.netscan_nearby_24s)
+                if not near or 254 > limit:
                     self._refuse(network, hosts)
                     continue
                 self._refuse(network, hosts, near)
-                network = near
+                for block in near:
+                    targets += [str(h) for h in block.hosts() if str(h) != own]
+                continue
             targets += [str(h) for h in network.hosts() if str(h) != own]
         # A robot found before is asked again even if it now sits outside
         # what is swept (it can only have come from a sweep, so it is local).
@@ -333,13 +337,17 @@ class NetscanDetector:
                 "discovery.netscan_max_hosts ({}). Raise that setting, or put the "
                 "robot on a smaller subnet.".format(text, hosts, limit))
             return
+        first, last = min(near, key=lambda b: b.network_address), max(
+            near, key=lambda b: b.network_address)
+        span = str(first) if len(near) == 1 else "{} to {}".format(first, last)
         self.bus.emit_log(
             "info",
             "Not sweeping all of {} ({} hosts is more than "
             "discovery.netscan_max_hosts, {}): sweeping {}, this laptop's part of "
-            "it, for robots that mDNS cannot reach. A robot elsewhere in {} still "
-            "appears through mDNS if this network passes it.".format(
-                text, hosts, limit, near, text))
+            "it (discovery.netscan_nearby_24s = {} on each side), for robots that "
+            "mDNS cannot reach. A robot elsewhere in {} still appears through "
+            "mDNS if this network passes it.".format(
+                text, hosts, limit, span, self.config.discovery.netscan_nearby_24s, text))
 
     def _emit(self, found: Found) -> None:
         try:
@@ -457,11 +465,24 @@ def _arp_from_proc() -> dict[str, str]:
     return table
 
 
-def _neighbourhood(network: Any, own: str) -> Optional[Any]:
-    """The laptop's own /24 inside a bigger network; None if it is not bigger."""
+def _neighbourhood(network: Any, own: str, radius: int = 0) -> list[Any]:
+    """The laptop's own /24 inside a bigger network, then the `radius` /24s on
+    each side of it, nearest first (all inside `network`). Empty if the
+    network is not bigger than a /24."""
     if network.prefixlen >= 24:
-        return None
-    return ipaddress.ip_network("{}/24".format(own), strict=False)
+        return []
+    home = ipaddress.ip_network("{}/24".format(own), strict=False)
+    blocks = [home]
+    for step in range(1, max(0, radius) + 1):
+        for sign in (1, -1):
+            try:
+                block = ipaddress.ip_network(
+                    (int(home.network_address) + sign * step * 256, 24))
+            except ValueError:
+                continue
+            if block.subnet_of(network):
+                blocks.append(block)
+    return blocks
 
 
 def _page_id(body: str) -> Optional[str]:

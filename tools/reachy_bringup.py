@@ -55,7 +55,9 @@ from hub.adapters.reachy_wireless import (DEFAULT_SSH_PASSWORD,  # noqa: E402
                                           DEFAULT_SSH_USER, ROBOT_READY_CHECK,
                                           _ssh_run)
 from hub.config import load_config  # noqa: E402
-from hub.discovery.netscan import local_networks  # noqa: E402
+from hub.discovery.netscan import _neighbourhood, local_networks  # noqa: E402
+
+NEARBY_24S = 4      # the hub's discovery.netscan_nearby_24s default
 
 OUT_DIR = REPO_ROOT / "logs" / "bringup"
 STATUS = OUT_DIR / "status.json"
@@ -252,15 +254,19 @@ def version_tuple(v: str) -> tuple[int, ...]:
 def sweep() -> dict[str, dict]:
     """ip -> daemon status for every Reachy daemon on this laptop's networks.
 
-    A network bigger than a /24 (the lab WiFi is a /16) is searched only in
-    the laptop's own /24, as the hub does (hub/discovery/netscan.py)."""
+    A network bigger than a /24 (the lab WiFi is a /16) is searched in the
+    laptop's own /24 and NEARBY_24S /24s on each side, as the hub does
+    (hub/discovery/netscan.py): reachy8 got 172.19.85.33 while the laptop
+    had 84.41 (2026-11-03)."""
     hosts: list[str] = []
     for network, own in local_networks():
         if network.version != 4:
             continue
+        blocks = [network]
         if network.num_addresses > 256:
-            network = ipaddress.ip_network("{}/24".format(own), strict=False)
-        hosts += [str(h) for h in network.hosts() if str(h) != own]
+            blocks = _neighbourhood(network, own, NEARBY_24S)
+        for block in blocks:
+            hosts += [str(h) for h in block.hosts() if str(h) != own]
     found: dict[str, dict] = {}
     with cf.ThreadPoolExecutor(64) as pool:
         open_ = [h for h, up in zip(hosts, pool.map(_port_open, hosts)) if up]
