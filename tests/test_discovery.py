@@ -156,7 +156,7 @@ def test_netscan_refuses_an_oversized_subnet(config):
 
 
 def test_a_big_network_sweeps_the_laptops_own_slash_24(config, monkeypatch):
-    # 2026-11-03, the lab's HOT-WiFi: a /16 that drops all multicast. The
+    # 2026-11-03, the lab WiFi: a /16 that drops all multicast. The
     # laptop was 172.19.84.41 and reachy6 172.19.84.45.
     import ipaddress
     from hub.discovery import netscan as NS

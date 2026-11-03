@@ -109,6 +109,29 @@ def test_bad_input_never_reaches_the_robot(ssid, password, why):
     assert robot.calls == []
 
 
+def test_an_open_lab_wifi_travels_with_an_empty_password():
+    # 2026-11-03: the lab WiFi has no password at all.
+    robot = Robot("CURRENT Tomer Iphone\nSEEN yes\nACTION saved\nMOVE no\n")
+    msg = W.teach(robot, "root", "Open Lab", "", True, "reachy6", open_network=True)
+    assert "as the lab WiFi" in msg
+    assert robot.calls[0][1] == "root\n\n"
+    assert robot.calls[0][0].endswith("hubwifi 'Open Lab' -10 0")
+
+
+def test_an_open_network_takes_no_password_and_others_need_one():
+    with pytest.raises(RuntimeError, match="leave the password empty"):
+        W.check("Open Lab", "secretpass1", open_network=True)
+    with pytest.raises(RuntimeError, match="8 to 63"):
+        W.check("Open Lab", "")              # not marked open: still refused
+
+
+def test_the_robot_script_saves_an_empty_password_as_open():
+    # an empty PSK must drop the security block, not save `wifi-sec.psk ""`
+    assert 'SEC=()' in W.ROBOT_SCRIPT
+    assert 'remove 802-11-wireless-security' in W.ROBOT_SCRIPT
+    assert W.ROBOT_SCRIPT.count('"${SEC[@]}"') == 2
+
+
 def test_the_network_panel_accepts_the_lab_wifi(monkeypatch):
     monkeypatch.setattr(wifi.sys, "platform", "win32")
     monkeypatch.setattr(wifi, "_run", lambda argv, timeout=8.0: (

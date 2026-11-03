@@ -17,7 +17,7 @@ Identity is the MAC from the ARP table, never the IP: within one hour on
 dropped -- a card keyed on an address would be worse than no card.
 
 **Big networks.** A network larger than `discovery.netscan_max_hosts` is not
-swept whole: the laptop's own /24 inside it is. The lab's HOT-WiFi is a /16
+swept whole: the laptop's own /24 inside it is. The lab WiFi is a /16
 that drops all multicast, so mDNS finds nothing there; DHCP put the laptop and
 reachy6 in the same /24 (172.19.84.x, 2026-11-03).
 

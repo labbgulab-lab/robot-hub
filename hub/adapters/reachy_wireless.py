@@ -39,6 +39,7 @@ Settings read from `[robots.reachy_wireless.settings]`:
 from __future__ import annotations
 
 import asyncio
+import functools
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -439,8 +440,12 @@ class ReachyWirelessAdapter(RobotAdapter):
         def run(command: str, stdin_text: Optional[str], timeout_s: float):
             return _ssh_run(host, user, login, command, timeout_s, stdin_text)
 
+        network = self.config.network
+        open_network = bool(lab and network.lab_wifi_open and network.lab_wifi
+                            and (ssid or "").strip() == network.lab_wifi)
         return await thread_finishing_on_cancel(
-            reachy_wifi.teach, run, login, ssid, password, lab, self.display_name,
+            functools.partial(reachy_wifi.teach, open_network=open_network),
+            run, login, ssid, password, lab, self.display_name,
             timeout_s=60.0 + reachy_wifi.WATCH_S + 30)
 
     async def _ssh(self, command: str, timeout_s: float = SSH_TIMEOUT_S,

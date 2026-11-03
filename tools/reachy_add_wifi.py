@@ -64,6 +64,9 @@ def main() -> int:
     ap.add_argument("--host", help="the robot's address (default: find it over mDNS)")
     ap.add_argument("--lab", action="store_true",
                     help="save it as the lab WiFi: the fallback, never preferred; no move")
+    ap.add_argument("--open", action="store_true",
+                    help="the WiFi has no password (automatic for the lab WiFi when "
+                         "[network] lab_wifi_open = true)")
     args = ap.parse_args()
 
     config = load_config()
@@ -78,8 +81,10 @@ def main() -> int:
     user = str(robot.settings.get("ssh_user") or DEFAULT_SSH_USER)
     login = str(robot.settings.get("ssh_password") or config.secret("REACHY_SSH_PASSWORD")
                 or DEFAULT_SSH_PASSWORD)
-    password = os.environ.get("REACHY_WIFI_PASSWORD") or getpass.getpass(
-        'Password for "{}": '.format(args.ssid))
+    open_network = args.open or (config.network.lab_wifi_open
+                                 and args.ssid == config.network.lab_wifi)
+    password = "" if open_network else (os.environ.get("REACHY_WIFI_PASSWORD")
+                                        or getpass.getpass('Password for "{}": '.format(args.ssid)))
 
     def run(command, stdin_text, timeout_s):
         return _ssh_run(host, user, login, command, timeout_s, stdin_text)
@@ -88,7 +93,8 @@ def main() -> int:
         name, host, "saving the lab WiFi" if lab else "joining", args.ssid,
         "" if lab else " (up to a minute; keep that hotspot on)"), flush=True)
     try:
-        print(plain(reachy_wifi.teach(run, login, args.ssid, password, lab, name)))
+        print(plain(reachy_wifi.teach(run, login, args.ssid, password, lab, name,
+                                      open_network=open_network)))
     except Exception as exc:  # noqa: BLE001
         print(plain("Failed: {}".format(exc)), file=sys.stderr)
         return 1

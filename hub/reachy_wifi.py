@@ -45,13 +45,16 @@ POLL_S = 4.0
 
 # $1 ssid  $2 priority  $3 move: "1" = now if in range, "2" = now even unseen
 # (bring-up: a robot hosting its own reachy-mini-ap cannot scan), "0" = never.
-# stdin: sudo password, then the WiFi password, one per line.
+# stdin: sudo password, then the WiFi password, one per line. An empty WiFi
+# password saves an open network (no security); check() only lets that
+# through when the caller said the network is open.
 ROBOT_SCRIPT = r"""
 set -u
 IFS= read -r SPW || true
 IFS= read -r PSK || true
 SSID=$1; PRIO=$2; SWITCH=$3
 nm() { printf '%s\n' "$SPW" | sudo -S -p '' nmcli "$@"; }
+if [ -n "$PSK" ]; then SEC=(wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK"); else SEC=(); fi
 # nmcli -t escapes '\' and ':' inside a field
 ESC=${SSID//\\/\\\\}; ESC=${ESC//:/\\:}
 
@@ -78,13 +81,14 @@ fi
 
 NEW=old
 if [ -n "$PROFILE" ]; then
-  nm connection modify uuid "$PROFILE" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK" \
+  [ -z "$PSK" ] && nm connection modify uuid "$PROFILE" remove 802-11-wireless-security >/dev/null 2>&1
+  nm connection modify uuid "$PROFILE" "${SEC[@]}" \
      connection.autoconnect yes connection.autoconnect-priority "$PRIO" \
      || { echo "ERR NetworkManager would not update it"; exit 4; }
   ACTION=updated
 else
   OUT=$(nm connection add type wifi con-name "$SSID" ifname "$DEV" ssid "$SSID" \
-        wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK" \
+        "${SEC[@]}" \
         connection.autoconnect yes connection.autoconnect-priority "$PRIO" 2>&1) \
      || { echo "ERR NetworkManager would not save it: $OUT"; exit 4; }
   PROFILE=$(printf '%s' "$OUT" | sed -n 's/.*(\([0-9a-f-]\{36\}\)).*/\1/p')
@@ -119,12 +123,17 @@ echo "MOVE $MOVE"
 Runner = Callable[[str, Optional[str], float], "tuple[int, str]"]
 
 
-def check(ssid: str, password: str) -> str:
+def check(ssid: str, password: str, open_network: bool = False) -> str:
     ssid = (ssid or "").strip()
     if not ssid or len(ssid.encode("utf-8")) > 32:
         raise RuntimeError("a WiFi name has 1 to 32 characters")
     if ssid == "Hotspot" or ssid == "reachy-mini-ap":
         raise RuntimeError("that is the robot's own setup network")
+    if open_network:
+        if password:
+            raise RuntimeError("“{}” is set up as an open WiFi: leave the password "
+                               "empty".format(ssid))
+        return ssid
     if not 8 <= len(password or "") <= 63:
         raise RuntimeError("a WiFi password has 8 to 63 characters")
     if "\n" in password or "\r" in password:
@@ -153,13 +162,15 @@ def parse(output: str) -> dict[str, str]:
 
 def teach(run: Runner, sudo_password: str, ssid: str, password: str,
           lab: bool = False, name: str = "The robot", *,
+          open_network: bool = False,
           sleep: Callable[[float], None] = time.sleep,
           clock: Callable[[], float] = time.monotonic) -> str:
     """Blocking; call through a thread. Returns a sentence for the card,
-    raises RuntimeError with one otherwise."""
-    ssid = check(ssid, password)
+    raises RuntimeError with one otherwise. `open_network`: the WiFi has no
+    password (config [network] lab_wifi_open for the lab WiFi)."""
+    ssid = check(ssid, password, open_network)
     status, output = run(command(ssid, lab),
-                         "{}\n{}\n".format(sudo_password, password), 60.0)
+                         "{}\n{}\n".format(sudo_password, "" if open_network else password), 60.0)
     info = parse(output)
     if info.get("ERR"):
         raise RuntimeError(info["ERR"])

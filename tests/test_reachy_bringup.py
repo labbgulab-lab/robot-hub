@@ -178,6 +178,13 @@ def test_without_a_lab_wifi_only_the_hotspot_is_saved(world, tmp_path):
     assert [s for _ip, _c, s in FakeRobot.log if s] == ["root\nhotpass12\n"]
 
 
+def test_an_open_lab_wifi_is_saved_with_an_empty_password(world, tmp_path):
+    ok, d = _run(tmp_path, lab=("Open Lab", B.OPEN_WIFI))
+    assert ok and d["lab_wifi"] == "Open Lab (priority -10)"
+    sent = [s for _ip, _c, s in FakeRobot.log if s]
+    assert sent == ["root\n\n", "root\nhotpass12\n"]
+
+
 def test_a_robot_registered_under_another_name_is_refused(world, tmp_path, monkeypatch):
     world["on_hotspot"] = True
     world["version"] = "1.11.0"

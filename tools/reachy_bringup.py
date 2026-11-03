@@ -24,7 +24,8 @@ What it does:
 
 Settings: the hotspot is config.toml [network] hotspot (the laptop must be on
 it when this starts), its password HOTSPOT_PASSWORD in .env. The lab WiFi is config.toml [network]
-lab_wifi, its password LAB_WIFI_PASSWORD in .env; without them that step is
+lab_wifi, its password LAB_WIFI_PASSWORD in .env (or lab_wifi_open = true for
+a WiFi with no password); without them that step is
 skipped with a warning. Progress: logs/bringup/status.json and the log next to it.
 """
 
@@ -67,7 +68,10 @@ AP_ADDRESS = "10.42.0.1"
 DEFAULT_AP_PASSWORD = "reachy-mini"
 DAEMON_PORT = 8000
 MIN_DAEMON = (1, 11, 0)              # what reachy1-3 run; older lacks BLE provisioning
-HOTSPOT_PRIORITY = 0                 # lab members' hotspots get 10, the lab WiFi -10
+# Stands in for the lab WiFi's password when [network] lab_wifi_open is set:
+# truthy, so "is there a lab WiFi?" stays one test, and never a real password.
+OPEN_WIFI: Any = object()
+HOTSPOT_PRIORITY = 0                # lab members' hotspots get 10, the lab WiFi -10
 UPDATE_WAIT_S = 35 * 60
 NAME_RE = re.compile(r"^reachy(\d+)$")
 
@@ -378,6 +382,8 @@ def main() -> int:
     hot_ssid = config.network.hotspot
     lab_ssid = config.network.lab_wifi
     lab_pass = config.secret("LAB_WIFI_PASSWORD")
+    if lab_ssid and config.network.lab_wifi_open:
+        lab_pass = OPEN_WIFI
     hot_pass = config.secret("HOTSPOT_PASSWORD")
     chat_root = config.path("reachy_wireless", "reachy_chat_path")
     chat_py = None
@@ -404,7 +410,7 @@ def main() -> int:
             hot_ssid or "your hotspot"))
     if not lab_ssid or not lab_pass:
         notes.append("lab WiFi not set ([network] lab_wifi in config.toml + LAB_WIFI_PASSWORD "
-                     "in .env): the robot will not learn it now")
+                     "in .env, or lab_wifi_open = true): the robot will not learn it now")
     if not args.skip_app and not (chat_py and chat_py.exists()):
         problems.append("reachy_chat's venv python not found at {} -- set reachy_chat_path "
                         "or use --skip-app".format(chat_py))
@@ -415,7 +421,8 @@ def main() -> int:
                         "stale".format(LOCK))
     print("Hotspot: {}   (this laptop is on: {})".format(hot_ssid or "(not set)",
                                                         here.get("ssid") or "no WiFi"))
-    print("Lab WiFi: {}".format(lab_ssid or "(not set)"))
+    print("Lab WiFi: {}{}".format(lab_ssid or "(not set)",
+                                  " (open, no password)" if lab_ssid and lab_pass is OPEN_WIFI else ""))
     for n in notes:
         print("note: " + n)
     for p in problems:
@@ -561,9 +568,11 @@ class NoReply(RuntimeError):
 
 def save_wifi(robot: Robot, login: str, ssid: str, password: str, priority: int,
               move: str, details: dict, key: str) -> dict:
+    # OPEN_WIFI travels as an empty password: the robot saves an open network.
+    secret = "" if password is OPEN_WIFI else password
     try:
         rc, out = robot.run(reachy_wifi.command(ssid, lab=False, priority=priority, move=move),
-                            "{}\n{}\n".format(login, password), 60.0)
+                            "{}\n{}\n".format(login, secret), 60.0)
     except Exception as exc:  # noqa: BLE001 -- the SSH session itself broke
         raise NoReply("the robot stopped answering while saving “{}” ({})".format(ssid, exc))
     if not out.strip():

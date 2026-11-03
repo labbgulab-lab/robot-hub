@@ -33,6 +33,9 @@ class NetworkCfg(BaseModel):
     # lab member hands a robot their hotspot (hub/reachy_wifi.py). Its name
     # lives here, in the git-ignored config.toml, not in the public repo.
     lab_wifi: str = ""
+    # true when the lab WiFi has no password (2026-11-03): robots
+    # save it as an open network and LAB_WIFI_PASSWORD is not needed.
+    lab_wifi_open: bool = False
     # The hotspot every new robot is set up on (tools/reachy_bringup.py);
     # its password is HOTSPOT_PASSWORD in .env.
     hotspot: str = ""
