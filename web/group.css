@@ -57,6 +57,13 @@
   .convo, .robots { min-height: 0; display: flex; flex-direction: column; }
   .transcript { flex: 1; min-height: 0; }
   .cards { flex: 1; min-height: 0; overflow-y: auto; }
+  /* Six robots or more (two rows): the page grows and scrolls instead, so
+     every card shows whole -- in a fixed-height box the second row was cut
+     off (2026-11-03, nine robots). Back to one screen at five or fewer. */
+  html[data-two-rows], html[data-two-rows] body.group-page { height: auto; overflow: visible; }
+  html[data-two-rows] body.group-page { display: block; }
+  html[data-two-rows] .cards { flex: none; overflow: visible; grid-auto-rows: auto; }
+  html[data-two-rows] .transcript { flex: none; height: clamp(260px, 54vh, 680px); }
 }
 
 /* ------------------------------------------------------------------ stage */
@@ -269,7 +276,8 @@
   transition: box-shadow .2s, background .2s;
 }
 .card.speaking { background: #f7faff; box-shadow: 0 0 0 3px var(--blue-ring); border-color: #8eb4f6; border-top-color: var(--seat-color, var(--blue)); }
-.card.excluded > :not(.card-head):not(.card-checks) { opacity: .45; }
+.card.excluded > :not(.card-head):not(.card-checks):not(.card-meta),
+.card.excluded .card-meta > :not(.seat-order) { opacity: .45; }
 
 .card-head { display: flex; align-items: center; gap: 8px; }
 .seat-pos {
@@ -298,7 +306,12 @@
 .card-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--muted); }
 .seat-robot { font-weight: 650; color: var(--ink); }
 .seat-state.ok { color: var(--blue); }
-.card-meta .level { flex: 1; min-width: 30px; max-width: 140px; margin-left: auto; }
+.card-meta .level { flex: 1; min-width: 24px; max-width: 140px; margin-left: auto; }
+/* The robot's name and state never shrink; on a narrow card the seat
+   buttons wrap under them instead. */
+.card-meta { flex-wrap: wrap; row-gap: 4px; }
+.card-meta .seat-robot, .card-meta .seat-state { white-space: nowrap; flex-shrink: 0; }
+.card-meta .seat-order { flex-shrink: 0; margin-left: auto; }
 
 .card-checks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; cursor: pointer; }

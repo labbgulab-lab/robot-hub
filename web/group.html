@@ -196,18 +196,20 @@
       <span class="seat-pos">1</span>
       <input class="seat-character" type="text" dir="auto" placeholder="Reachy Mini 1" aria-label="Label" maxlength="30"
              title="This robot's label in the transcript and for the writer. It is never said aloud.">
+    </div>
+    <p class="name-warn hidden">Another robot has this label.</p>
+    <!-- The seat buttons share this line so the label above gets the card's
+         whole width (with them beside it, "Reachy Mini 6" showed as "Reachy"). -->
+    <div class="card-meta">
+      <span class="seat-robot">robot</span>
+      <span class="seat-state">Not connected</span>
+      <span class="level" title="Microphone level"><span class="level-fill"></span></span>
       <div class="seat-order">
         <button type="button" class="seat-move" data-move="-1" title="Move one seat to the left" aria-label="Move left">&lsaquo;</button>
         <button type="button" class="seat-move" data-move="1" title="Move one seat to the right" aria-label="Move right">&rsaquo;</button>
         <button type="button" class="seat-move seat-add" aria-label="Add a robot">+</button>
         <button type="button" class="seat-move seat-remove" aria-label="Remove this robot">&times;</button>
       </div>
-    </div>
-    <p class="name-warn hidden">Another robot has this label.</p>
-    <div class="card-meta">
-      <span class="seat-robot">robot</span>
-      <span class="seat-state">Not connected</span>
-      <span class="level" title="Microphone level"><span class="level-fill"></span></span>
     </div>
     <div class="card-checks">
       <label class="check" title="Takes part in the conversation. Untick to leave this robot out; it stays connected to the hub. Fixed until Disconnect."><input type="checkbox" class="seat-included"> Included</label>

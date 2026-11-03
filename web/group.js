@@ -756,6 +756,8 @@ function renderSeats() {
   seatList.toggleAttribute('data-many', n >= 4);
   seatList.closest('.board').toggleAttribute('data-many', n >= 4);
   seatList.closest('.board').dataset.robots = String(n);
+  // Two rows of cards do not fit one screen: let the page grow (group.css).
+  document.documentElement.toggleAttribute('data-two-rows', n > 5);
   seatsEmpty.classList.toggle('hidden', n > 0);
   paintLevels();
   renderSpeaking();
