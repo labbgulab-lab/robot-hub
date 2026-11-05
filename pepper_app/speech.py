@@ -44,6 +44,21 @@ QUICK_PHRASES = [
 ]
 
 
+def _http_error(status: int, body: str) -> str:
+    """One plain line for a failed OpenAI speech call (never raw JSON)."""
+    if status in (401, 403):
+        return "GPT key rejected (HTTP {}): check the key on the Pepper card".format(status)
+    msg = ""
+    try:
+        import json
+        err = json.loads(body, strict=False).get("error")
+        msg = err.get("message", "") if isinstance(err, dict) else str(err or "")
+    except Exception:  # noqa: BLE001
+        msg = body
+    msg = " ".join(str(msg).split())[:160]
+    return "OpenAI speech failed (HTTP {}){}".format(status, ": " + msg if msg else "")
+
+
 def is_hebrew(text: str) -> bool:
     return bool(HEBREW.search(text or ""))
 
@@ -84,7 +99,7 @@ class Speech:
                                         "instructions": "Speak warmly and clearly, like a friendly robot "
                                                         "talking to visitors. Natural pace."})
         if r.status_code != 200:
-            raise RuntimeError("OpenAI speech failed: HTTP {} {}".format(r.status_code, r.text[:160]))
+            raise RuntimeError(_http_error(r.status_code, r.text))
         pcm = r.content[: len(r.content) & ~1]
         self._store(path, pcm)
         return pcm
@@ -103,7 +118,7 @@ class Speech:
                 await self.synth(p, voice, provider)
                 ready += 1
             except Exception as exc:  # noqa: BLE001
-                log.info("could not pre-make a quick phrase: %s", exc)
+                log.warning("could not pre-make a quick phrase: %s", exc)
                 break
             await asyncio.sleep(0)
         return ready

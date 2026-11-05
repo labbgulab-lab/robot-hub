@@ -16,10 +16,14 @@ request comes from this laptop and names it as the host.
 from __future__ import annotations
 
 import asyncio
+import atexit
 import collections
 import json
 import logging
 import os
+import socket
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -43,6 +47,101 @@ LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 WALK_LINES = {"he": "אני צריך למתוח קצת את הרגליים, יוצא להליכה.",
               "en": "I need to stretch my legs, going for a walk."}
 TABLET_RESHOW_S = 20.0
+# Names shown in the chat for the dashboard's move buttons (ids are internal).
+MOVE_LABELS = {"walk": "walking", "wave": "wave", "yes": "nod yes", "no": "shake no",
+               "arms_up": "both arms up", "arms_wide": "arms wide", "right_arm_up": "right arm up",
+               "left_arm_up": "left arm up", "hands": "open/close hands"}
+_rehearsal: dict = {}
+
+
+def _kill_on_close_job():
+    """A Windows job object that kills its processes when its handle closes,
+    which also happens when this process dies, even on a hard terminate (the
+    hub stops pepper_app that way). No admin needed. None elsewhere or on error."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes as w
+
+        class Basic(ctypes.Structure):
+            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                        ("LimitFlags", w.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", w.DWORD),
+                        ("Affinity", ctypes.c_size_t), ("PriorityClass", w.DWORD), ("SchedulingClass", w.DWORD)]
+
+        class IoCounters(ctypes.Structure):
+            _fields_ = [(n, ctypes.c_uint64) for n in ("r", "w", "o", "rb", "wb", "ob")]
+
+        class Extended(ctypes.Structure):
+            _fields_ = [("Basic", Basic), ("Io", IoCounters), ("ProcessMemoryLimit", ctypes.c_size_t),
+                        ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                        ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateJobObjectW.restype = w.HANDLE
+        k32.CreateJobObjectW.argtypes = [w.LPVOID, w.LPCWSTR]
+        k32.SetInformationJobObject.argtypes = [w.HANDLE, ctypes.c_int, w.LPVOID, w.DWORD]
+        job = k32.CreateJobObjectW(None, None)
+        if not job:
+            return None
+        info = Extended()
+        info.Basic.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+            k32.CloseHandle(job)
+            return None
+        return job
+    except Exception:
+        return None
+
+
+def _bind_to_job(proc) -> bool:
+    """Tie a child's life to this process's. True when it is bound."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes as w
+        if "job" not in _rehearsal:
+            _rehearsal["job"] = _kill_on_close_job()
+        job = _rehearsal["job"]
+        if not job:
+            return False
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.AssignProcessToJobObject.argtypes = [w.HANDLE, w.HANDLE]
+        return bool(k32.AssignProcessToJobObject(job, int(proc._handle)))
+    except Exception:
+        return False
+
+
+def stop_rehearsal() -> None:
+    proc = _rehearsal.get("proc")
+    if proc is not None and proc.poll() is None:
+        proc.terminate()
+
+
+def start_rehearsal() -> int:
+    """Start the simulator (this laptop only, port 8620-8629) with this
+    process's own Python and key folder; returns its port. One at a time."""
+    old = _rehearsal.get("proc")
+    if old is not None and old.poll() is None:
+        return _rehearsal["port"]
+    port = 0
+    for p in range(8620, 8630):
+        with socket.socket() as sk:
+            if sk.connect_ex(("127.0.0.1", p)) != 0:
+                port = p
+                break
+    if not port:
+        raise HTTPException(503, "no free port for the rehearsal")
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    proc = subprocess.Popen([sys.executable, "-m", "pepper_app.sim", "--port", str(port), "--no-browser"],
+                            cwd=str(HERE.parent), env=os.environ.copy(), creationflags=flags,
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    _bind_to_job(proc)
+    _rehearsal.update(proc=proc, port=port)
+    atexit.register(stop_rehearsal)
+    return port
 # A fresh laptop gets the setup tested on the robot on 2026-10-12: the scripted
 # demo, Hebrew, ElevenLabs ears and voice ("Laura", a premade ElevenLabs voice).
 DEFAULTS = {"experience": DEFAULT_EXPERIENCE, "engine": "eleven", "language": "he",
@@ -173,6 +272,8 @@ class PepperApp:
         if self.brain is not None and self.brain.running:
             return self.brain.public()
         off = self.brain.public() if self.brain is not None else {"state": "off"}
+        for k in ("step", "step_title", "steps"):   # a stopped run has no step to show
+            off.pop(k, None)
         return {**off, "state": "off", "running": False, "model": self.model_for()}
 
     def web_state(self) -> dict:
@@ -611,6 +712,7 @@ class PepperApp:
             self.phrases_ready, len(QUICK_PHRASES), provider, self._voice_name(voice)))
 
     async def shutdown(self) -> None:
+        stop_rehearsal()
         if self.brain and self.brain.running:
             await self.brain.stop()
         if self.robot.connected:
@@ -791,6 +893,8 @@ def create_app(robot_ip: str, port: int, agent_port: int = AGENT_PORT, data_dir:
         else:
             raise HTTPException(404)
         P.log("INFO", "ai: " + what)
+        if what in ("pause", "resume"):
+            P.add_chat("event", "You paused the AI" if what == "pause" else "You resumed the AI")
         return {"ok": True}
 
     @app.post("/api/turn/{what}")
@@ -834,9 +938,26 @@ def create_app(robot_ip: str, port: int, agent_port: int = AGENT_PORT, data_dir:
         if name == "walk":
             await P.say_before_walk()
         res = await robot_call("move", name=name)
-        P.add_chat("event", "Gesture: {}".format(name))
+        P.add_chat("event", "Gesture: {}".format(MOVE_LABELS.get(name, name)))
         P.log("INFO", "motion: {} ({})".format(name, res.get("did", "")))
         return {"ok": True}
+
+    @app.post("/api/rehearse")
+    async def rehearse():
+        if not (P.key or os.environ.get("OPENAI_API_KEY")):
+            raise HTTPException(409, "No GPT key -- add one in the hub's Keys panel")
+        port = await asyncio.get_running_loop().run_in_executor(None, start_rehearsal)
+        proc = _rehearsal.get("proc")
+        for _ in range(16):  # up to 8 s on a cold laptop
+            await asyncio.sleep(0.5)
+            if proc is not None and proc.poll() is not None:
+                break
+            with socket.socket() as sk:
+                if sk.connect_ex(("127.0.0.1", port)) == 0:
+                    break
+        if proc is not None and proc.poll() is not None:
+            raise HTTPException(502, "the rehearsal did not start")
+        return {"ok": True, "url": "http://127.0.0.1:{}/sim".format(port)}
 
     @app.post("/api/head")
     async def head(request: Request):

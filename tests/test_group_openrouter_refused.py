@@ -36,7 +36,7 @@ def test_expired_key_drops_openrouter_and_says_why():
     assert out["text"] == "hello"                   # Gemini stood in
     assert s.openrouter_key == "" and s.openrouter_gone == "key expired"
     assert said and "OpenRouter refused (key expired)" in said[0]
-    assert "Keys panel" in said[0]
+    assert "Settings, Keys" in said[0]
 
     calls.clear()
     asyncio.run(s.director("sys", "user"))

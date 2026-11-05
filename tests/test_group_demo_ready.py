@@ -288,3 +288,38 @@ def test_a_premade_first_line_is_used_only_while_it_fits(tmp_path, monkeypatch):
                        "modes": {"group": (g, done)}}
         assert gm.take_premade("group") is None
     asyncio.run(run())
+
+
+def test_checks_show_pending_while_get_ready_runs(tmp_path, monkeypatch):
+    from test_group_per_robot import manager
+    gm = manager(tmp_path, monkeypatch)
+    gm.cfg["settings"]["simulate"] = True
+    svc = gm.shared_services()
+    seen = []
+
+    async def writer(model):
+        seen.append(dict(gm.warm_state()["checks"]))
+
+    async def hearing(lang=""):
+        return ""
+    svc.ping_writer, svc.ping_hearing = writer, hearing
+    gm._warm["Stale service"] = {"ok": True, "ms": 5}
+    asyncio.run(gm.warm_up(full=False))
+    assert seen and any(v.get("ok") is None for v in seen[0].values())
+    assert "Stale service" not in gm.warm_state()["checks"]
+    assert all(v["ok"] is True for v in gm.warm_state()["checks"].values())
+
+
+def test_a_steer_sent_before_start_is_kept_for_the_first_line(tmp_path, monkeypatch):
+    from test_group_per_robot import manager
+    gm = manager(tmp_path, monkeypatch)
+
+    async def ensure():
+        return None
+
+    async def lifecycle(mode):
+        return None
+    gm._ensure_session, gm._lifecycle = ensure, lifecycle
+    gm.nudge("ask them about music")
+    asyncio.run(gm.start("group"))
+    assert gm.pending_nudge == "ask them about music"

@@ -228,6 +228,9 @@
   // The big line: who has the floor, in words a visitor understands.
   function statusParts(status) {
     const phase = str(status.phase) || 'idle';
+    if (S.running && S.closing && ['speaking', 'listening', 'human', 'thinking'].includes(phase)) {
+      return ['Closing: each robot says its last word'];
+    }
     if (phase === 'speaking') {
       const seat = findSeat(status.speaker);
       const verb = status.detail === 'interrupting' ? ' cuts in' : ' is speaking';
@@ -260,19 +263,20 @@
   function renderStatus() {
     const status = S.status;
     const phase = str(status.phase) || 'idle';
+    const closingNow = S.running && S.closing;
+    const shown = closingNow && phase !== 'idle' ? 'stopping' : phase;
     E.stage.dataset.phase = phase;
-    E.phase.className = `phase ${PHASE_LABEL[phase] ? phase : 'idle'}`;
-    E.phaseLabel.textContent = PHASE_LABEL[phase] || phase;
+    E.phase.className = `phase ${PHASE_LABEL[shown] ? shown : 'idle'}`;
+    E.phaseLabel.textContent = PHASE_LABEL[shown] || shown;
     E.statusLine.textContent = '';
     E.statusLine.append(...statusParts(status));
     // Shown on purpose since 2026-11-05: Get ready's progress ("getting
     // ready: checking every service", "connected, but X failed the check").
     const hidden = ['interrupting', 'the robots are listening'];
     let detail = hidden.includes(str(status.detail)) ? '' : str(status.detail);
-    if (phase === 'ready' && /^robots connected/i.test(detail)) detail = '';
+    if (phase === 'ready' && /^robots connected/i.test(detail)) detail = 'The robots stay connected. Press a mode to go again.';
     const modeText = S.running && S.mode ? MODE_NAME[S.mode] || S.mode : '';
-    const closing = S.running && S.closing ? 'closing: each robot says its last word' : '';
-    const parts = [modeText, closing || detail].filter(Boolean);
+    const parts = [modeText, closingNow ? '' : detail].filter(Boolean);
     E.statusDetail.textContent = RA.cap(parts.join(' · '));
     E.statusDetail.hidden = !E.statusDetail.textContent;
     E.view.classList.toggle('g-live', S.running);
@@ -293,6 +297,12 @@
     if (live && !E.view.dataset.wasLive) setRoomOpen(false);
     if (!live && E.view.dataset.wasLive) setRoomOpen(true);
     if (live) E.view.dataset.wasLive = '1'; else delete E.view.dataset.wasLive;
+    // People cut in is a demo-day knob: while live it sits outside the fold.
+    const slot = $('barge-slot'), bl = $('barge-label'), anchor = $('people-mic-label');
+    if (slot && bl && anchor) {
+      if (live && !slot.contains(E.barge)) slot.append(bl, E.barge);
+      else if (!live && slot.contains(E.barge)) { anchor.before(bl); anchor.before(E.barge); }
+    }
   }
 
   function roomOpen() { return E.roomFold.getAttribute('aria-expanded') === 'true'; }
@@ -319,6 +329,7 @@
     const over = total > 0 && elapsed >= total && S.running;
     E.timerBar.classList.toggle('over', over);
     E.timerWrap.classList.toggle('over', over);
+    E.timerNote.hidden = !(over && !S.closing);
   }
 
   // Exactly one real Reachy on the hub (laptop robots do not count): Talk.
@@ -629,6 +640,7 @@
     // side by side up to five, then two rows.
     const cols = S.running ? (n <= 5 ? n : Math.ceil(n / 2)) : (n === 4 ? 2 : Math.min(3, n));
     E.seats.style.setProperty('--cols', String(Math.max(1, cols)));
+    E.seats.classList.toggle('many', draft.seats.length >= 4);
     renderGroupsHead();
     E.seatsEmpty.hidden = n > 0;
     paintLevels();
@@ -684,12 +696,12 @@
     const a = S.available.find(x => x.key === seat.key);
     const stateEl = row.querySelector('.seat-state');
     const state = a ? str(a.state) : '';
-    const sig = `${state}|${!!a}`;
+    const sig = `${state}|${!!a}|${onLaptop}`;
     if (stateEl.dataset.sig !== sig) {
       stateEl.dataset.sig = sig;
       stateEl.textContent = '';
       const text = a ? (RA.STATUS_TEXT[state] || state || 'Connected') : 'Not connected';
-      stateEl.append(RA.pill(a ? (RA.STATUS_PILL[state] || 'p-conn') : 'p-off', text, state === 'CONNECTING'));
+      if (!onLaptop) stateEl.append(RA.pill(a ? (RA.STATUS_PILL[state] || 'p-conn') : 'p-off', text, state === 'CONNECTING'));
     }
 
     const level = row.querySelector('.level');
@@ -771,6 +783,8 @@
     const nowEl = row.querySelector('.card-now');
     nowEl.textContent = now.join(', ');
     nowEl.title = nowEl.textContent;
+    row.querySelector('.vsep').hidden = !now.length || draft.seats.length >= 4;
+    row.querySelector('.lsep').hidden = !now.length;
     row.querySelector('.vline').hidden = !now.length && !S.running;
     row.querySelector('.less-wrap').hidden = !(S.running && openCards.has(seat.key));
     row.querySelector('.copy-button').disabled = draft.seats.length < 2;
@@ -997,7 +1011,12 @@
       name.value = str(g.name);
       name.setAttribute('aria-label', 'Group name');
       name.title = "The group's name in the transcript and for the writer, when it talks as one.";
-      name.addEventListener('input', () => { g.name = name.value; markDirty(); renderSeats(); });
+      name.addEventListener('input', () => {
+        // By id: a save or a state push may have replaced the group objects.
+        const cur = groups().find(x => x.id === g.id) || g;
+        cur.name = g.name = name.value;
+        markDirty(); renderSeats();
+      });
       const kind = el('select', 'select');
       kind.style.width = '300px';
       kind.setAttribute('aria-label', 'What the group does together');
@@ -1035,7 +1054,7 @@
   function openGroups() {
     renderGroupsModal();
     $('groups-modal').hidden = false;
-    const first = $('groups-modal').querySelector('input, button');
+    const first = $('groups-list').querySelector('input') || $('groups-add');
     if (first) first.focus();
   }
   function closeGroups() {
@@ -1340,7 +1359,13 @@
     head.append(who);
     if (kind === 'robot') {
       const robotName = (seat && seat.name) || str(t.who);
-      if (robotName && robotName !== who.textContent) head.append(el('span', 'rtag', robotName));
+      const grp = seat && groupOf(seat.key);
+      const lead = grp && grp.g.talk && Array.isArray(grp.g.members) && grp.g.members[0] === seat.key;
+      const ownChar = seat ? (seat.character || seat.name || '').trim() : '';
+      if (lead && who.textContent === ownChar) who.textContent = groupLabel(grp.g, grp.i);
+      const voiceOf = seat && grp && grp.g.talk && groupLabel(grp.g, grp.i) === who.textContent;
+      const tag = voiceOf ? `${ownChar || robotName}'s voice` : robotName;
+      if (tag && tag !== who.textContent) head.append(el('span', 'rtag', tag));
       if (t.move) head.append(el('span', 'mtag', str(t.move)));
       if (t.latency_ms !== undefined && t.latency_ms !== null && Number.isFinite(Number(t.latency_ms))) {
         head.append(el('span', '', `${Math.round(Number(t.latency_ms))} ms`));
@@ -1538,7 +1563,7 @@
     const r = await RA.get('/api/group/state');
     const st = unwrapState(r.body);
     if (r.ok && st) { applyState(st); return; }
-    linkError = r.status ? errorFrom(r) : `The hub didn't answer (${RA.errorText(r)}). The screen may be out of date.`;
+    linkError = r.status ? errorFrom(r) : `The hub didn't answer (${RA.errorText(r).replace(/^the hub did not answer \((.*)\)$/i, '$1')}). The screen may be out of date.`;
     renderError();
   }
 
@@ -1547,7 +1572,7 @@
     E = {
       view: $('view-group'), stage: $('stage'), phase: $('phase'), phaseLabel: $('phase-label'),
       statusLine: $('status-line'), statusDetail: $('status-detail'),
-      timer: $('timer'), timerTotal: $('timer-total'), timerBar: $('timer-bar'), timerFill: $('timer-fill'),
+      timer: $('timer'), timerTotal: $('timer-total'), timerNote: $('timer-note'), timerBar: $('timer-bar'), timerFill: $('timer-fill'),
       timerWrap: $('timer-wrap'), moreTime: $('more-time'),
       modes: $('modes'), modeBtns: Array.from(document.querySelectorAll('#modes .mode-button')),
       readyBtn: $('get-ready'), talkBtn: $('talk-one'), stopBtn: $('stop'), disconnect: $('disconnect'),

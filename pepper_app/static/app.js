@@ -23,7 +23,7 @@ const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&a
 
 // ------------------------------------------------------------ helpers
 function sentence(msg) {
-  msg = String(msg || '').trim().replace(/\s+--\s+/g, '. ');
+  msg = String(msg || '').trim().replace(/\s+--\s+(\S)/g, (_, c) => '. ' + c.toUpperCase());
   if (!msg) return msg;
   msg = msg[0].toUpperCase() + msg.slice(1);
   return /[.!?…:)]$/.test(msg) ? msg : msg + '.';
@@ -121,6 +121,7 @@ function chip(dot, text, cls) {
 function renderHealth() {
   const h = S.health || {}, r = h.robot || {}, st = r.status || {}, sc = h.screen || {};
   const ok = r.state === 'connected';
+  $('charge-note').hidden = !(ok && st.charging);
   let text, cls;
   if (!wsUp) { text = 'Dashboard server stopped · retrying'; cls = 'bad'; }
   else if (ok) {
@@ -129,7 +130,7 @@ function renderHealth() {
   } else if (r.state === 'deploying' || r.state === 'starting') {
     text = (r.detail || '').startsWith(FALLBACK) ? 'Fallback: Pepper connects back' : 'Starting its agent… up to 60 s';
     cls = 'warn';
-  } else if (r.state === 'lost') { text = "The agent's connection dropped · trying again"; cls = 'bad'; }
+  } else if (r.state === 'lost') { text = "The agent's connection dropped · trying again in 20 s"; cls = 'bad'; }
   else if ((r.detail || '').includes('without a robot address')) { text = 'Started without a robot address · test mode'; cls = 'bad'; }
   else { text = 'Pepper is not connected'; cls = 'bad'; }
   chip('robot-dot', '', cls);
@@ -156,6 +157,7 @@ function renderHealth() {
     chip('tablet-dot', '', 'bad');
   }
   $('tablet-text').textContent = tt;
+  $('tablet-chip').title = tt;
   $('tablet-reload').hidden = !!sc.connected;
   $('screen-off').hidden = !!sc.connected;
   document.querySelectorAll('.needs-robot').forEach(b => { b.disabled = !ok; });
@@ -225,9 +227,12 @@ function renderAI() {
   $('pause-btn').disabled = !(ai.running && !ai.paused);
   $('turns').textContent = ai.turns || 0;
   $('latency').textContent = ai.latency_ms ? ai.latency_ms : '–';
-  $('step').textContent = ai.steps ? `${ai.step || '–'}/${ai.steps}${ai.step_title ? ' ' + ai.step_title : ''}` : '–';
+  $('step').textContent = ai.running && ai.steps ? `${ai.step || '–'}/${ai.steps}${ai.step_title ? ' ' + ai.step_title : ''}` : '–';
   $('turnrow').hidden = !(ai.running && !ai.paused);
   $('next-start').hidden = !ai.running;
+  $('next-start-text').textContent = String((S.cfg || {}).experience || '').startsWith('feelings')
+    ? "Voice and Engine change Pepper's voice at once. Experience and Language apply at the next Start."
+    : 'Experience, Engine, Language and Voice apply at the next Start. Wizard of Oz uses a new voice at once.';
   renderTurn();
   const banner = !!(ai.running && ai.stuck);
   if (banner && $('ai-banner').hidden) ['woz-speech', 'woz-move'].forEach(id => flash($(id)));
@@ -544,7 +549,7 @@ function openDialog(id) {
       $('facts-text').textContent = r.text || 'No lab facts yet: Pepper says it is not sure.';
     });
   }
-  if (id === 'dlg-rehearse') { $('rehearse-sim').hidden = !S.sim; $('rehearse-real').hidden = !!S.sim; }
+  if (id === 'dlg-rehearse') { $('rehearse-sim').hidden = !S.sim; $('rehearse-real').hidden = !!S.sim; $('rehearse-start').hidden = !!S.sim; }
   $(id).showModal();
 }
 $('emoji-test').onclick = () => api('/api/screen', { kind: 'emoji_test' });
@@ -624,3 +629,32 @@ function connect() {
   };
 }
 connect();
+
+$('rehearse-start').onclick = async () => {
+  const b = $('rehearse-start'); b.disabled = true; b.textContent = 'Starting…';
+  // Open the window now, inside the click, so the browser lets it through;
+  // its address is set when the simulator answers.
+  let win = null;
+  try { win = window.open('about:blank', '_blank'); } catch (e) { win = null; }
+  const r = await api('/api/rehearse');
+  b.disabled = false; b.textContent = 'Start rehearsal';
+  if (r && r.url) {
+    if (win) { win.location = r.url; toast('Rehearsal started.'); }
+    else {
+      toast('Rehearsal started. ');
+      const a = document.createElement('a');
+      a.href = r.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open it';
+      $('toast').append(a);
+    }
+  } else if (win) win.close();
+};
+
+// Keep the floating AI-stuck bar just below the top bar, however many rows it wraps to.
+(function () {
+  const top = document.querySelector('.top');
+  if (!top) return;
+  const set = () => document.documentElement.style.setProperty('--topH', top.offsetHeight + 'px');
+  set();
+  if (window.ResizeObserver) new ResizeObserver(set).observe(top);
+  window.addEventListener('resize', set);
+})();

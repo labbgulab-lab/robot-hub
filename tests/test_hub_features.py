@@ -164,6 +164,7 @@ def test_add_key_duplicate_and_refused(hub):
     with pytest.raises(ActionError) as exc:
         run(hub.add_key("gemini", "", " " + GEM + " "))
     assert exc.value.code == "DUPLICATE"
+    assert exc.value.body()["label"]
     hub.key_transport = FakeHTTP(default=(401, {}))
     with pytest.raises(ActionError) as exc:
         run(hub.add_key("auto", "", OAI))
@@ -890,3 +891,27 @@ def test_reachy_adapter_passes_open_through(monkeypatch):
     monkeypatch.setattr(rw, "_ssh_run", fake_run)
     msg = run(a.join_wifi("Cafe", "", open_network=True))
     assert seen == ["pw\n\n"] and "Cafe" in msg
+
+
+def test_effective_staff_tools_reach_the_page(hub, monkeypatch, tmp_path):
+    assert hub.snapshot()["settings"]["staff_tools"] is True      # lab checkout
+    monkeypatch.setenv("ROBOT_HUB_DATA", str(tmp_path))
+    assert hub.snapshot()["settings"]["staff_tools"] is False
+    hub.settings.update({"staff_tools": True})
+    assert hub.snapshot()["settings"]["staff_tools"] is True
+
+
+def test_a_refused_furhat_login_is_pushed_to_the_page(hub):
+    q = hub.bus.subscribe()
+    hub.settings.note_login("furhat", False)
+    ev = q.get_nowait()
+    assert ev["type"] == "settings" and ev["passwords"]["furhat"]["works"] is False
+    hub.settings.note_login("furhat", False)      # no change, no event
+    assert q.empty()
+
+
+def test_duplicate_key_error_names_the_existing_label():
+    from hub.core import ActionError
+
+    err = ActionError("That key is already here.", "DUPLICATE", label="Lab Gemini")
+    assert err.body()["label"] == "Lab Gemini"

@@ -101,7 +101,7 @@
     return `${Math.floor(s / 3600)} h ago`;
   }
   function sizeText(bytes) {
-    if (bytes >= 1 << 20) return `${(bytes / (1 << 20)).toFixed(1)} MB`;
+    if (bytes >= 1 << 20) { const mb = bytes / (1 << 20); return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`; }
     if (bytes >= 1 << 10) return `${Math.round(bytes / (1 << 10))} KB`;
     return `${bytes || 0} B`;
   }
@@ -301,7 +301,6 @@
     S.lastEvent = e.ts || Date.now() / 1000;
     if (e.level === 'error') {
       if (!ui.logs) ui.logUnseen = true;
-      toast(e.text, 'err');
     }
   }
 
@@ -350,8 +349,7 @@
     return s && s.key ? s.key : null;
   }
   function optText(k, slot) {
-    const extra = slot === 'voice' ? '' :
-      (k.provider === 'openrouter' ? ' · groups only' : k.provider === 'elevenlabs' ? ' · voice only' : '');
+    const extra = slot === 'voice' ? '' : (k.provider === 'openrouter' ? ' · groups only' : '');
     return slot === 'voice' ? `${k.label} · …${k.tail}` : `${k.label} · ${PROV[k.provider] || k.provider} · …${k.tail}${extra}`;
   }
   function netName() {
@@ -557,14 +555,15 @@
     const connected = all.filter(r => CONNECTED.includes(r.state));
     const running = all.filter(r => r.state === 'RUNNING');
     const updated = S.lastEvent ? `Updated ${clock(S.lastEvent)}` : 'Watching for robots';
-    put($('#counts'), `<span><b>${present.length}</b> of ${all.length} nearby</span>` +
-      `<span><span class="d" style="background:#1D4ED8"></span><b>${connected.length}</b> connected</span>` +
-      `<span><span class="d" style="background:#15803D"></span><b>${running.length}</b> running</span>` +
+    const emptyNow = gridState().empty;
+    put($('#counts'), emptyNow ? '' : `<span><b>${present.length}</b> of ${all.length} nearby</span>` +
+      (connected.length ? `<span><span class="d" style="background:#1D4ED8"></span><b>${connected.length}</b> connected</span>` : '') +
+      (running.length ? `<span><span class="d" style="background:#15803D"></span><b>${running.length}</b> running</span>` : '') +
       `<span>${updated}</span>`);
 
     // The Reachy app band: Talk, groups, Choir and Wizard of Oz live there.
     const reachys = all.filter(isReachy);
-    if (reachys.length) {
+    if (reachys.length && !emptyNow) {
       const run = reachys.filter(r => r.state === 'RUNNING').map(r => r.name);
       const near = reachys.filter(r => PRESENT.includes(r.state)).length;
       const status = run.length ? `${listText(run)} running` : (near ? plural(near, 'Reachy', 'Reachys') + ' nearby' : 'No Reachys nearby');
@@ -573,7 +572,7 @@
         <div class="tiles" aria-hidden="true">${tiles}</div>
         <div style="flex:1 1 260px;display:flex;flex-direction:column;gap:4px">
           <h2 id="rapp" class="h2">Reachy app</h2>
-          <div class="modes">${['Talk', 'Group talk', 'Interrupt', 'Free talk', 'Choir'].map(m => `<button class="mode" type="button" data-act="reachy-group" title="Open the Reachy app">${m}</button>`).join('')}<button class="mode" type="button" data-act="reachy-woz" title="Open Wizard of Oz">Wizard of Oz</button></div>
+          <div class="modes">${['Talk', 'Group talk', 'Interrupt', 'Free talk', 'Choir'].map(m => `<button class="mode" type="button" data-act="${m === 'Talk' ? 'reachy-talk' : 'reachy-group'}" title="Open the Reachy app">${m}</button>`).join('')}<button class="mode" type="button" data-act="reachy-woz" title="Open Wizard of Oz">Wizard of Oz</button></div>
         </div>
         <span class="muted small">${esc(status)}</span>
         <button class="btn btn-quiet" type="button" data-act="reachy-group">Open</button>
@@ -670,6 +669,10 @@
   const noteHtml = (kind, icon, text, acts) =>
     `<div class="note ${kind}">${icon === 'spin' ? '<span class="spin" aria-hidden="true"></span>' : (icon ? ic(icon, 18) : '')}<div>${text}${acts ? `<div class="nacts">${acts}</div>` : ''}</div></div>`;
 
+  function retryText(r) {
+    const s = r.retry_at ? Math.ceil(r.retry_at - Date.now() / 1000) : 0;
+    return s > 0 ? ` Trying again in ${s} s.` : ' Trying again soon.';
+  }
   function oldDaemon(r) {
     const m = /daemon ([\d.]+) is older than ([\d.]+)/i.exec(r.detail || '');
     return m ? { have: m[1], need: m[2] } : null;
@@ -720,7 +723,7 @@
       m.detail = isReachy(r) && secs > 45 ? 'Installing the Reachy app on the robot. First time only.'
         : (r.type_id === 'naoqi' && secs > 30 ? 'First run: downloading the speech model, about 140 MB' : 'Can take a couple of minutes');
     }
-    if (st === 'ERROR' && r.detail) m.detail = sentence(detailText(r.detail)) + (S.settings.auto_connect ? ' Trying again soon.' : '');
+    if (st === 'ERROR' && r.detail) m.detail = sentence(detailText(r.detail)) + (S.settings.auto_connect ? retryText(r) : '');
     m.detail = detailText(m.detail);
 
     // ---- notes (a problem: one short sentence and one button)
@@ -749,7 +752,7 @@
     }
     if (ui.wifiNote[r.key] && (!ui.sheet || ui.sheet.key !== r.key) && !ui.moved[r.key]) {
       const w = ui.wifiNote[r.key];
-      m.notes.push(noteHtml(w.kind, w.kind === 'ok' ? 'check' : (w.kind === 'warn' ? 'info' : 'alert'), esc(w.text)));
+      m.notes.push(noteHtml(w.kind, w.kind === 'ok' ? 'check' : (w.icon || (w.kind === 'warn' ? 'info' : 'alert')), esc(w.text)));
     }
 
     // ---- key pickers (Reachy, Pepper, Furhat)
@@ -811,6 +814,11 @@
       : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
   }
 
+  function takeOverBtn(r, label) {
+    return staff() ? btn('Take over', 'quiet', 'override', r.key, { grow: true, title: 'Lab staff: take this robot from the other laptop' })
+      : btn(label, 'primary', 'launch', r.key, { grow: true, disabled: true, title: `In use by ${r.in_use_by}` });
+  }
+
   function mainAction(r, m, c) {
     const st = r.state;
     const ready = c.connected && !c.launching && !r.posture_pending;
@@ -836,10 +844,13 @@
         return btn(r.launch_error ? 'Try again' : 'Open Studio', 'primary', 'launch', r.key, { grow: true, icon: 'ext', disabled: !ready });
       }
       case 'pepper':
+        if (r.in_use_by && st !== 'RUNNING') return takeOverBtn(r, 'Open dashboard');
         if (st === 'RUNNING' && r.system_url) return btn('Open dashboard', 'primary', 'open', r.key, { grow: true, icon: 'ext' });
         return btn(r.launch_error ? 'Try again' : 'Open dashboard', 'primary', 'launch', r.key, { grow: true, icon: 'ext', disabled: !ready });
       case 'naoqi':
         if ((r.staff_only_actions || ['nao_app']).includes('nao_app') && !staff()) return null;
+        if (r.posture_pending || r.posture_failed || ui.armed[r.key]) return null;
+        if (r.in_use_by && st !== 'RUNNING') return takeOverBtn(r, 'NAO app');
         if (st === 'RUNNING' && r.system_url) return btn('', 'primary', 'open', r.key, { grow: true, icon: 'ext', html: 'Open NAO app' + STAFF_TAG, title: 'Lab staff tool' });
         return btn('', 'primary', 'launch', r.key, { grow: true, icon: 'ext', html: (r.launch_error ? 'Try again' : 'NAO app') + STAFF_TAG, disabled: !ready, title: 'Lab staff tool' });
       case 'reachy_lite':
@@ -907,6 +918,7 @@
     let t = String(note || '').trim();
     t = t.replace(/^NAO is (sitting|lying down|lying|standing)(.*?)\s*\(hottest joint: (.+?)\)\.?$/i,
       (_, a, b, c) => `${cap(a)}${b.replace(/[,\s]+$/, '')}. Hottest joint: ${c}`);
+    t = t.replace(/(\d) °C/g, '$1 °C');
     return cap(t.replace(/\s+—\s+/g, '. ').replace(/ -- /g, '. '));
   }
 
@@ -1027,7 +1039,7 @@
       <p class="sub">${f.open ? '' : '8 to 63 characters. '}Turn the hotspot on first, 2.4 GHz.</p>
       <div style="display:flex"><button class="btn btn-dark${busy ? ' busy' : ''}" type="button" data-act="wifi-join" data-key="${esc(r.key)}"${busy ? ' disabled' : ''}>${busy ? (f.save ? 'Saving…' : 'Joining…') : 'Join'}</button></div>
       ${busy ? `<p class="note"><span class="spin" aria-hidden="true"></span><span>${f.save ? `Saving "${esc(f.ssid)}" as the lab WiFi…` : `Joining "${esc(f.ssid)}"… up to a minute. Keep that hotspot on.`}</span></p>` : ''}
-      ${!busy && note ? `<p class="note ${note.kind}">${ic(note.kind === 'ok' ? 'check' : note.kind === 'warn' ? 'info' : 'alert', 18)}<span>${esc(note.text)}</span></p>` : ''}
+      ${!busy && note ? `<p class="note ${note.kind}">${ic(note.kind === 'ok' ? 'check' : (note.icon || (note.kind === 'warn' ? 'info' : 'alert')), 18)}<span>${esc(note.text)}</span></p>` : ''}
     </section>`;
   }
 
@@ -1185,16 +1197,20 @@
   /* ------------------------------------------------------------ logs drawer */
   function logSource(e) {
     const text = e.text || '';
-    let best = null;
+    // A line belongs to a robot only when it starts with the name, or the
+    // backend said so; a line that merely lists robots is the Hub's.
     for (const r of realRobots()) {
       const n = r.name;
       if (!n) continue;
-      const re = new RegExp(`(^|[^\\w])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\w]|$)`);
-      if (re.test(text) && (!best || text.indexOf(n) < text.indexOf(best))) best = n;
+      if (e.source === n || text === n || text.startsWith(n + ':') || text.startsWith(n + ' ')) return n;
     }
-    if (best) return best;
     if (e.source) return e.source === 'group' || /group/.test(e.source) ? 'Reachy app' : e.source;
     return 'Hub';
+  }
+  function logText(x) {
+    const t = String(x.e.text || '');
+    const p = x.src + ':';
+    return t.startsWith(p) ? cap(t.slice(p.length).trim()) : t;
   }
   function renderLogs() {
     const host = $('#logs-layer');
@@ -1205,7 +1221,7 @@
     const lines = S.log.map(e => ({ e, src: logSource(e) }))
       .filter(x => ui.logFilter === 'all' || x.src === ui.logFilter);
     const cls = { ok: 'ok', warn: 'warn', error: 'err', info: '' };
-    const body = lines.length ? lines.map(x => `<div class="ln"><span class="t">${clock(x.e.ts)}</span><span class="src">${esc(x.src)}</span><span class="${cls[x.e.level] || ''}">${esc(x.e.text)}</span></div>`).join('')
+    const body = lines.length ? lines.map(x => `<div class="ln"><span class="t">${clock(x.e.ts)}</span><span class="src">${esc(x.src)}</span><span class="${cls[x.e.level] || ''}">${esc(logText(x))}</span></div>`).join('')
       : '<div class="ln none">Nothing yet.</div>';
     const html = `
       <div class="grab" aria-hidden="true"></div>
@@ -1262,7 +1278,7 @@
       return { kind: 'ok', icon: 'check', html: '<b>It works.</b> All robots can talk.', saved: true };
     }
     switch (res.code) {
-      case 'DUPLICATE': return { kind: 'warn', html: '<b>Already added.</b> It is in Settings.' };
+      case 'DUPLICATE': return { kind: 'warn', html: res.label ? `<b>Already added</b> as "${esc(res.label)}".` : '<b>Already added.</b> It is in Settings.' };
       case 'NOT_A_KEY': return { kind: 'warn', html: "<b>That doesn't look like a key.</b> Paste the whole key." };
       case 'UNKNOWN_PROVIDER': return { kind: 'chips', html: 'Which service is it from?', chips: ['gpt', 'gemini', 'openrouter', 'elevenlabs'] };
       case 'KEY_REFUSED': return { kind: 'bad', icon: 'xcircle', html: "<b>That key didn't work.</b> Copy it again, all of it." };
@@ -1764,8 +1780,8 @@
     const r = S.robots.get(key);
     const f = ui.wifi[key] || {};
     const ssid = (f.ssid || '').trim();
-    if (!ssid) { ui.wifiNote[key] = { kind: 'warn', text: 'Type the hotspot name.' }; render(); return; }
-    if (!f.open && (f.pw || '').length < 8) { ui.wifiNote[key] = { kind: 'warn', text: 'A WiFi password has at least 8 characters.' }; render(); return; }
+    if (!ssid) { ui.wifiNote[key] = { kind: 'warn', icon: 'alert', text: 'Type the hotspot name.' }; render(); return; }
+    if (!f.open && (f.pw || '').length < 8) { ui.wifiNote[key] = { kind: 'warn', icon: 'alert', text: 'A WiFi password has at least 8 characters.' }; render(); return; }
     ui.wifiBusy[key] = true;
     delete ui.wifiNote[key];
     render();
@@ -1930,6 +1946,7 @@
       case 'open': { const r = S.robots.get(key); if (r && r.system_url) openSystem(r.system_url, null); } break;
       case 'talk': openReachy('talk', key); break;
       case 'woz': openReachy('woz', key); break;
+      case 'reachy-talk': openReachy('talk'); break;
       case 'reachy-group': openReachy('group'); break;
       case 'reachy-woz': openReachy('woz'); break;
       case 'posture': doPosture(key, el.dataset.name); break;

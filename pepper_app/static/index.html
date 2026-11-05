@@ -74,7 +74,7 @@
         <select id="lang" class="select"><option value="he">Hebrew</option><option value="en">English</option><option value="auto">Auto</option></select>
         <label for="voice">Voice</label><select id="voice" class="select" title="Pepper's voice, for the AI and for Wizard of Oz"></select>
       </div>
-      <p id="next-start" class="sub" hidden><svg class="icon"><use href="#i-clock"/></svg>Experience, Engine, Language and Voice apply at the next Start. Wizard of Oz uses a new voice at once.</p>
+      <p id="next-start" class="sub" hidden><svg class="icon"><use href="#i-clock"/></svg><span id="next-start-text">Experience, Engine, Language and Voice apply at the next Start. Wizard of Oz uses a new voice at once.</span></p>
       <div class="tg2" data-opt="vision" title="The AI sees what Pepper's camera sees"><span class="grow">Vision</span><span class="sub why"></span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Vision"><span></span></button></div>
       <div class="tg2" data-opt="ai_screen" title="The AI shows choices and slides on the screen by itself"><span class="grow">AI drives screen</span><span class="sub why"></span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="AI drives screen"><span></span></button></div>
       <div class="tg2" data-opt="gestures" title="The AI may wave and nod while it talks"><span class="grow">Gestures</span><span class="sub why"></span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Gestures"><span></span></button></div>
@@ -114,6 +114,7 @@
         <button id="stop-motion" class="btn btn-quiet btn-xs needs-robot" type="button"><svg class="icon"><use href="#i-stop"/></svg>Stop motion</button></div>
       <!-- Only movements that ran on this Pepper (agent/pepper_agent.py has the exact values). -->
       <div id="moves" class="mv"></div>
+      <div id="charge-note" class="note warn" role="status" hidden><svg class="icon"><use href="#i-alert"/></svg><span>Pepper is charging. Unplug the charger and close the flap to walk.</span></div>
       <div class="headrow"><span class="sub">Head</span>
         <button class="btn btn-quiet btn-s30 needs-robot" type="button" data-head="left" title="Look left">Left</button>
         <button class="btn btn-quiet btn-s30 needs-robot" type="button" data-head="center" title="Look straight ahead">Center</button>
@@ -228,10 +229,9 @@
   <div class="body">
     <p id="rehearse-sim" class="sub" hidden>This is the rehearsal. <a href="/sim" target="_blank">Open the rehearsal page</a> to type what the visitor says and tap the tablet.</p>
     <div id="rehearse-real" class="sub" style="display:block">
-      <p style="margin:0 0 8px">Practise the flow on this laptop: you type what the visitor says and tap the tablet on the page. Pepper's lines play on this laptop.</p>
-      <p style="margin:0">Pepper must not be in use: disconnect it in the hub first. Then run <code>python -m pepper_app.sim</code> in the robot-hub folder.</p>
+      <p style="margin:0">Practise the flow on this laptop: you type what the visitor says and tap the tablet on the page. Pepper's lines play on this laptop.</p>
     </div>
-    <div class="acts"><button class="btn btn-ghost btn-sm" type="button" data-close>Close</button></div>
+    <div class="acts"><button class="btn btn-ghost btn-sm" type="button" data-close>Close</button><button id="rehearse-start" class="btn btn-dark btn-sm" type="button">Start rehearsal</button></div>
   </div>
 </dialog>
 

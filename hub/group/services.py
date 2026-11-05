@@ -361,7 +361,7 @@ class Services:
             self.openrouter_gone = why
             self.openrouter_key = ""
             msg = ("OpenRouter refused ({}): the robots use {} instead; put a new OpenRouter "
-                   "key in the Keys panel".format(why, "Gemini" if self.gemini_key else "OpenAI"))
+                   "key in Settings, Keys".format(why, "Gemini" if self.gemini_key else "OpenAI"))
             log.warning("%s", msg)
             if self.on_switch is not None:
                 self.on_switch(msg)

@@ -144,7 +144,7 @@ def joint_label(joint: str) -> str:
 
 
 def _degrees(value: Any) -> str:
-    return "{:.0f} °C".format(float(value))
+    return "{:.0f} °C".format(float(value))
 
 
 def heat_refusal(joint: str, temp_c: float, limit_c: float, name: str) -> str:

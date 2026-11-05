@@ -95,8 +95,8 @@
         <div style="display: flex; gap: 8px; align-items: center;">
           <button class="btn btn-dark" type="button" id="persona-save" style="min-height: 36px; font-size: 14px;" title="Save the text and the voice, and switch the character on.">Save</button>
           <button class="btn btn-ghost" type="button" id="persona-reset" style="min-height: 36px; font-size: 14px;" title="Clear the text and go back to the base persona">Clear</button>
-          <span class="sub" id="persona-msg" aria-live="polite"></span>
         </div>
+        <div id="persona-msg" aria-live="polite"></div>
       </div>
     </section>
   </div>
@@ -137,6 +137,7 @@
         <button class="btn btn-quiet" type="button" id="more-time" style="min-height: 30px; font-size: 13px; padding: 0 10px;" disabled title="Add one minute to this conversation while it runs; press again for more. The saved Minutes setting does not change.">+1 min</button>
       </div>
       <div class="bar" id="timer-bar"><span id="timer-fill" style="width: 0%;"></span></div>
+      <p class="det" id="timer-note" hidden>Every robot says a closing line now.</p>
     </div>
     <div class="modes2" id="modes">
       <button class="mbtn talk" type="button" id="talk-one" hidden title="This Reachy's own app: one robot talking with the people. It opens in the Talk tab.">Talk<small>one robot, its own app</small></button>
@@ -168,17 +169,18 @@
         <label for="minutes" title="How long a conversation lasts, 0.5 to 60 minutes. At the end every robot says a closing line. While it runs, +1 min adds time.">Minutes</label><input class="input" id="minutes" type="number" min="0.5" max="60" step="0.5">
       </div>
       <div class="srow"><span class="grow" id="lab-intro-label" title="Group talk starts with every robot saying one line about the lab (from Pepper's lab facts); the first robot hands over to the topic.">Lab intro <span class="used"><span>Group only</span></span></span><button class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="lab-intro-label" id="lab-intro"><span></span></button></div>
+      <div class="frow only-live" id="barge-slot" hidden></div>
       <p class="sub" id="voice-note" title="ElevenLabs credits left. Robots on Auto use OpenAI when they run low."></p>
       <div class="fold">
         <div class="pnlh"><h3 style="flex: 1 1 auto;" id="room-title">Room and network</h3><button class="fold-btn" type="button" id="room-fold" aria-expanded="true" aria-controls="room-body" aria-labelledby="room-title"><i data-ic="chev" data-s="16"></i></button></div>
-        <p class="sub" id="room-live-note" hidden>Gap, voice threshold, slow network and heads change live. Audience mic and Simulate wait until Stop.</p>
+        <p class="sub" id="room-live-note" hidden>Gap, voice threshold, slow network and heads change live. Audience mic waits until Stop; Simulate until Disconnect.</p>
         <div id="room-body" style="display: flex; flex-direction: column; gap: 10px;">
           <div class="frow">
             <label for="listen-gap" title="Silence after a robot line before the next robot speaks, 0.2 to 3 seconds. Longer leaves the people more room to jump in.">Gap</label><div class="rng"><input class="input" id="listen-gap" type="number" min="0.2" max="3" step="0.1"> s</div>
             <label for="voice-min" title="On the mic-meter scale. A voice quieter than this at every robot does not take the floor. 0 = off.">Voice threshold</label><input class="input" id="voice-min" type="number" min="0" max="0.9" step="0.05">
-            <label for="barge-in" title="How easily a person talking over a robot cuts it off. Off: the people are heard only in the pauses. Careful: only a clearly louder voice cuts in. Normal: the default. Eager: cuts in easily, also on room noise.">People cut in</label>
+            <label id="barge-label" for="barge-in" title="How easily a person talking over a robot cuts it off. Off: the people are heard only in the pauses. Careful: only a clearly louder voice cuts in. Normal: the default. Eager: cuts in easily, also on room noise.">People cut in</label>
             <select class="select" id="barge-in"><option value="off">Off (only in the gaps)</option><option value="careful">Careful</option><option value="normal">Normal</option><option value="eager">Eager</option></select>
-            <label for="people-mic" title="Where the audience is heard. Auto: the DJI mic plugged into this laptop, else the robots' own mics. A change reconnects the robots at the next start.">Audience mic</label>
+            <label id="people-mic-label" for="people-mic" title="Where the audience is heard. Auto: the DJI mic plugged into this laptop, else the robots' own mics. A change reconnects the robots at the next start.">Audience mic</label>
             <div class="mic-row"><select class="select" id="people-mic"></select><span class="meter level" data-key="mic:people" title="Audience mic level"><span style="width: 0%;"></span></span></div>
           </div>
           <div class="srow"><span class="grow" id="slow-label" title="Voices come compressed (OpenAI and ElevenLabs only): on a phone hotspot raw voice audio arrives slower than it plays.">Slow network</span><button class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="slow-label" id="slow-network"><span></span></button></div>
@@ -414,7 +416,7 @@
         <input type="range" class="seat-loudness" min="0" max="250" step="5" aria-label="Volume"></div>
       <b class="volnum only-compact">150%</b>
     </div>
-    <p class="vline"><span class="card-now"></span><span class="only-compact"> · <button class="linkbtn more-link" type="button">Personality, camera, more</button></span><span class="only-full less-wrap" hidden> · <button class="linkbtn less-link" type="button">Less</button></span></p>
+    <p class="vline"><span class="card-now"></span><span class="only-compact"><span class="vsep"> · </span><button class="linkbtn more-link" type="button">Personality, camera, more</button></span><span class="only-full less-wrap" hidden><span class="lsep"> · </span><button class="linkbtn less-link" type="button">Less</button></span></p>
     <div class="copyrow only-full"><button class="btn btn-ghost btn-sm copy-button" type="button" style="min-height: 30px; font-size: 13px; padding: 0 8px;" title="Copy some of this robot's settings (voice, writer, gestures, volume and more) to other robots. You choose which."><i data-ic="copy" data-s="14"></i>Copy to others</button><span class="spacer"></span>
       <button class="ib seat-add" type="button" aria-label="Add a laptop robot here"><i data-ic="plus" data-s="16"></i></button><button class="ib seat-remove" type="button" aria-label="Take off the table"><i data-ic="x" data-s="16"></i></button></div>
   </article>

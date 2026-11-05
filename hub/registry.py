@@ -56,6 +56,8 @@ class RobotState:
     # Why the last Connect failed. Sticky until a Connect succeeds, so a failed
     # Connect reads as "couldn't connect", not "Lost" (that is a real loss).
     connect_error: Optional[str] = None
+    # When the next automatic retry runs (epoch seconds); None when none is queued.
+    retry_at: Optional[float] = None
     battery_low: bool = False              # below BATTERY_LOW_PCT
     charging: Optional[bool] = None        # NAO / Pepper, when the probe can tell
     # Another laptop launched this robot's app (a marker file on the robot).
@@ -119,6 +121,13 @@ class Registry:
         if changed:
             self.bus.publish(r.to_event())
         return r
+
+    def set_retry_at(self, key: str, retry_at: Optional[float]) -> None:
+        """Set the retry time without counting as a sighting."""
+        r = self._robots.get(key)
+        if r is not None and r.retry_at != retry_at:
+            r.retry_at = retry_at
+            self.bus.publish(r.to_event())
 
     def set_state(self, key: str, state: str, detail: str = "") -> Optional[RobotState]:
         assert state in STATES, state

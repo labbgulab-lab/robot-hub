@@ -35,8 +35,10 @@
   let persona = {};
   let personaDirty = false;
   let backend = null;
-  let elVoicesLoaded = false;
+  let elVoicesTried = false;       // asked once; retried only on a backend change or a refresh
   let startError = '';             // a refused start, as a sentence
+  let backendError = '';           // a refused backend change or voice load, kept until the next good one
+  let stopError = '';              // a refused Stop, kept until the next state change
   let systemError = '';            // why the system stopped (startup fatal)
   let systemBusy = '';             // 'start' | 'stop'
   let ending = false;
@@ -190,7 +192,9 @@
     E.robotIp.lastChild.textContent = (up && robotLink.ip) || (r && r.address) || '—';
     // State pill and substate.
     E.systemPill.textContent = '';
-    if (up) {
+    if (up && robotLink.connected === false && (current === 'IDLE_BREATHING' || current === 'CONVERSATION_RUNNING')) {
+      E.systemPill.append(RA.pill('p-lost', 'Disconnected'));
+    } else if (up) {
       E.systemPill.append(RA.pill(STATE_PILL[current] || 'p-off', STATE_LABEL[current] || current,
         current === 'STARTING' || current === 'SHUTTING_DOWN'));
     } else if (r) {
@@ -209,15 +213,17 @@
   function renderSystemNote(up) {
     E.systemNote.textContent = '';
     if (!up) return;
+    if (stopError) E.systemNote.append(RA.note('err', 'alert', stopError));
     if (robotLink.connected === false && current !== 'STOPPED') {
       E.systemNote.append(RA.note('warn', 'wifi', `${RA.robotName(key)} stopped answering. It reconnects by itself when it's back.`));
     }
-    if (current === 'STOPPED' && systemError) {
-      E.systemNote.append(RA.note('err', 'alert', `Couldn't start: ${systemError}`, [
+    const sysMsg = systemError ? `Couldn't start: ${String(systemError).replace(/[.\s]+$/, '')}.` : '';
+    if (sysMsg && current !== 'ERROR' && current !== 'STARTING') {
+      E.systemNote.append(RA.note('err', 'alert', sysMsg, [
         RA.button('See log', 'btn-ghost btn-sm', () => { E.log.scrollTop = E.log.scrollHeight; E.copyLogs.focus(); }),
       ]));
-    } else if (current === 'ERROR' && systemError) {
-      E.systemNote.append(RA.note('err', 'alert', systemError));
+    } else if (current === 'ERROR' && sysMsg) {
+      E.systemNote.append(RA.note('err', 'alert', sysMsg));
     }
   }
 
@@ -266,27 +272,41 @@
     setSwitch(E.vision, !!vis.enabled);
     E.visionNote.hidden = !vis.enabled;
     const note = !vis.enabled ? '' : vis.available ? `${RA.cap(str(vis.source))} · ${str(vis.how)}`
-      : `No camera here: ${str(vis.source) || "the app isn't running on the robot"}.`;
+      : visionProblem(str(vis.source));
     E.visionNote.lastChild.textContent = note;
     E.visionNote.title = note;
     E.visionNote.style.color = vis.enabled && !vis.available ? '#8A3B00' : '';
-    if (elv.enabled && !elVoicesLoaded) loadElVoices(false);
+    if (elv.enabled && !elVoicesTried) loadElVoices(false);
     else if (elv.enabled) E.elVoice.value = str(elv.voice_id);
     describeBackend();
   }
 
+  // reachy_chat words a missing key for its own config files; students
+  // add keys in Settings.
+  function keyLine(text) {
+    const m = /^No (.+?) key yet/.exec(str(text));
+    return m ? `No ${m[1]} key yet. Add one in Settings.` : 'No key for this brain yet. Add one in Settings.';
+  }
+
+  function visionProblem(src) {
+    if (!src || /^no camera here/i.test(src)) return "No camera here: the app isn't running on the robot.";
+    const m = /^REACHY_CAMERA_IMAGE does not exist: (.+)$/.exec(src);
+    if (m) return `Test image not found: ${m[1].split(/[\\/]/).pop()}`;
+    return `No camera here: ${src}.`;
+  }
+
   // The honest line under the picker: what the next conversation will be,
   // and anything that would stop it.
-  function describeBackend(extra) {
+  function describeBackend() {
     const b = backend;
     if (!b) return;
     if (startError) { msg(E.backendMsg, startError, 'err', 'key'); return; }
-    if (extra) { msg(E.backendMsg, extra, 'err'); return; }
+    if (backendError) { msg(E.backendMsg, backendError, 'err'); return; }
     const brain = arr(b.brains).find(x => x.id === b.brain) || {};
     const elv = obj(b.elevenlabs);
     const problems = [];
-    if (!brain.key_ok) problems.push(brain.key_error || 'No key for this brain yet. Add one in Settings.');
-    if (elv.enabled && !elv.key_ok) problems.push(`ElevenLabs: ${elv.key_error || 'no key'}`);
+    if (!brain.key_ok) problems.push(keyLine(brain.key_error));
+    if (elv.enabled && !elv.key_ok) problems.push(keyLine(elv.key_error || 'No ElevenLabs key yet'));
     E.backendMsg.textContent = '';
     if (problems.length) {
       problems.forEach(p => { const line = RA.el('p', 'sub', p); line.style.color = '#B91C1C'; E.backendMsg.append(line); });
@@ -301,25 +321,27 @@
   }
 
   async function loadElVoices(refresh) {
+    elVoicesTried = true;
     const r = await RA.link.api('GET', `backend/elevenlabs/voices${refresh ? '?refresh=true' : ''}`);
-    if (!r.ok) { describeBackend("Couldn't load the ElevenLabs voices."); return; }
+    if (!r.ok) { backendError = "Couldn't load the ElevenLabs voices."; describeBackend(); return; }
+    if (backendError === "Couldn't load the ElevenLabs voices.") backendError = '';
     const voices = arr(r.body.voices);
     const cur = obj(backend && backend.elevenlabs);
     fillOptions(E.elVoice, [['', voices.length ? 'First voice in the account' : 'No voices (check the key)'],
       ...voices.map(v => [v.voice_id, v.name + (v.language ? ` (${v.language})` : '')])], str(cur.voice_id));
-    elVoicesLoaded = voices.length > 0;
   }
 
   async function sendBackend(body) {
     if (!RA.link) return;
     const r = await RA.link.api('PUT', 'backend', body);
     if (!r.ok) {
-      describeBackend(r.status === 409 ? `${RA.robotName(key)}'s app is not running.` : `Couldn't change that: ${RA.errorText(r)}`);
+      backendError = r.status === 409 ? `${RA.robotName(key)}'s app is not running.` : `Couldn't change that: ${RA.errorText(r)}`;
       RA.setSave('talk', 'Not saved', 'problem');
       renderBackend();
       return;
     }
     startError = '';
+    backendError = '';
     backend = r.body;
     RA.setSave('talk', 'Saved', 'ok');
     renderBackend();
@@ -337,7 +359,7 @@
       fillOptions(E.personaVoice, [['', `Default voice (${p.default_voice || '—'})`], ...arr(p.voices).map(v => [v, v])], p.voice || '');
     }
     if (p.active) {
-      const what = p.preset_id ? (arr(p.presets).find(x => x.id === p.preset_id) || {}).label || p.preset_id : 'Custom';
+      const what = personaLabel(p);
       E.personaSummary.textContent = `In character: ${what}`;
       E.personaSummary.style.cssText = 'color: #15803D; font-weight: 600; font-size: 14px;';
     } else {
@@ -346,6 +368,21 @@
     }
     E.personaHint.textContent = current === 'CONVERSATION_RUNNING' ? 'Applies to the next conversation.' : '';
     updateCount(p.max_chars);
+  }
+
+  function personaLabel(p) {
+    return p.preset_id ? (arr(p.presets).find(x => x.id === p.preset_id) || {}).label || p.preset_id : 'Custom';
+  }
+  function backendLine(text, summary) {
+    let who;
+    if (typeof summary === 'string' && summary) {
+      const m = /^preset:(.+)$/.exec(summary);
+      if (summary === 'base') who = '';
+      else if (m) who = (arr(persona.presets).find(x => x.id === m[1]) || {}).label || m[1];
+      else if (/^custom/i.test(summary)) who = 'Custom';
+      else who = summary;
+    } else who = persona && persona.active ? personaLabel(persona) : '';
+    return who ? `${text} · Character: ${who}` : text;
   }
 
   function updateCount(max) {
@@ -357,10 +394,12 @@
 
   let personaMsgTimer = 0;
   function personaMessage(text, ok) {
-    E.personaMsg.textContent = text || '';
-    E.personaMsg.style.color = ok ? '#15803D' : '#B91C1C';
+    E.personaMsg.textContent = '';
     clearTimeout(personaMsgTimer);
-    if (text) personaMsgTimer = setTimeout(() => { if (E.personaMsg.textContent === text) E.personaMsg.textContent = ''; }, 4000);
+    if (!text) return;
+    E.personaMsg.append(RA.note(ok ? 'ok' : 'err', ok ? 'check' : 'alert', text));
+    // Only the good news fades; an error stays until the text is fixed or sent again.
+    if (ok) personaMsgTimer = setTimeout(() => { E.personaMsg.textContent = ''; }, 4000);
   }
 
   async function sendPersona(body) {
@@ -539,6 +578,7 @@
   /* ----------------------------------------------------------- events */
   function setState(state) {
     current = state;
+    stopError = '';
     if (state !== 'CONVERSATION_RUNNING') { ending = false; E.substate.hidden = true; }
     if (['IDLE_BREATHING', 'STOPPED', 'ERROR', 'SHUTTING_DOWN'].includes(state)) freezeTimer();
     if (state === 'IDLE_BREATHING' || state === 'CONVERSATION_RUNNING') systemBusy = '';
@@ -558,11 +598,11 @@
     if (k.error) {
       E.keyBadge.className = 'badge bad';
       E.keyBadge.textContent = 'No key';
-      E.keyBadge.title = k.error;
+      E.keyBadge.title = 'No key for this brain yet. Add one in Settings.';
     } else if (k.label) {
       E.keyBadge.className = 'badge';
       E.keyBadge.append(RA.el('span', 'mono', `${k.label} ··${k.key_tail || ''}`));
-      E.keyBadge.title = 'The key this brain uses (label and last four only).';
+      E.keyBadge.title = `The key this brain uses (label and last four only)${k.source ? `, from ${k.source}` : ''}.`;
     } else {
       E.keyBadge.className = 'badge';
       E.keyBadge.append(RA.el('span', 'mono', '…'));
@@ -592,10 +632,11 @@
         break;
       case 'state.snapshot': {
         robotLink = { connected: obj(m.robot).connected, ip: str(obj(m.robot).ip), daemon: str(obj(m.robot).daemon_status) };
+        backendError = '';
         setIdentity(m.identity);
         persona = obj(m.persona);
         backend = obj(m.backend);
-        elVoicesLoaded = false;
+        elVoicesTried = false;
         systemError = str(m.error_message);
         E.log.textContent = '';
         logLines = [];
@@ -605,7 +646,7 @@
         const conv = m.conversation ? obj(m.conversation) : null;
         setConvHeader(conv ? conv.id : '');
         E.turns.textContent = conv ? String(num(conv.turn_count, 0)) : '0';
-        if (conv && conv.backend) appendSys(str(conv.backend));
+        if (conv && conv.backend) appendSys(backendLine(str(conv.backend), conv.persona));
         arr(m.transcript).forEach(t => {
           t = obj(t);
           lastTurn = num(t.turn_id, lastTurn);
@@ -637,7 +678,7 @@
         E.turns.textContent = '0';
         lastTurn = 0;
         if (m.backend) {
-          appendSys(str(m.backend));
+          appendSys(backendLine(str(m.backend), m.persona));
           logLine('INFO', 'client', `conversation on ${m.backend}`);
         }
         break;
@@ -665,7 +706,7 @@
         break;
       case 'turn.aborted': appendAborted(m.turn_id, m.reason); break;
       case 'volume.change': showVolume(m); break;
-      case 'backend.change': backend = m; renderBackend(); break;
+      case 'backend.change': backendError = ''; elVoicesTried = false; backend = m; renderBackend(); break;
       case 'identity.change': setIdentity(m); break;
       case 'persona.change':
         // Another tab changed it; a half-typed text here is not overwritten.
@@ -694,6 +735,14 @@
     if (r.status === 409 && b.error === 'already_running') return 'Already talking. End this conversation first.';
     if (r.status === 503) return 'Still starting. Try again in a few seconds.';
     if (r.status === 409 && b.code === 'NOT_RUNNING') return `${RA.robotName(key)}'s app is not running.`;
+    const kd = /key yet/.test(str(b.detail)) && /No (.+?) key yet/.exec(b.detail);
+    if (kd && /voice/i.test(str(b.detail)) && /ElevenLabs/i.test(kd[1])) {
+      return "Couldn't start: the ElevenLabs voice needs a key. Add one in Settings.";
+    }
+    if (kd) {
+      const br = arr(backend && backend.brains).find(x => x.id === backend.brain);
+      return `Couldn't start: ${br ? str(br.label).replace(/^(OpenAI|Google)\s+/i, '') : 'This brain'} needs ${/^[AEIOU]/i.test(kd[1]) ? 'an' : 'a'} ${kd[1]} key. Add one in Settings${kd[1] === 'OpenAI' ? ', or pick Gemini' : ''}.`;
+    }
     if (b.detail) return `Couldn't start: ${b.detail}`;
     return `Couldn't start: ${RA.errorText(r)}`;
   }
@@ -723,12 +772,13 @@
 
   async function startSystem() {
     systemBusy = 'start';
+    systemError = '';
     render();
     const r = await RA.link.api('POST', 'system/start');
     systemBusy = '';
     if (!r.ok) {
       const why = r.body.error === 'invalid_state' ? `it is ${STATE_LABEL[r.body.state] || r.body.state}` : RA.errorText(r);
-      systemError = `Couldn't start the system: ${why}.`;
+      systemError = String(why).replace(/[.\s]+$/, '');
       logLine('ERROR', 'client', `start system failed: ${why}`);
     }
     render();
@@ -736,12 +786,13 @@
 
   async function stopSystem() {
     systemBusy = 'stop';
+    stopError = '';
     render();
     const r = await RA.link.api('POST', 'system/stop');
     systemBusy = '';
     if (!r.ok) {
       const why = r.body.error === 'invalid_state' ? "it isn't running" : RA.errorText(r);
-      E.systemNote.append(RA.note('err', 'alert', `Couldn't stop the system: ${why}.`));
+      stopError = `Couldn't stop the system: ${why}.`;
       logLine('ERROR', 'client', `stop system failed: ${why}`);
     }
     render();
@@ -807,16 +858,19 @@
     if (staff) loadWifi();
   }
 
+  let wifiAvailable = false;
   async function loadWifi() {
     const known = $('wifi-known');
     known.textContent = '';
     if (!RA.link || RA.link.state !== 'open') {
+      wifiAvailable = false;
       wifiMsg('err', `WiFi can only be set while ${RA.robotName(key)}'s app runs. Start it first.`);
       $('wifi-save').disabled = true;
       return;
     }
     const r = await RA.link.api('GET', 'wifi');
     if (!r.ok) { wifiMsg('err', `Couldn't ask the robot: ${RA.errorText(r)}`); return; }
+    wifiAvailable = !!r.body.available;
     if (!r.body.available) {
       wifiMsg('err', r.body.reason === 'only when reachy_chat runs on the robot'
         ? 'WiFi can only be set when the app runs on the robot.' : str(r.body.reason) || 'WiFi settings are not available here.');
@@ -855,10 +909,10 @@
     $('wifi-save').disabled = true;
     wifiMsg('busy', 'Saving on the robot…');
     const r = await RA.link.api('POST', 'wifi', { ssid, password });
-    $('wifi-save').disabled = false;
+    $('wifi-save').disabled = !wifiAvailable;
     if (!r.ok) { wifiMsg('err', r.status ? (str(r.body.error) || `Failed (${r.status}).`) : `Couldn't reach the robot: ${RA.errorText(r)}`); return; }
     $('wifi-pass').value = '';
-    wifiMsg('ok', `"${ssid}" saved. The robot stays on its current WiFi for now; turn that one off and it moves over within a minute.`);
+    wifiMsg('ok', `"${ssid}" ${r.body.action === 'updated' ? 'updated' : 'saved'}. The robot stays on its current WiFi for now; turn that one off and it moves over within a minute.`);
     loadWifi();
   }
 
@@ -916,7 +970,7 @@
       personaDirty = false;
       await sendPersona({ preset_id: id, enabled: true });
     });
-    E.personaText.addEventListener('input', () => { personaDirty = true; updateCount(); });
+    E.personaText.addEventListener('input', () => { personaDirty = true; updateCount(); if (E.personaMsg.querySelector('.note.err') && E.personaText.value.length <= (persona.max_chars || PERSONA_MAX)) personaMessage('', true); });
     E.personaVoice.addEventListener('change', () => { personaDirty = true; });
     E.personaSave.addEventListener('click', async () => {
       const max = persona.max_chars || PERSONA_MAX;
@@ -961,6 +1015,8 @@
       identity = {};
       ended = null;
       startError = '';
+      backendError = '';
+      stopError = '';
       systemError = '';
       clearChat();
       clearTimer();

@@ -4199,11 +4199,18 @@ class GroupManager:
         if mode not in MODES:
             return {"ok": False, "error": "unknown mode {!r}".format(mode)}
         async with self._lock:
+            # A steer sent before Start is kept for the first line; only a
+            # switch from a running conversation drops it.
+            idle = self._task is None or self._task.done()
+            kept = self.pending_nudge if idle else ""
             await self._stop_conversation()
+            had_session = self.session is not None
             refused = await self._ensure_session()
             if refused is not None:
                 return refused
-            self.pending_nudge = ""
+            self.pending_nudge = kept
+            if kept and not had_session:
+                self.note("operator: {}".format(kept))   # the new session cleared the transcript
             self._task = asyncio.create_task(self._lifecycle(mode))
             self.publish_state()
             return {"ok": True}
@@ -4227,7 +4234,7 @@ class GroupManager:
                                           "name".format(", ".join(twins))}
         if not self._key("gpt") and not self._keys("gemini") and not self._key("openrouter"):
             return {"ok": False, "error": "the hub needs an OpenRouter, OpenAI or Gemini key "
-                                          "(Keys panel on the main page)"}
+                                          "(Settings, Keys)"}
         self.error = None
         if self.session is not None and self.session.signature != Session.make_signature(
                 seats, settings):
@@ -4381,6 +4388,13 @@ class GroupManager:
         if not settings.get("simulate"):
             from .vad import SileroVAD
             jobs["Voice detection"] = asyncio.to_thread(SileroVAD)
+        # Every check shows as pending until its request lands; services no
+        # longer checked drop out (a short run keeps the voices' last result).
+        self._warm = {n: w for n, w in self._warm.items() if n in jobs or (
+            not full and n.startswith("Voice of "))}
+        for n in jobs:
+            self._warm[n] = {"ok": None}
+        self.publish_state()
         await asyncio.gather(*(check(n, j) for n, j in jobs.items()))
         self._warm_at = time.time()
         bad = [n for n, w in self._warm.items() if w.get("ok") is False]

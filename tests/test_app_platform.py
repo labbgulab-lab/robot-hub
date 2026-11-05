@@ -219,7 +219,8 @@ class _Cfg:
         return RobotCfg(settings={"password": self._password} if self._password else {})
 
 
-def test_settings_defaults_and_persistence(tmp_path):
+def test_settings_defaults_and_persistence(tmp_path, monkeypatch):
+    monkeypatch.setenv("ROBOT_HUB_DATA", str(tmp_path))   # a student install
     cfg = _Cfg()
     store = S.SettingsStore(tmp_path / "settings.json", cfg)
     assert store.first_run is True

@@ -242,7 +242,7 @@ def test_adapter_heat_refusal_names_the_joint_and_temperature(monkeypatch, agent
     with pytest.raises(PostureRefused) as exc:
         _run(a.posture("sit"))
     text = str(exc.value)
-    assert "right hip" in text and "92 °C" in text and "cool" in text
+    assert "right hip" in text and "92 °C" in text and "cool" in text
     assert nao.calls == []
 
 

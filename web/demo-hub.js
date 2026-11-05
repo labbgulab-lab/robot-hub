@@ -116,7 +116,7 @@
     add('About to stop', robot('c:9', 'reachy_wireless', 'reachy3', 'DEGRADED', { address: '10.0.4.23', detail: 'Control loop errors (3). It usually stops about 7 s later.' }), { main: slot(K.gem, 'k1', 'assigned', ALL) });
     add('Old robot software', robot('c:10', 'reachy_wireless', 'reachy5', 'DETECTED', { address: '10.0.4.25', detail: 'ready -- daemon 1.9.2 is older than 1.10.0, where `ready` is permanently false' }));
     add('Not answering yet', robot('c:11', 'reachy_wireless', 'reachy1', 'DEGRADED', { address: '10.0.4.21', detail: 'Not answering yet. Restarting?' }));
-    add('Lost, retrying', robot('c:12', 'reachy_wireless', 'reachy6', 'ERROR', { address: '10.0.4.26', detail: 'connect timed out' }));
+    add('Lost, retrying', robot('c:12', 'reachy_wireless', 'reachy6', 'ERROR', { address: '10.0.4.26', detail: 'connect timed out', retry_at: now() + 20 }));
     add("Key that can't talk", robot('c:13', 'reachy_wireless', 'reachy3', 'CONNECTED', { address: '10.0.4.23' }), { main: slot(K.el, 'k4', 'assigned', ALL) });
     add('Pepper without a GPT key', robot('c:14', 'pepper', 'Pepper', 'CONNECTED', { address: '10.0.4.41', battery: 58 }), { main: slot(null, null, 'no GPT key in the hub', ['gpt']) });
     add('In use by another laptop', robot('c:15', 'reachy_wireless', 'reachy4', 'DETECTED', { address: '10.0.4.24', in_use_by: 'LAB-LAPTOP-3' }));
@@ -291,7 +291,7 @@
         'key-voice': { ok: true, key: { provider: 'elevenlabs', status: { state: 'works' } } },
         'key-ok': { ok: true, key: { provider: 'gpt', status: { state: 'works' } } },
         'key-unknown': { ok: false, code: 'UNKNOWN_PROVIDER' },
-        'key-dup': { ok: false, code: 'DUPLICATE' },
+        'key-dup': { ok: false, code: 'DUPLICATE', label: 'Lab Gemini' },
         'key-notakey': { ok: false, code: 'NOT_A_KEY' },
         'key-bad': { ok: false, code: 'KEY_REFUSED' },
       }[s];

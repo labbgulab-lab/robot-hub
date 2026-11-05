@@ -116,6 +116,7 @@ class Hub:
         # The student's settings (data/settings.json); stored values such as
         # auto_connect and the lab WiFi are applied onto `config` here.
         self.settings = hub_settings.open_store(config.data_dir, config)
+        self.settings.listeners.append(self._settings_changed)
         # What this laptop needs before a robot works (hub/requirements.py).
         self.setup = SetupManager(config, self.bus, self.settings)
         self.setup.listeners.append(self._setup_changed)
@@ -183,16 +184,19 @@ class Hub:
                 except Exception:  # noqa: BLE001
                     pass
 
+    def _settings_changed(self) -> None:
+        """A login result changed (Furhat password): tell open pages."""
+        try:
+            self.bus.publish({"type": "settings", **self.settings.public(),
+                              "auto_connect": self.config.auto_connect})
+        except Exception:  # noqa: BLE001
+            pass
+
     # ----------------------------------------------------------- staff tools
     def staff_tools_on(self) -> bool:
         """Settings > Staff tools. A lab checkout (no ROBOT_HUB_DATA) that
         never set it keeps every tool, as before the student app."""
-        stored = getattr(self.settings, "_data", {})
-        if "staff_tools" in stored:
-            return bool(stored["staff_tools"])
-        if custom_data_dir() is None:
-            return True
-        return bool(self.settings.get("staff_tools"))
+        return self.settings.staff_tools_on()
 
     # ------------------------------------------------------------------ keys
     def _key_robots(self) -> list[Any]:
@@ -229,8 +233,10 @@ class Hub:
         secret = keycheck.clean(key)
         if not keycheck.looks_like_a_key(secret):
             raise ActionError("That doesn't look like an API key.", "NOT_A_KEY")
-        if self.keys.find_secret(secret) is not None:
-            raise ActionError("That key is already here.", "DUPLICATE")
+        dup = self.keys.find_secret(secret)
+        if dup is not None:
+            raise ActionError("That key is already here.", "DUPLICATE",
+                              label=dup.get("label", ""))
         wanted = normalize_provider(provider)
         if wanted in ("", "auto"):
             candidates = keycheck.detect(secret)
@@ -700,10 +706,13 @@ class Hub:
         r = self.registry.get(key)
         if r is not None:
             self.bus.emit_log("info", "{}: retrying in {:.0f} s".format(r.name, delay))
+            self.registry.set_retry_at(key, time.time() + delay)
         await asyncio.sleep(delay)
         current = self.registry.get(key)
         if current is None:
             return
+        if current.retry_at is not None:
+            self.registry.set_retry_at(key, None)
         # Lost (a real loss), or Available after a failed Connect.
         if current.state == R.ERROR or (current.state == R.DETECTED and current.connect_error
                                         and self.config.auto_connect):
@@ -908,8 +917,7 @@ class Hub:
             if not override and getattr(adapter, "remote_shell", None) is not None:
                 holder = await self._read_in_use(key, adapter)
                 if holder:
-                    message = ("Another laptop ({}) is using {}. Press again to take it "
-                               "over.".format(holder, r.name))
+                    message = "Another laptop ({}) is using {}.".format(holder, r.name)
                     self.bus.emit_log("warn", "{}: {}".format(r.name, message))
                     return {"ok": False, "error": message, "code": "IN_USE",
                             "in_use_by": holder}

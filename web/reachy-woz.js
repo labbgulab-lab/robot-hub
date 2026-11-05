@@ -68,13 +68,12 @@
     edit.setAttribute('aria-label', `Edit ${cue.label}`);
     edit.addEventListener('click', (ev) => { ev.stopPropagation(); openEditor(cue); });
     node.append(edit);
-    node.addEventListener('click', () => fire(cue.id, false));
+    node.addEventListener('click', () => { fire(cue.id, false); node.blur(); });
     node.addEventListener('keydown', (ev) => {
       if (ev.target !== node) return;
-      if (ev.key === 'Enter' || ev.key === ' ') {
-        // The page's own Space handler must not fire the outlined cue too.
+      // Enter fires this card; Space always fires the outlined cue (page handler).
+      if (ev.key === 'Enter') {
         ev.preventDefault();
-        ev.stopPropagation();
         fire(cue.id, false);
       }
     });
@@ -112,9 +111,10 @@
       card.append(grid);
       E.board.append(card);
     });
-    if (!arr(catalog.sections).length) E.board.append(el('p', 'sub', 'No cue script on this robot yet. Press + add cue after Reload script, or add cues/show/cues.json.'));
+    if (!arr(catalog.sections).length) E.board.append(el('p', 'sub', 'This robot has no cue script yet. Put one in reachy_chat show/cues.json, then press Reload script.'));
     if (pointer >= order.length) pointer = Math.max(0, order.length - 1);
     markPointer(false);
+    renderQuick();
   }
 
   function markPointer(scroll = true) {
@@ -283,6 +283,7 @@
   function hotkeyClash(hotkey) {
     const k = str(hotkey).toLowerCase();
     if (!k) return '';
+    if (editing && editing.cue && str(editing.cue.hotkey).toLowerCase() === k) return '';   // unchanged
     if (QUICK_KEYS.includes(k)) return `Hotkey "${k.toUpperCase()}" is a quick save. Hotkeys must differ from every cue and quick save (S, D, F).`;
     if (k === ' ') return 'Space fires the outlined cue. Pick another key.';
     const other = byHotkey[k];
@@ -435,12 +436,14 @@
       b.type = 'button';
       b.style.minHeight = '0';
       const head = el('span', 'ch');
-      head.append(el('span', 'k', QUICK_KEYS[i].toUpperCase()), el('span', 'lb', line || '(empty: press Edit)'));
+      const taken = byHotkey[QUICK_KEYS[i]];   // a cue with this hotkey wins on the keyboard
+      head.append(el('span', 'k', taken ? '·' : QUICK_KEYS[i].toUpperCase()), el('span', 'lb', line || '(empty: press Edit)'));
       head.lastChild.dir = 'auto';
       b.append(head);
       b.disabled = !line;
-      b.title = line ? `Say it (${QUICK_KEYS[i].toUpperCase()})` : 'Empty. Press Edit to give it a line.';
-      b.addEventListener('click', () => say(line, 'quick'));
+      b.title = !line ? 'Empty. Press Edit to give it a line.'
+        : taken ? `Say it. ${QUICK_KEYS[i].toUpperCase()} fires the cue "${str(obj(cues[taken]).label)}".` : `Say it (${QUICK_KEYS[i].toUpperCase()})`;
+      b.addEventListener('click', () => { say(line, 'quick'); b.blur(); });
       E.quickList.append(b);
     });
     // Ready ahead of time, like a typed line.
@@ -530,8 +533,7 @@
     if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
     if (ev.key === 'Escape') { ev.preventDefault(); stopAll(); return; }
     if (ev.key === ' ') {
-      if (t && t.tagName === 'BUTTON') return;    // a focused button takes its own Space
-      ev.preventDefault();
+      ev.preventDefault();                        // always the outlined cue, whatever has focus
       const id = order[pointer];
       if (id) fire(id, true);
       return;
@@ -544,6 +546,8 @@
       : '';
     const physical = /^Key([A-Z])$/.exec(ev.code || '');
     const letter = physical ? physical[1].toLowerCase() : (/^Digit(\d)$/.exec(ev.code || '') || [])[1] || k;
+    const id = byHotkey[letter] || byHotkey[k];
+    if (id) { ev.preventDefault(); fire(id, false); return; }   // a cue hotkey beats a quick save
     const qi = QUICK_KEYS.indexOf(letter);
     if (qi >= 0) {
       ev.preventDefault();
@@ -551,8 +555,15 @@
       if (line) say(line, 'quick');
       return;
     }
-    const id = byHotkey[letter] || byHotkey[k];
-    if (id) { ev.preventDefault(); fire(id, false); }
+  }
+
+  // A focused button would also click on Space key-up; Space belongs to the outlined cue.
+  function onKeyUp(ev) {
+    if (ev.key !== ' ' || RA.route.tab !== 'woz' || !RA.link || RA.link.state !== 'open' || editing) return;
+    if (!$('quick-modal').hidden || !$('logs-drawer').hidden || !$('details-drawer').hidden) return;
+    const t = ev.target;
+    if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+    ev.preventDefault();
   }
 
   /* ---------------------------------------------------------------- link */
@@ -622,6 +633,7 @@
     $('quick-cancel').addEventListener('click', () => { $('quick-modal').hidden = true; E.quickEdit.focus(); });
     $('quick-modal').addEventListener('click', (ev) => { if (ev.target === $('quick-modal')) $('quick-modal').hidden = true; });
     document.addEventListener('keydown', onKey);
+    document.addEventListener('keyup', onKeyUp);
     RA.onLink((m) => { if (RA.link && RA.link.key === key) handle(m); });
     RA.onHub((kind) => {
       if (kind === 'settings' || kind === 'all') {

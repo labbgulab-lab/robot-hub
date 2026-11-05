@@ -204,7 +204,7 @@ async function pollMoves() {
     const d = await (await fetch('/sim/state')).json();
     const m = d.moves || [];
     $('moves').textContent = m.length
-      ? m.slice(-6).reverse().map(x => new Date(x.t * 1000).toLocaleTimeString('en-GB') + '  ' + x.text).join('\n')
+      ? m.slice(-6).map(x => new Date(x.t * 1000).toLocaleTimeString('en-GB') + '  ' + x.text).join('\n')
       : 'No movements yet.';
   } catch (e) {}
 }

@@ -2,6 +2,8 @@
 laptop-only guard. No robot and no OpenAI here: a fake agent speaks the real
 frame protocol over a real socket."""
 
+import os
+import types
 import asyncio
 import json
 import struct
@@ -435,3 +437,50 @@ def test_free_conversation_is_bare():
     s = b._session()
     assert s["tools"] == [] and s["tool_choice"] == "none"
     assert s["audio"]["input"]["turn_detection"]["eagerness"] == "medium"
+
+
+def test_stopped_ai_has_no_step_and_rehearsal_needs_a_key(monkeypatch):
+    from fastapi.testclient import TestClient
+    from pepper_app import server as srv
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert srv.MOVE_LABELS["walk"] == "walking"
+    import tempfile, pathlib
+    app = srv.create_app("127.0.0.1", 8780, 0, pathlib.Path(tempfile.mkdtemp()))
+    app.state.pepper.key = ""
+    c = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 5000))
+    r = c.post("/api/rehearse")
+    assert r.status_code == 409
+    ai = app.state.pepper.ai_public()
+    assert ai["running"] is False and "steps" not in ai
+
+
+def test_shutdown_stops_rehearsal(monkeypatch):
+    import asyncio
+    from pepper_app import server
+
+    calls = []
+    monkeypatch.setattr(server, "stop_rehearsal", lambda: calls.append(1))
+    p = server.PepperApp.__new__(server.PepperApp)
+    p.brain = None
+    p.robot = types.SimpleNamespace(connected=False)
+    p.robot_ip = ""
+    asyncio.run(server.PepperApp.shutdown(p))
+    assert calls == [1]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="job objects are Windows only")
+def test_rehearsal_child_dies_with_job():
+    import ctypes
+    import subprocess
+    import sys
+    from pepper_app import server
+
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        server._rehearsal.pop("job", None)
+        assert server._bind_to_job(proc)
+        ctypes.WinDLL("kernel32").CloseHandle(ctypes.c_void_p(server._rehearsal.pop("job")))
+        proc.wait(timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill()

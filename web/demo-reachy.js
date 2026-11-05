@@ -133,7 +133,7 @@
     return {
       event: 'state.snapshot', state: 'CONVERSATION_RUNNING',
       robot: { connected: true, ip: '10.0.4.23', daemon_status: 'active' },
-      conversation: { id: '1105-1412-a3', turn_count: 7, backend: 'Gemini 3.8 Live · en-US · Gemini Live voice Aoede · Character: Scientist' },
+      conversation: { id: '1105-1412-a3', turn_count: 7, backend: 'Gemini 3.8 Live · en-US · Gemini Live voice Aoede', persona: 'preset:scientist' },
       identity: { robot: { display_name: 'reachy3' }, provider: { name: 'gemini', display_name: 'Gemini 3.8 Live', implemented: true },
                   key: { label: 'Lab Gemini', key_tail: 'a91f', source: 'hub' } },
       persona: persona(), backend: backend(), recent_log: LOG,

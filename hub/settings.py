@@ -23,7 +23,9 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
+
+from .config import custom_data_dir
 
 log = logging.getLogger("hub.settings")
 
@@ -62,6 +64,8 @@ class SettingsStore:
         self._data: dict[str, Any] = {}
         # Last login result per robot type: True / False / None (not tried).
         self._works: dict[str, Optional[bool]] = {}
+        # Called (no arguments) when a login result changes; the hub pushes it.
+        self.listeners: list[Callable[[], None]] = []
         # A fresh data folder: no settings were ever saved here.
         self.first_run = not self.path.exists()
         self._load()
@@ -109,6 +113,15 @@ class SettingsStore:
             return {"ssid": "", "last_seen": None}
         return DEFAULTS.get(name)
 
+    def staff_tools_on(self) -> bool:
+        """The effective switch. A lab checkout (no ROBOT_HUB_DATA) that never
+        set it keeps every tool, as before the student app."""
+        if "staff_tools" in self._data:
+            return bool(self._data["staff_tools"])
+        if custom_data_dir() is None:
+            return True
+        return bool(DEFAULTS.get("staff_tools"))
+
     def apply_to_config(self) -> None:
         """Stored values the rest of the hub reads from the config object."""
         cfg = self.config
@@ -123,6 +136,7 @@ class SettingsStore:
 
     def public(self) -> dict[str, Any]:
         out: dict[str, Any] = {name: bool(self.get(name)) for name in BOOL_FIELDS}
+        out["staff_tools"] = self.staff_tools_on()
         out["lab_wifi"] = dict(self.get("lab_wifi"))
         out["passwords"] = {robot: {"set": self.password_is_set(robot),
                                     "works": self._works.get(robot)}
@@ -200,7 +214,14 @@ class SettingsStore:
 
     def note_login(self, robot: str, works: bool) -> None:
         """A robot adapter reports whether the password just worked."""
+        changed = self._works.get(robot) is not bool(works)
         self._works[robot] = bool(works)
+        if changed:
+            for hook in list(self.listeners):
+                try:
+                    hook()
+                except Exception:  # noqa: BLE001
+                    pass
 
     # ------------------------------------------------------ robots network
     def note_robots_network(self, ssid: str, when: Optional[float] = None) -> None:
