@@ -42,7 +42,7 @@
    - Build: `powershell -ExecutionPolicy Bypass -File tools\build_release.ps1 -FromWorkingTree`.
    - Install from the local zip into a temp root with `tools\install.ps1 -Zip ... -Root ...`, then run the app, quit it and uninstall.
    - Ideally also on a clean laptop or VM as a **standard (non-admin) user**.
-3. **Push and release.** Ask Tomer first, every time. **2026-11-05: both branches are pushed. Tomer runs the v1.0.0 release himself (the permission check blocks `gh release create` for Claude). Merging into master waits for his call: lab laptops `git pull` master on every start.**
+3. **Push and release.** Ask Tomer first, every time. **2026-11-05: both branches are pushed. Release v1.0.0 is published (latest, from 9db7123). The one-line install was tested from GitHub end to end, and the in-app update check sees v1.0.0. Merging into master waits for his call: lab laptops `git pull` master on every start.**
    - Push `student-app` and reachy_chat `multi-provider` (use `GH_TOKEN=$(gh auth token --user labbgulab-lab)`).
    - Publish release `v1.0.0` with `RobotHub-1.0.0.zip` and `install.ps1`, marked latest. Until then, the README's one-line install returns 404.
    - Merge `student-app` into master when Tomer agrees.
