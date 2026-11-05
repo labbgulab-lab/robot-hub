@@ -23,6 +23,8 @@ irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.
   `& ([scriptblock]::Create((irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.ps1))) -Uninstall`.
   Add `-RemoveData` to delete your keys, settings and logs too.
 
+**Guides:** [Student guide](docs/guides/STUDENT.md) · [Lab staff guide](docs/guides/LAB-STAFF.md)
+
 Lab members who work on the code use the git setup below instead.
 
 **Making a release (lab):** bump `VERSION`, commit, then on Windows run

@@ -454,6 +454,19 @@ def test_stopped_ai_has_no_step_and_rehearsal_needs_a_key(monkeypatch):
     assert ai["running"] is False and "steps" not in ai
 
 
+def test_walk_refused_while_charging_carries_a_reason():
+    from fastapi.testclient import TestClient
+    from pepper_app import server as srv
+    import tempfile, pathlib, types
+    app = srv.create_app("127.0.0.1", 8780, 0, pathlib.Path(tempfile.mkdtemp()))
+    app.state.pepper.robot = types.SimpleNamespace(status={"charging": True}, connected=True)
+    c = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 5000))
+    r = c.post("/api/move", json={"name": "walk"})
+    assert r.status_code == 409
+    assert r.json() == {"detail": srv.CHARGING_REFUSAL, "reason": "charging"}
+    assert srv.CHARGING_REFUSAL.startswith("Pepper is charging. Unplug the charger")
+
+
 def test_shutdown_stops_rehearsal(monkeypatch):
     import asyncio
     from pepper_app import server

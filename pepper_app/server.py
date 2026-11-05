@@ -47,6 +47,9 @@ LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 WALK_LINES = {"he": "אני צריך למתוח קצת את הרגליים, יוצא להליכה.",
               "en": "I need to stretch my legs, going for a walk."}
 TABLET_RESHOW_S = 20.0
+# Why a walk is refused while charging; the page shows it as an amber note.
+CHARGING_REFUSAL = ("Pepper is charging. Unplug the charger and close the flap, "
+                    "then press Walking again.")
 # Names shown in the chat for the dashboard's move buttons (ids are internal).
 MOVE_LABELS = {"walk": "walking", "wave": "wave", "yes": "nod yes", "no": "shake no",
                "arms_up": "both arms up", "arms_wide": "arms wide", "right_arm_up": "right arm up",
@@ -688,8 +691,7 @@ class PepperApp:
         voice has no Hebrew), then walks. Nothing is said while it is charging:
         the agent refuses the walk then."""
         if (self.robot.status or {}).get("charging"):
-            raise HTTPException(409, "Pepper is charging: unplug the charger and close the flap, "
-                                     "then press Walking again")
+            raise HTTPException(409, CHARGING_REFUSAL)
         text = WALK_LINES["en" if self.cfg.get("language") == "en" else "he"]
         try:
             provider, voice = self.voice_now()
@@ -936,8 +938,19 @@ def create_app(robot_ip: str, port: int, agent_port: int = AGENT_PORT, data_dir:
     async def move(request: Request):
         name = str((await body(request)).get("name", ""))
         if name == "walk":
-            await P.say_before_walk()
-        res = await robot_call("move", name=name)
+            try:
+                await P.say_before_walk()
+            except HTTPException as exc:
+                if exc.detail != CHARGING_REFUSAL:
+                    raise
+                # The page shows this one as an amber note, not a red toast.
+                return JSONResponse({"detail": exc.detail, "reason": "charging"}, status_code=409)
+        try:
+            res = await robot_call("move", name=name)
+        except HTTPException as exc:
+            if name == "walk" and exc.detail == CHARGING_REFUSAL:
+                return JSONResponse({"detail": exc.detail, "reason": "charging"}, status_code=409)
+            raise
         P.add_chat("event", "Gesture: {}".format(MOVE_LABELS.get(name, name)))
         P.log("INFO", "motion: {} ({})".format(name, res.get("did", "")))
         return {"ok": True}

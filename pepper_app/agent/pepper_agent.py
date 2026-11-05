@@ -672,8 +672,8 @@ class Agent(object):
         except Exception:
             charging = False
         if charging:
-            raise RuntimeError("Pepper is charging: unplug the charger and close the flap, "
-                               "then press Walking again")
+            raise RuntimeError("Pepper is charging. Unplug the charger and close the flap, "
+                               "then press Walking again.")
         if self.walking:
             raise RuntimeError("Pepper is already walking")
         mot = p["ALMotion"]

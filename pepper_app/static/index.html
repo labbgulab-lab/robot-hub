@@ -42,8 +42,11 @@
   </span>
   <span class="rng" title="Pepper's speaker volume"><svg class="icon"><use href="#i-vol"/></svg><input id="vol" class="needs-robot" type="range" min="0" max="100" step="5" value="50" aria-label="Volume"><b id="volv">–</b></span>
   <span class="spacer"></span>
-  <span id="key-gpt" class="badge" title="GPT key, picked on the Pepper card. A new pick applies at the next Launch."></span>
-  <span id="key-eleven" class="badge" title="ElevenLabs key. A new pick applies at the next Launch."></span>
+  <span class="keybox">
+    <span class="keyrow"><span id="key-gpt" class="badge" title="GPT key, picked on the Pepper card. A new pick applies at the next Launch."></span>
+    <span id="key-eleven" class="badge" title="ElevenLabs key. A new pick applies at the next Launch."></span></span>
+    <p id="key-line" class="sub" hidden>The scripted demo needs both keys. Free conversation needs GPT.</p>
+  </span>
   <div class="menuwrap">
     <button id="more-btn" class="btn btn-ghost btn-sm" type="button" aria-haspopup="menu" aria-expanded="false">More</button>
     <div id="more-menu" class="menu" role="menu" hidden>
@@ -114,7 +117,8 @@
         <button id="stop-motion" class="btn btn-quiet btn-xs needs-robot" type="button"><svg class="icon"><use href="#i-stop"/></svg>Stop motion</button></div>
       <!-- Only movements that ran on this Pepper (agent/pepper_agent.py has the exact values). -->
       <div id="moves" class="mv"></div>
-      <div id="charge-note" class="note warn" role="status" hidden><svg class="icon"><use href="#i-alert"/></svg><span>Pepper is charging. Unplug the charger and close the flap to walk.</span></div>
+      <p id="robot-wait" class="sub" hidden>Moves, volume and camera wait for the robot.</p>
+      <div id="charge-note" class="note warn" role="status" hidden><svg class="icon"><use href="#i-battery"/></svg><span id="charge-text">Pepper is charging. Unplug the charger and close the flap, then press Walking again.</span></div>
       <div class="headrow"><span class="sub">Head</span>
         <button class="btn btn-quiet btn-s30 needs-robot" type="button" data-head="left" title="Look left">Left</button>
         <button class="btn btn-quiet btn-s30 needs-robot" type="button" data-head="center" title="Look straight ahead">Center</button>

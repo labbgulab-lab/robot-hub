@@ -33,9 +33,17 @@ async function api(path, body, method = 'POST') {
     const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json' },
                                   body: body === undefined ? undefined : JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
+    if (!r.ok && j.reason === 'charging') { showChargeNote(j.detail); return null; }
     if (!r.ok) { toast(sentence(j.detail || j.error || ('HTTP ' + r.status)), true); return null; }
     return j;
   } catch (e) { toast("The dashboard server isn't answering.", true); return null; }
+}
+let chargeTimer, chargeRefused = false;
+function showChargeNote(msg) {
+  $('charge-text').textContent = sentence(msg);
+  chargeRefused = true; $('charge-note').hidden = false;
+  clearTimeout(chargeTimer);
+  chargeTimer = setTimeout(() => { chargeRefused = false; renderHealth(); }, 10000);
 }
 let toastTimer;
 function toast(msg, bad = false) {
@@ -121,7 +129,9 @@ function chip(dot, text, cls) {
 function renderHealth() {
   const h = S.health || {}, r = h.robot || {}, st = r.status || {}, sc = h.screen || {};
   const ok = r.state === 'connected';
-  $('charge-note').hidden = !(ok && st.charging);
+  $('charge-note').hidden = !((ok && st.charging) || chargeRefused);
+  if (!chargeRefused) $('charge-text').textContent = 'Pepper is charging. Unplug the charger and close the flap, then press Walking again.';
+  $('robot-wait').hidden = ok;
   let text, cls;
   if (!wsUp) { text = 'Dashboard server stopped · retrying'; cls = 'bad'; }
   else if (ok) {
@@ -179,6 +189,7 @@ function renderKeys() {
   const mono = text => { const m = document.createElement('span'); m.className = 'mono'; m.textContent = text; return m; };
   if (g.has) { gb.className = 'badge'; gb.replaceChildren(mono(`GPT${g.tail ? ' ··' + g.tail : ' key'}`)); }
   else { gb.className = 'badge bad'; gb.textContent = 'No GPT key · add one on the Pepper card'; }
+  $('key-line').hidden = g.has && e.has;
   gb.title = g.has ? 'GPT key, picked on the Pepper card. A new pick applies at the next Launch.' : 'No GPT key: add one on the Pepper card in the hub. Free conversation needs it; the scripted demo needs it and an ElevenLabs key.';
   if (e.has) { eb.className = 'badge'; eb.replaceChildren(mono(`ElevenLabs${e.tail ? ' ··' + e.tail : ' key'}`)); }
   else { eb.className = 'badge warn'; eb.textContent = 'No ElevenLabs key · Wizard of Oz uses the OpenAI voice'; }

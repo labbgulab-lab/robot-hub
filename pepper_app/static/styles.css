@@ -32,6 +32,8 @@ a{color:#A84E00}a:hover{color:#7A3900}
 .badge.bad,.badge.warn{display:inline-block;line-height:28px}
 .badge.bad{background:var(--danger-tint);color:var(--danger)}
 .badge.warn{background:#FFF1D6;color:#8A3B00}
+.keybox{display:flex;flex-direction:column;gap:2px;align-items:flex-end;min-width:0}
+.keyrow{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .menuwrap{position:relative}
 .menu{position:absolute;right:0;top:42px;z-index:30;background:#FFFFFF;border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 40px -16px rgba(28,25,23,.35);padding:6px;display:flex;flex-direction:column;gap:2px;min-width:330px}
 .menu .btn{justify-content:flex-start;min-height:36px;font-size:14px;font-weight:500}
