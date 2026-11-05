@@ -1,127 +1,75 @@
-# Robot Hub — where things stand
+# Next session: start here
 
-**Updated 2026-10-06, after the 2026-10-05 lab day.** Four robots — reachy2,
-reachy3, Furhat and NAO — went detect → Connect (spoken line) → Launch from the
-hub over WiFi, **running at the same time**: the headline requirement.
-`PLAN.md` is still the design authority. The day's full summary is
-`..\SESSION-2026-10-05.md`.
+**Updated 2026-11-05, end of build phase 2.** We are building the downloadable **student app**: one-line install, keys popup, the new hub page, reachy_app and the Pepper dashboard, all to the design canvas, with full parity with today's tools.
 
-## Every robot joins the lab hotspot — and must save it
+## Where things are
 
-**SSID `Tomer Iphone`** (password: ask the user — it stays out of git). Each robot has to *save* it
-(auto-connect), or it comes up off-network next time and the hub sees nothing.
-On 2026-10-05 neither NAO nor Furhat had it saved.
+| Repo | Branch | Last commit | Pushed? |
+|---|---|---|---|
+| robot-hub (this repo) | `student-app` | `7e7b97f` Student app: backend, hub page, reachy_app, Pepper, installer | **No**, local only |
+| reachy_chat (`../reachy-mini/reachy_chat`) | `multi-provider` | `10c4be2` Typed Wizard of Oz lines, live captions, deploy without the heavy deps | **No**, local only |
 
-- **NAOqi (NAO, Pepper):** cable once, `ping nao.local` (IPv6 is enough), SSH
-  `nao`/`nao`, then interactive `connmanctl`: `agent on`, `connect <wifi_…_psk id
-  of "Tomer Iphone">`, passphrase. It is then a connman favourite.
-- **Furhat:** on its own screen (needs a keyboard).
-- **Reachy Mini:** reachy2 and reachy3 already have it.
-- **The laptop roams back to campus WiFi on its own** (it did mid-test). Turn
-  off auto-connect for the campus network during lab sessions.
+- Tests: `.venv\Scripts\python.exe -m pytest tests -q`, with **521 passing** at the end of phase 2.
+- Nothing has run on a real robot yet. Everything was verified with fakes, local servers and headless screenshots.
+- `docs/CRAB-SWAP-PLAN.md` is untracked on purpose (kept out of this public repo). Never commit it.
 
-## Next lab session, in order
+## Read these first (in this order)
 
-1. **Restart the hub**, then check the Launch button live: spinner + seconds,
-   auto-open of the system tab, failure reason on the card, log Copy button.
-2. **reachy2:** Relaunch and ask "what am I holding?" (camera vision, tested on
-   photos only). Confirm the 0.35 s audio pre-buffer removed the cuts.
-3. **NAO_LLM with a real voice** on the laptop mic (a full turn passed with a
-   WAV file only).
-4. **NAO Launch starts its speaker server itself** (`_ensure_speaker_server`
-   runs `deploy_nao.py` when port 9600 is closed, then waits on the port, not
-   on deploy_nao's 45 s). Built but not yet pressed on the robot.
-5. **Disconnect during Launch** (fixed 2026-10-06, offline-tested): the
-   in-flight sync / deploy child is killed, and an SSH start already on the
-   wire lands before Disconnect clears the robot. Try it once on hardware.
-6. **Robot files panel** (2026-10-06): OpenAIChat 1.3.0 is in the library,
-   keyless. Download it with a GPT key from the page and import it on Furhat.
-7. **Pepper's new dashboard (`pepper_app`, built 2026-10-07, never on the
-   robot).** Launch Pepper, allow the Windows Firewall prompt (private), then
-   check in this order: Robot pill green (agent connected; the log names the
-   speaker mode), Screen pill green and the welcome page on the chest tablet,
-   camera picture, **Wizard of Oz quick phrase in Hebrew** (does Pepper's
-   speaker play it, and is it clean?), each movement button once, then **Start
-   conversation** with Pepper's mic (the only audio route). If Pepper's speaker
-   stays silent, the log says why; English Wizard of Oz with Pepper's own
-   voice still works. Check that the vendor chatbot stays quiet during the
-   conversation and comes back after. Then, for the demo:
-   - **Emoji test** on the tablet, photo, **Mark broken**.
-   - Run **Feelings Together** with emoji and words only, on both engines.
-   - Have Hebrew speakers answer, including one with basic English.
-   - Check that Pepper waits for answers and re-asks only once.
-   Details: `pepper_app/README.md`.
-8. **reachy3 has a hardware fault** — Stewart leg 5 (motor ID 15) is stuck at
-   22°; see TASKS.md. Avoid long sessions on it. Use reachy2 for demos.
+1. `docs/BUILD-PLAN.md`: decisions and answers, the no-admin/no-firewall rule, the install layout, the API contract and the work packages A-G.
+2. `docs/STUDENT-APP-PLAN.md`: the what and why. Decision S19 is full parity.
+3. `docs/parity/*.md`: every control of the old tools, the checklist.
+4. `docs/design/`: the canvas boards (`*.dc.html`), renders (`renders/*.png`) and the CSS (`builder/*.py`). The live canvas is the "Robot Hub student app" artifact on claude.ai.
 
-## Status
+## What is built (phases 1-2)
 
-| | |
-|---|---|
-| `pytest tests -q` | ✅ 102 passed |
-| Wireless Reachy detect + Connect | ✅ reachy2 2026-09-23, reachy3 2026-10-05 |
-| Wireless Reachy robot-side Launch | ✅ reachy3 2026-10-05 (first install + resyncs) |
-| All three backends on the robot (Gemini / GPT-Live / ElevenLabs) | ✅ keys reach the robot; Gemini he/en/auto and GPT-Live he/en/auto talked |
-| NAO wireless detect + Connect | ✅ 2026-10-05 (`172.20.10.14`) |
-| NAO Launch (NAO_LLM panel opens) | ✅ after a manual `deploy_nao.py` |
-| Several robots at once (Phase 5) | ✅ reachy2 + reachy3 + Furhat + NAO, 2026-10-05 |
-| Network loss → auto-reconnect (Phase 6) | ✅ laptop roamed off the hotspot; reachy3 reconnected alone on return |
-| Furhat on hardware | ✅ 2026-10-05 (Connect sets the English voice; skill OpenAIChat 1.3.0) |
-| NAO posture buttons (Sit / Lie down / Stand up) | ✅ with a heat guard |
-| Reachy Lite | ❌ not plugged in |
-| Pepper card (detect, Connect speaks, battery, Launch = Say-It dashboard) | ✅ 2026-10-06 on hardware (NAOqi 2.5.10.7); the dashboard is in this repo, `pepper_dashboard/` (2026-10-07) |
+- **Hub backend** (`hub/`):
+  - data folder (`ROBOT_HUB_DATA`), `defaults.toml`, settings store, `/api/app` (version, update check, quit, update);
+  - single instance, no console windows, log report;
+  - key tests (`keycheck.py`) with per-robot slots, the setup items and the NAO kit download (`requirements.py`);
+  - `network.py`, the in-use marker (`inuse.py`), the new robot fields, Add WiFi for open networks.
+- **Hub page:** `web/index.html`, `app.js`, `style.css`, with a demo mode at `?demo=<state>`.
+- **reachy_app:** `web/reachy.html` with `reachy-*.js`, tabs `#group`, `#talk/<key>`, `#woz/<key>`, the proxy `hub/reachy_proxy.py` and `hub/transcripts.py`. `/group.html` redirects to it.
+- **Pepper** (`pepper_app/`):
+  - inverted link: the agent listens on robot 8790 and the tablet page is served from the robot on 8791;
+  - new dashboard;
+  - web search in free conversation (`websearch.py`).
+- **Packaging:** `tools/build_release.ps1`, `tools/install.ps1`, `launch/launch.pyw` (tray and Edge app window), `assets/labalab.ico`. A test build gave `dist/RobotHub-1.0.0.zip` at about 113 MB.
 
-## Run it
+## Next steps, in order
 
-Double-click **`Start Robot Hub.cmd`** (or the "Robot Hub" desktop shortcut it
-makes on its first run). It pulls the latest code (robot-hub, plus reachy_chat
-and NAO_LLM beside it), installs packages only when requirements.txt changed,
-starts the hub and opens the page. If the hub is already running it only opens
-the page. A Claude session opening the hub for someone: see CLAUDE.md.
+1. **Phase 3, verification.** Ultracode: run as a workflow.
+   - A parity sweep of the hub page, reachy_app and the Pepper dashboard against `docs/parity/*.md`. Check every item, wired and working.
+   - Demo-mode screenshots against `docs/design/renders/*.png`.
+   - Fix what's found and keep the tests green.
+2. **Release build and install test.**
+   - Build: `powershell -ExecutionPolicy Bypass -File tools\build_release.ps1 -FromWorkingTree`.
+   - Install from the local zip into a temp root with `tools\install.ps1 -Zip ... -Root ...`, then run the app, quit it and uninstall.
+   - Ideally also on a clean laptop or VM as a **standard (non-admin) user**.
+3. **Push and release.** Ask Tomer first, every time.
+   - Push `student-app` and reachy_chat `multi-provider` (use `GH_TOKEN=$(gh auth token --user labbgulab-lab)`).
+   - Publish release `v1.0.0` with `RobotHub-1.0.0.zip` and `install.ps1`, marked latest. Until then, the README's one-line install returns 404.
+   - Merge `student-app` into master when Tomer agrees.
+4. **Guides:** a student guide (install, add a key, talk to a Reachy) and a lab-staff guide (capped keys, staff tools, updating). README install block exists.
+5. **Lab day, robots needed:**
+   - Pepper: the outbound link on 8790, the tablet page from the robot on 8791, and the chip must never say "fallback".
+   - Reachy: Talk through the proxy, Wizard of Oz Say (prepare/say), live captions.
+   - The in-use marker, Add WiFi with the Knows list, NAO/Pepper charging.
+   - The NAO kit download and verify on a clean laptop.
+   - Furhat: the skill rebuild without a baked-in key, password `admin`.
 
-```powershell
-cd $HOME\Desktop\job\robot-hub
-.\run.ps1              # venv, deps, server, opens http://127.0.0.1:8099/
-.\run.ps1 -Doctor      # environment check with exact remedies
-```
+## Known gaps (from the builders)
 
-## What changed on 2026-10-05
+- The New Reachy bring-up row only explains `tools\reachy_bringup.py`; there's no button yet.
+- "Windows blocks Pepper" appears only when a start error mentions the firewall or port 8782; it should be rare now.
+- The first Talk on a factory Reachy guesses "Installing the Reachy app" after 45 s starting; the hub doesn't report it.
+- Log filters per robot match robot names in the text, because log lines carry no robot field.
+- Talk gesture tags come from reachy_chat's log lines, so there are no tags after a reload.
+- Group live captions type each line at about 15 characters a second, because the hub sends lines whole.
+- reachy_chat's own log is not copied into the transcripts folder after a Talk.
+- Typed Wizard of Oz lines need a Gemini key on the robot (Gemini text-to-speech), otherwise the code is `NO_KEY`.
 
-- **Launch sends every provider's key** (Gemini, OpenAI, ElevenLabs) on stdin
-  into the robot app's environment, so reachy_chat's backend picker works on
-  the robot. The Keys panel accepts ElevenLabs keys; GPT keys now speak.
-- **Launch always syncs reachy_chat to the robot** (incremental). Before, a
-  provisioned robot kept whatever code it was first given.
-- **Robot-side start command bug, found on hardware:** `a && b && app &`
-  backgrounded the whole chain, whose stdin is /dev/null, so the key reads got
-  nothing and the app never started — while `echo started` still ran. Only the
-  app is backgrounded now.
-- **NAO key check** also accepts keys from NAO_LLM's own `.env`.
-- **Launch UI** (spinner, elapsed seconds, auto-open, failure reason) and a log
-  **Copy** button; backend fields `launching_since` / `launch_error`.
-- **No-cache header** for the page's files (needs a restart to be live).
+## Rules that stay
 
-Known gaps found today: Disconnect does not cancel a Launch still in flight
-(it killed a half-started robot app); the card gave no progress during Launch
-(now fixed, untested live).
-
-Elsewhere, same day: reachy_chat GPT-Live end-of-reply detection (the model
-streams digital silence, which held turns open forever — now only audible
-audio counts; end gap 2.0 s); reachy_chat dashboard log fits the window;
-NAO_LLM web UI uses its own origin; `naoqi/rest.py` and `naoqi/lie_down.py`
-(lie it down — the crouch made NAO fall).
-
-## Deliberately not done
-
-- **Phase 7 (AWS/remote).** Designed for, not built. Discovery is inherently
-  local; remote means a local agent, never a cloud-only hub.
-- **Furhat silent pre-warm.** Neither captured control path has a
-  generate-without-speaking request, and `core.py` speaks right after
-  `connect()`, so warming there would say the sentence twice. Instead the
-  adapter allows a cold phrase its ~1.1 s and holds a warm one to 4 s.
-- **Patching `NAO_LLM` to use NAO's own microphones.** Still the right fix —
-  it removes the contention instead of managing it, and it is what lets NAO be
-  in a different room from the laptop. That is a change to `NAO_LLM`, tracked
-  against that project, not the hub. The hub arbitrates regardless.
-- **Robot photos.** Drop squares into `web/photos/<type_id>.png`; the cards
-  already look for them and fall back to a glyph.
+- Students are not admin: nothing may listen on anything but 127.0.0.1, and nothing may need UAC.
+- Public repo: no secrets, no personal names, no absolute user paths. Never print key files.
+- Commit when asked. Push and release only with Tomer's OK.
