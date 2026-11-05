@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>reachy_app: Group, before start</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}a:hover{color:#7A3900}
+.app{--page:#FAF8F5;--card:#FFFFFF;--sunken:#F4F1EC;--border:#E8E3DC;--ctrl:#8C8378;--ink:#1C1917;--muted:#6B635A;--brand:#FD9903;--brand-hover:#F08A00;--brand-text:#A84E00;--ready:#1D4ED8;--ready-tint:#EEF4FF;--run:#15803D;--run-tint:#ECFDF3;--warn:#8A3B00;--warn-tint:#FFF1D6;--busy-tint:#FFF4E0;--danger:#B91C1C;--danger-tint:#FEF2F2;--ease:cubic-bezier(0.23,1,0.32,1);--drawer:cubic-bezier(0.32,0.72,0,1)}
+.app{position:relative;min-height:800px;background:var(--page);color:var(--ink);font-family:Inter,system-ui,"Segoe UI",sans-serif;font-size:15px;line-height:22px;display:flex;flex-direction:column;overflow:hidden}
+.top{height:64px;box-sizing:border-box;padding:0 20px 0 24px;display:flex;align-items:center;gap:6px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{height:30px;width:auto;display:block;margin-right:8px}
+.spacer{flex:1 1 auto}
+.icon{width:20px;height:20px;flex-shrink:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--sunken);color:var(--ink);font-size:13px;font-weight:500;white-space:nowrap;text-decoration:none;font-variant-numeric:tabular-nums}
+a.chip:hover{color:var(--ink);background:#ECE7E0}
+.chip .cdot{width:7px;height:7px;border-radius:50%;background:#15803D}
+.chip-warn{background:var(--warn-tint);color:var(--warn)}
+.chip-warn .cdot{background:var(--warn)}
+.tgl{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;padding:0 8px;white-space:nowrap}
+.switch{position:relative;width:40px;height:24px;border-radius:999px;border:0;background:#D6CFC5;cursor:pointer;flex-shrink:0;padding:0;transition:background-color 180ms ease}
+.switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform 180ms var(--ease)}
+.switch.on{background:#1C1917}
+.switch.on span{transform:translateX(16px)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);padding:0 8px;white-space:nowrap}
+.ldot{width:8px;height:8px;border-radius:50%;background:#15803D;animation:pulse 2s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(21,128,61,.45)}100%{box-shadow:0 0 0 7px rgba(21,128,61,0)}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:transform 120ms var(--ease),background-color 150ms ease;box-sizing:border-box}
+.btn:active{transform:scale(0.97)}
+.btn:focus-visible,.switch:focus-visible,.select:focus-visible,.input:focus-visible,.chip:focus-visible{outline:2px solid #A84E00;outline-offset:2px}
+.btn-primary{background:var(--brand);color:var(--ink)}
+.btn-primary:hover{background:var(--brand-hover);color:var(--ink)}
+.btn-ghost{background:transparent;color:var(--ink)}
+.btn-ghost:hover{background:var(--sunken);color:var(--ink)}
+.btn-quiet{background:var(--sunken);color:var(--ink)}
+.btn-quiet:hover{background:#ECE7E0;color:var(--ink)}
+.btn-stop{background:var(--danger-tint);color:var(--danger)}
+.btn-arm{background:var(--warn-tint);color:var(--warn);box-shadow:inset 0 0 0 1px #E9A55E}
+.btn-dark{background:#1C1917;color:#FFFFFF}
+.btn-sm{min-height:36px;font-size:14px;padding:0 12px;border-radius:10px}
+.btn-icon{padding:0;width:44px}
+.btn-sm.btn-icon{width:36px}
+.btn[disabled]{opacity:.45;cursor:default}
+.busy{position:relative;overflow:hidden}
+.busy::after{content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.28) 0 8px,transparent 8px 16px);background-size:22px 22px;animation:slide 1s linear infinite}
+@keyframes slide{to{background-position:22px 0}}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite;flex-shrink:0;box-sizing:border-box}
+@keyframes spin{to{transform:rotate(360deg)}}
+.main{flex:1 1 auto;width:100%;max-width:1200px;margin:0 auto;box-sizing:border-box;padding:28px 32px 40px;display:flex;flex-direction:column;gap:24px}
+.pagehead{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+.h1{font-size:26px;line-height:32px;font-weight:700;letter-spacing:-.02em;margin:0}
+.h2{font-size:17px;line-height:24px;font-weight:600;margin:0}
+.muted{color:var(--muted)}
+.small{font-size:14px;line-height:20px}
+.counts{display:flex;gap:16px;align-items:center;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.counts b{color:var(--ink);font-weight:600}
+.counts .d{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.band{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 16px 14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.tiles{display:flex}
+.tiles img{width:40px;height:40px;border-radius:10px;border:2px solid #FFFFFF;margin-left:-10px}
+.tiles img:first-child{margin-left:0}
+.modes{display:flex;gap:6px;flex-wrap:wrap}
+.mode{font-size:13px;font-weight:500;color:var(--muted);background:var(--sunken);border-radius:999px;padding:2px 10px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;box-shadow:0 1px 2px rgba(28,25,23,.06);min-width:0}
+.card.s-run{border-color:#86D9A4;box-shadow:0 0 0 3px #ECFDF3}
+.card.s-conn{border-color:#A9C1F5}
+.card.s-busy{border-color:#F5C77E}
+.card.s-warn{border-color:#E9A55E}
+.card.s-lost{border-color:#F2A7A7}
+.card.s-off{opacity:.6}
+.head{display:flex;gap:12px;align-items:center}
+.tile{width:56px;height:56px;border-radius:12px;flex-shrink:0;display:block}
+.who{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.name{font-size:17px;line-height:24px;font-weight:600;margin:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:6px}
+.name .icon{width:16px;height:16px;color:var(--warn)}
+.side{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.metric{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.metric.batt{font-weight:600;color:var(--ink)}
+.metric.low{color:var(--danger)}
+.metric .icon{width:16px;height:16px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill .spin{width:11px;height:11px}
+.p-near{background:var(--sunken);color:var(--muted)}
+.p-conn{background:var(--ready-tint);color:var(--ready)}
+.p-run{background:var(--run-tint);color:var(--run)}
+.p-busy{background:var(--busy-tint);color:var(--brand-text)}
+.p-warn{background:var(--warn-tint);color:var(--warn)}
+.p-lost{background:var(--danger-tint);color:var(--danger)}
+.p-off{background:var(--sunken);color:var(--muted)}
+.detail{margin:0;font-size:14px;line-height:20px;color:var(--muted);overflow-wrap:anywhere}
+.lbl{font-size:12px;line-height:16px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0}
+.ai{display:flex;flex-direction:column;gap:6px}
+.select{appearance:none;-webkit-appearance:none;width:100%;height:40px;border:1px solid var(--ctrl);border-radius:10px;background:#FFFFFF url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B635A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center;padding:0 34px 0 12px;font:inherit;font-size:14px;color:var(--ink);box-sizing:border-box;text-overflow:ellipsis}
+.select.def{border-color:#E9A55E;background-color:#FFFBF2}
+.select.sm{height:36px;width:auto}
+.sub{font-size:13px;line-height:18px;color:var(--muted);margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{font-size:12px;line-height:18px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--warn-tint);color:var(--warn)}
+.tag-dark{background:#1C1917;color:#FFFFFF;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+.actions{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}
+.actions .grow{flex:1 1 auto}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:14px;line-height:20px;padding:10px 12px;border-radius:10px;background:var(--sunken);color:var(--ink);margin:0}
+.note .icon{width:18px;height:18px;margin-top:1px}
+.note.ok{background:var(--run-tint);color:var(--run)}
+.note.warn{background:var(--warn-tint);color:var(--warn)}
+.note.err{background:var(--danger-tint);color:var(--danger)}
+.note .nacts{display:flex;gap:6px;margin-top:8px}
+.postures{display:flex;gap:6px}
+.postures .btn{flex:1 1 0;min-height:40px;font-size:14px;padding:0 8px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);background:#1C1917;color:#F5F2EE;border-radius:12px;padding:10px 16px;font-size:14px;display:flex;gap:8px;align-items:center;box-shadow:0 12px 32px -12px rgba(28,25,23,.5);white-space:nowrap}
+.toast .icon{width:18px;height:18px}
+.away{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.ghost{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px 0 4px;border:1px dashed #D6CFC5;border-radius:999px;color:var(--muted);font-size:14px}
+.ghost img{width:28px;height:28px;border-radius:999px;opacity:.6}
+.setuprow{display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 6px 0 4px;border:1px dashed #D6CFC5;border-radius:999px;font-size:14px;color:var(--ink)}
+.setuprow img{width:34px;height:34px;border-radius:999px}
+.warnbar{display:flex;align-items:center;gap:10px;padding:8px 24px;background:var(--warn-tint);color:var(--warn);font-size:14px;border-bottom:1px solid #F5D7A6;flex-shrink:0}
+.warnbar.err{background:var(--danger-tint);color:var(--danger);border-bottom-color:#F2C4C4}
+.btn-bar{min-height:32px;font-size:14px;padding:0 12px;border-radius:10px;background:#1C1917;color:#FFFFFF}
+.btn-bar:hover{color:#FFFFFF}
+.dim{opacity:.5;pointer-events:none}
+.ph{background:var(--card);border:1px solid var(--border);border-radius:16px;height:230px}
+.scrim{position:absolute;left:0;right:0;top:0;bottom:0;background:rgba(28,25,23,.30)}
+.sheet{position:absolute;top:0;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:-24px 0 48px -24px rgba(28,25,23,.35);display:flex;flex-direction:column;animation:inr 260ms var(--drawer) both}
+@keyframes inr{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.sheet-head{display:flex;align-items:center;gap:12px;padding:16px 16px 16px 20px;border-bottom:1px solid var(--border)}
+.sheet-head .tile{width:48px;height:48px;border-radius:10px}
+.sheet-body{flex:1 1 auto;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:22px}
+.sec{display:flex;flex-direction:column;gap:10px}
+.sechd{display:flex;align-items:center;gap:8px}
+.facts{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0;font-size:14px;line-height:20px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.field{display:flex;flex-direction:column;gap:6px}
+.field>label,.flabel{font-size:14px;font-weight:500}
+.input{height:40px;border:1px solid var(--ctrl);border-radius:10px;padding:0 12px;font:inherit;font-size:14px;background:#FFFFFF;color:var(--ink);box-sizing:border-box;width:100%}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:20px;cursor:pointer}
+.check input{width:18px;height:18px;margin:1px 0 0;accent-color:#1C1917;flex-shrink:0}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;flex-wrap:wrap}
+.row+.row{border-top:1px solid var(--border)}
+.rowmain{flex:1 1 220px;min-width:0}
+.rowtitle{margin:0;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mono{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:13px;color:var(--muted)}
+.prov{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:var(--sunken);font-size:12px;font-weight:600;color:var(--ink)}
+.acc{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.acc+.acc{margin-top:8px}
+.acchd{display:flex;align-items:center;gap:10px;padding:10px 12px;font-weight:600;font-size:14px}
+.acchd img{width:28px;height:28px;border-radius:8px}
+.accbody{padding:0 12px 12px 50px;font-size:14px;line-height:21px}
+.accbody ol,.accbody ul{margin:0;padding-left:18px}
+.steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px}
+.steps>li{display:flex;gap:12px}
+.num{width:24px;height:24px;border-radius:50%;background:#1C1917;color:#FFFFFF;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.stepbody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:21px}
+.stepbody ul{margin:0;padding-left:18px;color:var(--muted)}
+.cap{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stagger{animation:in 300ms var(--ease) both}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.stagger,.ldot,.spin,.sheet,.busy::after{animation:none}}
+
+.ttl{font-weight:700;font-size:17px;letter-spacing:-.01em;margin:0 8px 0 4px;white-space:nowrap}
+.tabs{display:flex;gap:4px;background:var(--sunken);padding:4px;border-radius:12px}
+.tab{display:flex;flex-direction:column;justify-content:center;padding:3px 14px;border-radius:9px;font-weight:600;font-size:14px;line-height:18px;color:var(--ink);text-decoration:none;min-height:40px;box-sizing:border-box}
+.tab small{font-size:11.5px;font-weight:500;color:var(--muted);line-height:14px}
+.tab.on{background:#FFFFFF;box-shadow:0 1px 2px rgba(28,25,23,.10)}
+a.tab:hover{color:var(--ink)}
+.save{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--run);padding:0 8px;white-space:nowrap}
+.save.warn{color:var(--warn)}
+.save .icon{width:16px;height:16px}
+.pnl{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0;box-sizing:border-box}
+.pnlh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pnlh h2,.pnlh h3{font-size:12px;line-height:16px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0}
+.frow{display:grid;grid-template-columns:104px minmax(0,1fr);align-items:center;gap:8px 10px}
+.frow>label,.frow>.fl{font-size:14px;font-weight:500;color:var(--ink)}
+.frow .select,.frow .input{height:36px}
+.srow{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500}
+.srow .grow{flex:1 1 auto;min-width:0}
+.used{display:inline-flex;gap:4px;flex-wrap:wrap}
+.used span{font-size:11px;font-weight:600;line-height:16px;padding:0 6px;border-radius:5px;background:var(--sunken);color:var(--muted);white-space:nowrap}
+.ta{border:1px solid var(--ctrl);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;line-height:20px;resize:none;width:100%;box-sizing:border-box;color:var(--ink);background:#FFFFFF}
+.cnt{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;background:var(--sunken);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink)}
+.badge .mono{font-size:12px}
+.rng{display:flex;align-items:center;gap:8px;font-size:13px;font-variant-numeric:tabular-nums}
+.rng input[type=range]{accent-color:#1C1917;width:120px}
+.sub-badge{font-size:11px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:6px;background:var(--ready-tint);color:var(--ready)}
+.sub-badge.speak{background:#EEF4FF;color:#1D4ED8}
+.sub-badge.listen{background:var(--run-tint);color:var(--run)}
+.sub-badge.think{background:var(--busy-tint);color:var(--brand-text)}
+.log{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:12px;line-height:19px;background:#171412;color:#E7E2DA;border-radius:10px;padding:10px 12px;overflow:hidden;flex:1 1 auto;min-height:0}
+.log div{white-space:pre-wrap;overflow-wrap:anywhere}
+.log .t{color:#9C948A}.log .w{color:#FFC56B}.log .e{color:#FF8A8A}.log .d{color:#8C847A}
+.chat{display:flex;flex-direction:column;gap:10px;flex:1 1 auto;min-height:0;overflow:hidden}
+.bub{max-width:78%;padding:10px 14px;border-radius:14px;font-size:16px;line-height:24px}
+.bub.robot{align-self:flex-start;background:#FFF4E0;border-top-left-radius:4px}
+.bub.person{align-self:flex-end;background:var(--sunken);border-top-right-radius:4px}
+.bub .meta{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin-top:4px;flex-wrap:wrap}
+.bub.saying{box-shadow:0 0 0 2px #FDB241}
+.mbtn.on[disabled]{opacity:1;cursor:default}
+.chk.wait{background:#FFFFFF;border:1px dashed #D6CFC5;color:var(--muted)}
+.chk .spin{width:11px;height:11px}
+.sys{align-self:center;font-size:12.5px;color:var(--muted);background:var(--sunken);border-radius:999px;padding:3px 12px}
+.sys.err{background:var(--danger-tint);color:var(--danger)}
+.cur{display:inline-block;width:.55em;color:#A84E00;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.mtag{font-size:11.5px;font-weight:600;padding:0 6px;line-height:18px;border-radius:5px;background:#FFFFFF;color:var(--muted);border:1px solid var(--border)}
+.stage{display:grid;grid-template-columns:minmax(0,1.25fr) 230px minmax(0,1.6fr);gap:20px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 18px}
+.phase{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.pdot{width:9px;height:9px;border-radius:50%;background:currentColor}
+.big{font-size:22px;line-height:28px;font-weight:700;letter-spacing:-.015em;margin:2px 0 0}
+.det{font-size:14px;color:var(--muted);margin:2px 0 0}
+.timer{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.bar{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden;margin-top:6px}
+.bar span{display:block;height:100%;background:#1C1917;border-radius:999px}
+.modes2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto auto;gap:8px}
+.mbtn{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;min-height:52px;padding:6px 12px;border-radius:12px;border:1px solid var(--border);background:#FFFFFF;font:inherit;font-weight:600;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.mbtn small{font-size:12px;font-weight:500;color:var(--muted)}
+.mbtn.on{background:var(--run-tint);border-color:#86D9A4;color:var(--run)}
+.mbtn.int{border-left:4px solid #C2410C}
+.mbtn.free{border-left:4px solid #0E7490}
+.mbtn.grp{border-left:4px solid #2563EB}
+.mbtn[disabled]{opacity:.45;cursor:default}
+.substrip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;grid-column:1 / -1;border-top:1px solid var(--border);padding-top:10px;font-size:14px}
+.okline{color:var(--run);font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.warnline{color:var(--warn);font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.chk{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:500;background:var(--sunken);color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chk.ok{background:var(--run-tint);color:var(--run)}
+.chk.bad{background:var(--danger-tint);color:var(--danger)}
+.chips2{display:flex;gap:6px;flex-wrap:wrap;grid-column:1 / -1}
+.seat{background:var(--card);border:1px solid var(--border);border-top:4px solid var(--sc);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.seat.speaking{box-shadow:0 0 0 3px #BFD3FB;background:#FBFCFF}
+.seat.out{opacity:.5}
+.seathd{display:flex;align-items:center;gap:8px}
+.sn{width:24px;height:24px;border-radius:7px;background:var(--sc);color:#FFFFFF;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lab{flex:1 1 auto;min-width:0;height:34px;border:1px solid var(--ctrl);border-radius:9px;padding:0 10px;font:inherit;font-size:15px;font-weight:600;color:var(--ink);box-sizing:border-box}
+.rtag{font-size:12px;color:var(--muted);background:var(--sunken);border-radius:6px;padding:1px 6px;white-space:nowrap}
+.gtag{font-size:12px;font-weight:600;border-radius:6px;padding:1px 6px;white-space:nowrap}
+.meter{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden;flex:1 1 auto}
+.meter span{display:block;height:100%;background:#15803D}
+.meter.deaf span{background:#C9C2B8}
+.ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer;padding:0}
+.ib[disabled]{opacity:.4}
+.ib .icon{width:16px;height:16px}
+.checks3{display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px}
+.checks3 label{display:inline-flex;align-items:center;gap:6px}
+.checks3 input{width:16px;height:16px;accent-color:#1C1917;margin:0}
+.seg{display:flex;border:1px solid var(--ctrl);border-radius:9px;overflow:hidden;height:32px}
+.seg button{flex:1 1 0;border:0;background:#FFFFFF;font:inherit;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;padding:0 6px;font-variant-numeric:tabular-nums}
+.seg button+button{border-left:1px solid var(--border)}
+.seg button.on{background:#1C1917;color:#FFFFFF}
+.seg.lvl button.on{background:#C2410C}
+.vline{font-size:12.5px;color:var(--muted)}
+.fl2{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 -4px}
+.tr{display:flex;flex-direction:column;justify-content:flex-end;gap:2px;overflow:hidden;flex:1 1 auto;min-height:0}
+.ln2{display:grid;grid-template-columns:4px minmax(0,1fr);gap:10px;padding:8px 10px 8px 0;border-radius:8px}
+.ln2 .cb{border-radius:4px;background:var(--sc)}
+.ln2 .lh{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.ln2 .who{font-weight:700;color:var(--sc);font-size:13.5px;display:inline;flex:none}
+.ln2 .tx{font-size:17px;line-height:25px;color:var(--ink);margin-top:2px}
+.ln2.now{background:#EEF4FF}
+.ln2.cut .tx{text-decoration:line-through;color:var(--muted)}
+.cuttag{font-size:11.5px;font-weight:700;color:var(--warn);background:var(--warn-tint);border-radius:5px;padding:0 6px}
+.ln2.people{background:#FFFBF2}
+.ln2.people .cb{background:#D97706}
+.ln2.people .who{color:#8A3B00}
+.note2{font-size:12.5px;color:var(--muted);font-style:italic;padding:3px 0 3px 14px;margin:0}
+.plive{border:1px solid #F5C77E;background:#FFFBF2;border-radius:12px;padding:8px 12px;font-size:17px;line-height:25px}
+.plive b{display:block;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#8A3B00}
+.steer{display:flex;gap:8px;align-items:center}
+.kbd{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:5px;border:1px solid var(--border);background:#FFFFFF;font-size:11.5px;font-weight:600;color:var(--muted);font-family:inherit;box-sizing:border-box}
+.jump{align-self:center;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;background:#1C1917;color:#FFFFFF;font-size:13px;font-weight:600;border:0}
+.fold{border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:10px}
+.modal{position:absolute;background:#FFFFFF;border-radius:18px;box-shadow:0 24px 64px -16px rgba(28,25,23,.45);display:flex;flex-direction:column;gap:14px;padding:20px 22px}
+.modal h2{font-size:19px;margin:0}
+.app{min-height:1180px}</style>
+</helmet>
+<div class="app">
+  <header class="top" style="gap: 10px;">
+    <a class="btn btn-ghost btn-sm" href="Hub.dc.html"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>Robots</a>
+    <span class="ttl">Reachy app</span>
+    <nav class="tabs" role="tablist"><a class="tab" href="RATalk.dc.html" role="tab" aria-selected="false">Talk<small>one Reachy</small></a><a class="tab on" href="RATable.dc.html" role="tab" aria-selected="true">Group<small>two or more Reachys</small></a><a class="tab" href="RAShow.dc.html" role="tab" aria-selected="false">Wizard of Oz<small>you drive it</small></a></nav>
+    
+    <span class="spacer"></span>
+    <span class="save "><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>Saved</span>
+    <span class="live" title="Robot Hub is running"><span class="ldot" aria-hidden="true"></span>Live</span>
+    <a class="btn btn-ghost btn-sm" href="Logs.dc.html"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>Logs</a>
+  </header>
+  <main style="display: flex; flex-direction: column; gap: 14px; padding: 14px 18px 18px; box-sizing: border-box;">
+    <section class="stage">
+      <div><div class="phase" style="color: #15803D;"><span class="pdot"></span>Connected</div><p class="big">Robots connected: pick a mode</p><p class="det">Getting ready: checking every service</p></div>
+      <div><div style="display: flex; align-items: baseline; gap: 10px;"><span class="timer">0:00 / 6:00</span><button class="btn btn-quiet" type="button" style="min-height: 30px; font-size: 13px; padding: 0 10px;" disabled="{{yes}}">+1 min</button></div><div class="bar"><span style="width: 0%;"></span></div></div>
+      <div class="modes2"><button class="mbtn grp" type="button">Group talk<small>robots + people</small></button><button class="mbtn int" type="button">Interrupt<small>they cut you off</small></button><button class="mbtn free" type="button">Free talk<small>chat about anything</small></button><button class="btn btn-quiet busy" type="button" disabled="{{yes}}" style="min-height: 52px;">Getting ready…</button><button class="btn btn-ghost" type="button" style="min-height: 52px;"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"></path><line x1="8" y1="2" x2="8" y2="5"></line><line x1="2" y1="8" x2="5" y2="8"></line><line x1="16" y1="19" x2="16" y2="22"></line><line x1="19" y1="16" x2="22" y2="16"></line></svg>Disconnect</button></div>
+      <div class="substrip"><span class="okline"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>Mic: DJI mic · signal ok</span><button class="btn btn-ghost" type="button" style="min-height: 30px; font-size: 13px; padding: 0 10px;">Use robots' mics</button><span class="muted">3 Reachys at the table.</span><span class="spacer"></span><button class="chk" type="button" aria-expanded="true">checking 6/8 · last checked now</button></div>
+      <div class="chips2"><span class="chk ok">OpenAI 0.6 s</span><span class="chk ok">Writer gemini-3.5-flash 1.9 s</span><span class="chk ok">Writer gpt-oss-120b 1.1 s</span><span class="chk wait"><span class="spin" aria-hidden="true"></span>Writer gemini-3.5-flash-lite</span><span class="chk ok">Hearing (speech to text) 0.8 s</span><span class="chk ok">Voice of Max 0.7 s</span><span class="chk wait"><span class="spin" aria-hidden="true"></span>Voice of Leo</span><span class="chk ok">Voice detection 0.2 s</span></div>
+    </section>
+    <div style="display: grid; grid-template-columns: 330px minmax(0,1fr) 300px; gap: 14px; align-items: start;">
+      <section class="pnl" style="gap: 10px;">
+      <div class="pnlh"><h2>This conversation</h2></div>
+      <div><p class="fl2" style="margin-bottom: 6px;">Topic <span class="used"><span>Group</span><span>Interrupt</span></span></p><textarea class="ta" rows="2" maxlength="500" placeholder="What they talk about (empty: they choose)">Should AI write music?</textarea></div>
+      <div class="frow"><label>Language</label><select class="select" aria-label="Language"><option>Auto</option><option>Hebrew</option><option selected>English</option></select><label>Minutes</label><input class="input" type="number" min="0.5" max="60" step="1" value="6"></div>
+      <div class="srow"><span class="grow">Lab intro <span class="used"><span>Group only</span></span></span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Lab intro"><span></span></button></div>
+      <p class="sub">ElevenLabs credits: 41,220 · in use</p>
+      <div class="fold">
+        <div class="pnlh"><h3 style="flex: 1 1 auto;">Room and network</h3><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+        <div class="frow"><label>Gap</label><div class="rng"><input class="input" type="number" min="0.2" max="3" step="0.1" value="0.6" style="width: 80px; height: 36px;"> s</div>
+          <label>Voice threshold</label><input class="input" type="number" min="0" max="0.9" step="0.05" value="0.3">
+          <label>People cut in</label><select class="select" aria-label="People cut in"><option>Off (only in the gaps)</option><option>Careful</option><option selected>Normal</option><option>Eager</option></select>
+          <label>Audience mic</label><div style="display: flex; flex-direction: column; gap: 4px;"><select class="select" aria-label="Audience mic"><option selected>Auto (DJI mic, plugged in)</option><option>Robots' own mics</option><option>DJI mic</option><option>Laptop's built-in mic</option></select><span class="meter" style="flex: none; height: 5px;"><span style="width: 35%;"></span></span></div></div>
+        <div class="srow"><span class="grow">Slow network</span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Slow network"><span></span></button></div>
+        <div class="srow"><span class="grow">Heads turn the other way</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Heads turn the other way"><span></span></button></div>
+        <div class="srow"><span class="grow">Simulate on this laptop</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Simulate" disabled="{{yes}}" title="Disconnect first to switch simulation"><span></span></button></div>
+      </div>
+    </section>
+      <section class="pnl" style="background: transparent; border: 0; padding: 0;">
+        <div class="pnlh" style="gap: 10px;">
+        <h2>Robots</h2><span class="sub">Left to right, as the people see them. Order, Included and Listens lock while connected.</span>
+        <span class="spacer"></span>
+        <span class="save" style="padding: 0;"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>Saved.</span>
+        <span class="sub" title="Groups. Used from the next Start.">Group 1 (2): move together</span>
+        <button class="btn btn-quiet btn-sm" type="button" style="min-height: 32px; font-size: 13px;" aria-pressed="false"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Choir</button>
+        <a class="btn btn-quiet btn-sm" href="RADialogs.dc.html" style="min-height: 32px; font-size: 13px;">Groups…</a>
+      </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px;"><article class="seat" style="--sc: #2563EB;"><div class="seathd"><span class="sn">1</span><input class="lab" type="text" value="Max" maxlength="30" aria-label="Label"><button class="ib" type="button" aria-label="Move left" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button><button class="ib" type="button" aria-label="Move right" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg></button></div>
+          <div class="seathd" style="gap: 6px; flex-wrap: wrap;"><span class="rtag">reachy1</span><span class="gtag" style="background: #2563EB1A; color: #2563EB;">Group 1</span><span class="pill p-conn" style="height: 22px; font-size: 12px;"><span class="dot"></span>Connected</span><span class="spacer"></span><span title="Mic level. Echo check: its own voice peaked 4 dB over the learned echo." style="display: flex; align-items: center; gap: 6px; width: 90px;"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg><span class="meter"><span style="width: 55%;"></span></span></span></div><div class="checks3"><label title="Takes part in the conversation. Unticked, it stays connected to the hub."><input type="checkbox" checked disabled="{{yes}}" title="Disconnect first to change the seats">Included</label><label title="Its mic hears the people when the DJI mic is not in use."><input type="checkbox" checked disabled="{{yes}}" title="Disconnect first to change the seats">Listens</label><label title="It can look through its camera when someone asks what it sees."><input type="checkbox" checked>Camera</label></div>
+          <p class="fl2">Personality <span class="used"><span>Group</span><span>Interrupt</span></span></p>
+          <textarea class="ta" rows="3" maxlength="800" aria-label="Personality">For AI music: optimistic, brings examples of tools musicians already use.</textarea>
+          <p class="fl2">Voice</p>
+          <div style="display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 6px;"><select class="select" aria-label="Voice service"><option>Auto</option><option selected>ElevenLabs</option><option>OpenAI</option><option>OpenRouter</option><option>Gemini (daily cap)</option></select><select class="select" aria-label="Voice"><option>Default (Daniel)</option><option selected>Daniel</option><option>Adam</option><option>Josh</option><option>Brian</option><option>Callum</option></select></div>
+          <p class="fl2">Writer</p><select class="select" aria-label="Writer"><option selected>Gemini 3.5 Flash (smart, ~2.5 s)</option><option>gpt-oss-120b (fastest, ~1.2 s)</option><option>GPT-5.4 mini (~2.8 s)</option><option>GPT-4.1 mini (OpenAI key)</option><option>Flash-Lite (Gemini key)</option></select>
+          <p class="fl2">Interrupting <span class="used"><span>Interrupt only</span></span></p><div class="seg lvl"><button type="button" class="" title="Never">0</button><button type="button" class="" title="Rarely">1</button><button type="button" class="" title="Now and then">2</button><button type="button" class="on" title="Regularly">3</button><button type="button" class="" title="Often, and piles on">4</button><button type="button" class="" title="Every time">5</button></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end;">
+            <div><p class="fl2" style="margin-bottom: 4px;">Gestures</p><div class="seg"><button type="button" class="on" title="Moves on almost every line, and reacts while the others talk.">Lively</button><button type="button" class="" title="Moves on about half of its lines, rarely reacts.">Calm</button></div></div>
+            <div><p class="fl2" style="margin-bottom: 4px;">Volume <b style="color: #1C1917;">150%</b></p><input type="range" min="0" max="250" step="5" value="150" aria-label="Volume" title="100 = natural level. The speaker is already at its maximum; above 100 the hub boosts the audio." style="width: 100%; accent-color: #2563EB;"></div>
+          </div>
+          <p class="vline">Voice: ElevenLabs, writing via OpenRouter</p>
+          <div style="display: flex; gap: 6px;"><button class="btn btn-ghost btn-sm" type="button" style="min-height: 30px; font-size: 13px; padding: 0 8px;"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy to others</button><span class="spacer"></span><button class="ib" type="button" aria-label="Add a laptop robot here" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button><button class="ib" type="button" aria-label="Take off the table" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div></article><article class="seat" style="--sc: #C2410C;"><div class="seathd"><span class="sn">2</span><input class="lab" type="text" value="Leo" maxlength="30" aria-label="Label"><button class="ib" type="button" aria-label="Move left" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button><button class="ib" type="button" aria-label="Move right" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg></button></div>
+          <div class="seathd" style="gap: 6px; flex-wrap: wrap;"><span class="rtag">reachy3</span><span class="gtag" style="background: #2563EB1A; color: #2563EB;">Group 1</span><span class="pill p-conn" style="height: 22px; font-size: 12px;"><span class="dot"></span>Connected</span><span class="spacer"></span><span title="Mic level. Echo check: its own voice peaked 4 dB over the learned echo." style="display: flex; align-items: center; gap: 6px; width: 90px;"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg><span class="meter"><span style="width: 20%;"></span></span></span></div><div class="checks3"><label title="Takes part in the conversation. Unticked, it stays connected to the hub."><input type="checkbox" checked disabled="{{yes}}" title="Disconnect first to change the seats">Included</label><label title="Its mic hears the people when the DJI mic is not in use."><input type="checkbox" checked disabled="{{yes}}" title="Disconnect first to change the seats">Listens</label><label title="It can look through its camera when someone asks what it sees."><input type="checkbox" checked>Camera</label></div>
+          <p class="fl2">Personality <span class="used"><span>Group</span><span>Interrupt</span></span></p>
+          <textarea class="ta" rows="3" maxlength="800" aria-label="Personality">Against: skeptical, asks who gets paid and what makes music human.</textarea>
+          <p class="fl2">Voice</p>
+          <div style="display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 6px;"><select class="select" aria-label="Voice service"><option>Auto</option><option>ElevenLabs</option><option selected>OpenAI</option><option>OpenRouter</option><option>Gemini (daily cap)</option></select><select class="select" aria-label="Voice"><option>Default (ash)</option><option>ash (male)</option><option>ballad (male)</option><option>cedar (male)</option><option>echo (male)</option><option selected>onyx (male, deep)</option><option>fable (male, British)</option><option>verse (male)</option></select></div>
+          <p class="fl2">Writer</p><select class="select" aria-label="Writer"><option>Gemini 3.5 Flash (smart, ~2.5 s)</option><option selected>gpt-oss-120b (fastest, ~1.2 s)</option><option>GPT-5.4 mini (~2.8 s)</option><option>GPT-4.1 mini (OpenAI key)</option><option>Flash-Lite (Gemini key)</option></select>
+          <p class="fl2">Interrupting <span class="used"><span>Interrupt only</span></span></p><div class="seg lvl"><button type="button" class="" title="Never">0</button><button type="button" class="" title="Rarely">1</button><button type="button" class="" title="Now and then">2</button><button type="button" class="" title="Regularly">3</button><button type="button" class="on" title="Often, and piles on">4</button><button type="button" class="" title="Every time">5</button></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end;">
+            <div><p class="fl2" style="margin-bottom: 4px;">Gestures</p><div class="seg"><button type="button" class="" title="Moves on almost every line, and reacts while the others talk.">Lively</button><button type="button" class="on" title="Moves on about half of its lines, rarely reacts.">Calm</button></div></div>
+            <div><p class="fl2" style="margin-bottom: 4px;">Volume <b style="color: #1C1917;">130%</b></p><input type="range" min="0" max="250" step="5" value="130" aria-label="Volume" title="100 = natural level. The speaker is already at its maximum; above 100 the hub boosts the audio." style="width: 100%; accent-color: #C2410C;"></div>
+          </div>
+          <p class="vline">Voice: OpenAI, writing via OpenRouter</p>
+          <div style="display: flex; gap: 6px;"><button class="btn btn-ghost btn-sm" type="button" style="min-height: 30px; font-size: 13px; padding: 0 8px;"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy to others</button><span class="spacer"></span><button class="ib" type="button" aria-label="Add a laptop robot here" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button><button class="ib" type="button" aria-label="Take off the table" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div></article><article class="seat" style="--sc: #047857;"><div class="seathd"><span class="sn">3</span><input class="lab" type="text" value="Reachy Mini 3" maxlength="30" aria-label="Label"><button class="ib" type="button" aria-label="Move left" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button><button class="ib" type="button" aria-label="Move right" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg></button></div>
+          <div class="seathd" style="gap: 6px; flex-wrap: wrap;"><span class="rtag">reachy6</span><span class="pill p-conn" style="height: 22px; font-size: 12px;"><span class="dot"></span>Connected</span><span class="spacer"></span><span title="Mic level. Echo check: its own voice peaked 4 dB over the learned echo." style="display: flex; align-items: center; gap: 6px; width: 90px;"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg><span class="meter deaf"><span style="width: 0%;"></span></span></span></div><div class="checks3"><label title="Takes part in the conversation. Unticked, it stays connected to the hub."><input type="checkbox" checked disabled="{{yes}}" title="Disconnect first to change the seats">Included</label><label title="Its mic hears the people when the DJI mic is not in use."><input type="checkbox" disabled="{{yes}}" title="Disconnect first to change the seats">Listens</label><label title="It can look through its camera when someone asks what it sees."><input type="checkbox" checked>Camera</label></div>
+          <p class="fl2">Personality <span class="used"><span>Group</span><span>Interrupt</span></span></p>
+          <textarea class="ta" rows="3" maxlength="800" aria-label="Personality">Precise: brings facts and numbers.</textarea>
+          <p class="fl2">Voice</p>
+          <div style="display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 6px;"><select class="select" aria-label="Voice service"><option>Auto</option><option>ElevenLabs</option><option>OpenAI</option><option>OpenRouter</option><option selected>Gemini (daily cap)</option></select><select class="select" aria-label="Voice"><option selected>Default (Charon)</option><option>Achird</option><option>Algenib</option><option>Algieba</option><option>Alnilam</option><option>Charon</option><option>Enceladus</option><option>Fenrir</option><option>Iapetus</option><option>Orus</option><option>Puck</option><option>Rasalgethi</option><option>Sadachbia</option><option>Sadaltager</option><option>Schedar</option><option>Umbriel</option><option>Zubenelgenubi</option></select></div>
+          <p class="fl2">Writer</p><select class="select" aria-label="Writer"><option selected>Gemini 3.5 Flash (smart, ~2.5 s)</option><option>gpt-oss-120b (fastest, ~1.2 s)</option><option>GPT-5.4 mini (~2.8 s)</option><option>GPT-4.1 mini (OpenAI key)</option><option>Flash-Lite (Gemini key)</option></select>
+          <p class="fl2">Interrupting <span class="used"><span>Interrupt only</span></span></p><div class="seg lvl"><button type="button" class="" title="Never">0</button><button type="button" class="" title="Rarely">1</button><button type="button" class="on" title="Now and then">2</button><button type="button" class="" title="Regularly">3</button><button type="button" class="" title="Often, and piles on">4</button><button type="button" class="" title="Every time">5</button></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end;">
+            <div><p class="fl2" style="margin-bottom: 4px;">Gestures</p><div class="seg"><button type="button" class="on" title="Moves on almost every line, and reacts while the others talk.">Lively</button><button type="button" class="" title="Moves on about half of its lines, rarely reacts.">Calm</button></div></div>
+            <div><p class="fl2" style="margin-bottom: 4px;">Volume <b style="color: #1C1917;">150%</b></p><input type="range" min="0" max="250" step="5" value="150" aria-label="Volume" title="100 = natural level. The speaker is already at its maximum; above 100 the hub boosts the audio." style="width: 100%; accent-color: #047857;"></div>
+          </div>
+          <p class="vline">Voice: Gemini, writing via OpenRouter</p>
+          <div style="display: flex; gap: 6px;"><button class="btn btn-ghost btn-sm" type="button" style="min-height: 30px; font-size: 13px; padding: 0 8px;"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy to others</button><span class="spacer"></span><button class="ib" type="button" aria-label="Add a laptop robot here" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button><button class="ib" type="button" aria-label="Take off the table" disabled="{{yes}}" title="Disconnect first to change the seats"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div></article></div>
+        <p class="sub"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>Keys <span class="kbd">0</span> to <span class="kbd">5</span> set every robot's interrupting at once.</p>
+      </section>
+      <section class="pnl" style="min-height: 0;">
+      <div class="pnlh"><h2>Conversation</h2></div>
+      <p class="muted" style="margin: auto 0; text-align: center; font-size: 14px;">Nothing said yet.<br>Press a mode when everyone is seated.</p>
+      <div class="steer"><input class="input" type="text" placeholder="Steer: used once it runs" aria-label="Steer"><button class="btn btn-quiet btn-sm" type="button" disabled="{{yes}}"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>Send</button></div>
+    </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1680,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() { return { yes: true }; }
+}
+</script>
+</body>
+</html>

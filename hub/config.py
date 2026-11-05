@@ -3,6 +3,18 @@
 No lab values live in code (12). Everything site-specific -- paths, keys,
 the announcement sentences -- arrives through here, and every robot section
 is optional: a robot you do not own must cost nothing (13.6).
+
+App and data are separate (STUDENT-APP-PLAN 2.1). `ROBOT_HUB_DATA` names the
+folder every writable file lives in (logs, keys, settings, caches, pepper
+data, transcripts); when it is unset that folder is the repo root, so a lab
+checkout keeps working exactly as before.
+
+Config is layered, each layer overriding the one before it:
+
+  1. `defaults.toml` (shipped with the app; the student defaults)
+  2. lab checkout only (ROBOT_HUB_DATA unset): `config.toml` in the repo
+     root, or `config.example.toml` when there is none
+  3. `<ROBOT_HUB_DATA>/config.toml`: the student's own overrides
 """
 
 from __future__ import annotations
@@ -20,7 +32,76 @@ else:  # pragma: no cover
 from pydantic import BaseModel, Field
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULTS_FILE = REPO_ROOT / "defaults.toml"
+DATA_ENV = "ROBOT_HUB_DATA"
 DEFAULT_ANNOUNCE = "I am {name}, I am connected and ready to run."
+
+
+def custom_data_dir() -> Optional[Path]:
+    """The folder ROBOT_HUB_DATA names, or None in a lab checkout."""
+    raw = os.environ.get(DATA_ENV, "").strip().strip('"')
+    if not raw:
+        return None
+    return Path(os.path.expandvars(raw)).expanduser().resolve()
+
+
+def data_dir() -> Path:
+    """Where every writable file goes: ROBOT_HUB_DATA, else the repo root."""
+    return custom_data_dir() or REPO_ROOT
+
+
+# Read once at import: the launcher sets the variable before Python starts.
+# Module-level paths elsewhere (logs, group.local.json, caches) build on it.
+DATA_DIR = data_dir()
+
+# The NAO/Pepper kit lives on a short ASCII path: Python 2.7 breaks on a
+# user folder with Hebrew in it (STUDENT-APP-PLAN 4.3).
+NAOQI_KIT_DIRS = (Path("C:/LabaLab/naoqi-sdk"),)
+
+
+def naoqi_kit_dirs() -> list[Path]:
+    dirs = list(NAOQI_KIT_DIRS)
+    public = os.environ.get("PUBLIC")
+    if public:
+        dirs.append(Path(public) / "LabaLab" / "naoqi-sdk")
+    return dirs
+
+
+def _sdk_root(base: Path) -> Optional[Path]:
+    """The folder holding lib/ and bin/: the kit itself, or one or two levels
+    down (the official zip doubles its top folder)."""
+    level = [base]
+    for _ in range(3):
+        nxt: list[Path] = []
+        for p in level:
+            if (p / "lib").is_dir() and (p / "bin").is_dir():
+                return p
+            try:
+                nxt += sorted(c for c in p.iterdir() if c.is_dir())
+            except OSError:
+                continue
+        level = nxt
+    return None
+
+
+def find_naoqi_kit(bases: Optional[list[Path]] = None) -> dict[str, Path]:
+    """{"pynaoqi_sdk": ..., "python2": ...} for the installed kit, or {}.
+
+    The kit ships its own 64-bit Python 2.7 as bin/python.exe, so a found kit
+    supplies both settings; run it with PYTHONHOME=<sdk>/lib/python2.7.
+    """
+    for base in bases if bases is not None else naoqi_kit_dirs():
+        if not base.is_dir():
+            continue
+        sdk = _sdk_root(base)
+        if sdk is None:
+            continue
+        found = {"pynaoqi_sdk": sdk}
+        exe = "python.exe" if sys.platform == "win32" else "python"
+        if (sdk / "bin" / exe).is_file():
+            found["python2"] = sdk / "bin" / exe
+        return found
+    return {}
 
 
 class ServerCfg(BaseModel):
@@ -99,6 +180,10 @@ class Config(BaseModel):
     auto_connect: bool = False
     robots: dict[str, RobotCfg] = Field(default_factory=dict)
     repo_root: Path = REPO_ROOT
+    # Every writable file lives under here (ROBOT_HUB_DATA, else repo_root).
+    data_dir: Path = Field(default_factory=data_dir)
+    # The files this config was built from, in load order (for the log).
+    layers: list[str] = Field(default_factory=list)
 
     def robot(self, type_id: str) -> RobotCfg:
         return self.robots.get(type_id, RobotCfg())
@@ -126,15 +211,56 @@ def _load_env(path: Path) -> None:
         os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
-def load_config(path: Optional[Path] = None) -> Config:
+def merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    """`over` on top of `base`, tables merged key by key (a copy)."""
+    out = dict(base)
+    for key, value in over.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def _read_toml(path: Path) -> dict[str, Any]:
+    with path.open("rb") as fh:
+        return tomllib.load(fh)
+
+
+def config_layers(path: Optional[Path] = None,
+                  defaults: Optional[Path] = None,
+                  data: Optional[Path] = None) -> list[Path]:
+    """The files load_config reads, lowest first (see the module docstring)."""
+    layers: list[Path] = []
+    defaults = DEFAULTS_FILE if defaults is None else defaults
+    if defaults.is_file():
+        layers.append(defaults)
+    custom = data if data is not None else custom_data_dir()
+    if path is not None or custom is None:
+        lab = path or REPO_ROOT / "config.toml"
+        if not lab.exists():
+            lab = REPO_ROOT / "config.example.toml"
+        if lab.is_file():
+            layers.append(lab)
+    if custom is not None and (custom / "config.toml").is_file():
+        layers.append(custom / "config.toml")
+    return layers
+
+
+def load_config(path: Optional[Path] = None, *,
+                defaults: Optional[Path] = None,
+                data: Optional[Path] = None) -> Config:
+    """`path` is a lab config file to use instead of config.toml; `defaults`
+    and `data` stand in for defaults.toml and ROBOT_HUB_DATA (tests)."""
     _load_env(REPO_ROOT / ".env")
-    path = path or REPO_ROOT / "config.toml"
-    if not path.exists():
-        path = REPO_ROOT / "config.example.toml"
-    data: dict[str, Any] = {}
-    if path.exists():
-        with path.open("rb") as fh:
-            data = tomllib.load(fh)
+    merged: dict[str, Any] = {}
+    layers = config_layers(path, defaults, data)
+    for layer in layers:
+        merged = merge(merged, _read_toml(layer))
     robots = {k: RobotCfg(**v) if isinstance(v, dict) else RobotCfg()
-              for k, v in (data.pop("robots", {}) or {}).items()}
-    return Config(robots=robots, **data)
+              for k, v in (merged.pop("robots", {}) or {}).items()}
+    for key in ("repo_root", "data_dir", "layers"):
+        merged.pop(key, None)       # never taken from a file
+    data_root = data if data is not None else data_dir()
+    return Config(robots=robots, data_dir=data_root,
+                  layers=[str(p) for p in layers], **merged)

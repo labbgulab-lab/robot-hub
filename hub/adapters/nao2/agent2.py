@@ -92,9 +92,23 @@ def cmd_identity(args):
     return result
 
 
+# The battery's current, in amperes: positive while it charges, negative while
+# the robot runs on it. Same key on NAO and Pepper.
+BATTERY_CURRENT_KEY = "Device/SubDeviceList/Battery/Current/Sensor/Value"
+CHARGING_MIN_A = 0.05
+
+
 def cmd_battery(args):
     battery = make_proxy("ALBattery", args["ip"], args["port"])
-    return {"ok": True, "battery": int(battery.getBatteryCharge())}
+    result = {"ok": True, "battery": int(battery.getBatteryCharge())}
+    # Charging is a bonus: a robot that cannot say leaves it out.
+    try:
+        memory = make_proxy("ALMemory", args["ip"], args["port"])
+        current = float(memory.getData(BATTERY_CURRENT_KEY))
+        result["charging"] = current > CHARGING_MIN_A
+    except Exception:
+        pass
+    return result
 
 
 def cmd_say(args):

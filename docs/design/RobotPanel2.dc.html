@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pepper details and WiFi results</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}a:hover{color:#7A3900}
+.app{--page:#FAF8F5;--card:#FFFFFF;--sunken:#F4F1EC;--border:#E8E3DC;--ctrl:#8C8378;--ink:#1C1917;--muted:#6B635A;--brand:#FD9903;--brand-hover:#F08A00;--brand-text:#A84E00;--ready:#1D4ED8;--ready-tint:#EEF4FF;--run:#15803D;--run-tint:#ECFDF3;--warn:#8A3B00;--warn-tint:#FFF1D6;--busy-tint:#FFF4E0;--danger:#B91C1C;--danger-tint:#FEF2F2;--ease:cubic-bezier(0.23,1,0.32,1);--drawer:cubic-bezier(0.32,0.72,0,1)}
+.app{position:relative;min-height:800px;background:var(--page);color:var(--ink);font-family:Inter,system-ui,"Segoe UI",sans-serif;font-size:15px;line-height:22px;display:flex;flex-direction:column;overflow:hidden}
+.top{height:64px;box-sizing:border-box;padding:0 20px 0 24px;display:flex;align-items:center;gap:6px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{height:30px;width:auto;display:block;margin-right:8px}
+.spacer{flex:1 1 auto}
+.icon{width:20px;height:20px;flex-shrink:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--sunken);color:var(--ink);font-size:13px;font-weight:500;white-space:nowrap;text-decoration:none;font-variant-numeric:tabular-nums}
+a.chip:hover{color:var(--ink);background:#ECE7E0}
+.chip .cdot{width:7px;height:7px;border-radius:50%;background:#15803D}
+.chip-warn{background:var(--warn-tint);color:var(--warn)}
+.chip-warn .cdot{background:var(--warn)}
+.tgl{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;padding:0 8px;white-space:nowrap}
+.switch{position:relative;width:40px;height:24px;border-radius:999px;border:0;background:#D6CFC5;cursor:pointer;flex-shrink:0;padding:0;transition:background-color 180ms ease}
+.switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform 180ms var(--ease)}
+.switch.on{background:#1C1917}
+.switch.on span{transform:translateX(16px)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);padding:0 8px;white-space:nowrap}
+.ldot{width:8px;height:8px;border-radius:50%;background:#15803D;animation:pulse 2s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(21,128,61,.45)}100%{box-shadow:0 0 0 7px rgba(21,128,61,0)}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:transform 120ms var(--ease),background-color 150ms ease;box-sizing:border-box}
+.btn:active{transform:scale(0.97)}
+.btn:focus-visible,.switch:focus-visible,.select:focus-visible,.input:focus-visible,.chip:focus-visible{outline:2px solid #A84E00;outline-offset:2px}
+.btn-primary{background:var(--brand);color:var(--ink)}
+.btn-primary:hover{background:var(--brand-hover);color:var(--ink)}
+.btn-ghost{background:transparent;color:var(--ink)}
+.btn-ghost:hover{background:var(--sunken);color:var(--ink)}
+.btn-quiet{background:var(--sunken);color:var(--ink)}
+.btn-quiet:hover{background:#ECE7E0;color:var(--ink)}
+.btn-stop{background:var(--danger-tint);color:var(--danger)}
+.btn-arm{background:var(--warn-tint);color:var(--warn);box-shadow:inset 0 0 0 1px #E9A55E}
+.btn-dark{background:#1C1917;color:#FFFFFF}
+.btn-sm{min-height:36px;font-size:14px;padding:0 12px;border-radius:10px}
+.btn-icon{padding:0;width:44px}
+.btn-sm.btn-icon{width:36px}
+.btn[disabled]{opacity:.45;cursor:default}
+.busy{position:relative;overflow:hidden}
+.busy::after{content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.28) 0 8px,transparent 8px 16px);background-size:22px 22px;animation:slide 1s linear infinite}
+@keyframes slide{to{background-position:22px 0}}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite;flex-shrink:0;box-sizing:border-box}
+@keyframes spin{to{transform:rotate(360deg)}}
+.main{flex:1 1 auto;width:100%;max-width:1200px;margin:0 auto;box-sizing:border-box;padding:28px 32px 40px;display:flex;flex-direction:column;gap:24px}
+.pagehead{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+.h1{font-size:26px;line-height:32px;font-weight:700;letter-spacing:-.02em;margin:0}
+.h2{font-size:17px;line-height:24px;font-weight:600;margin:0}
+.muted{color:var(--muted)}
+.small{font-size:14px;line-height:20px}
+.counts{display:flex;gap:16px;align-items:center;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.counts b{color:var(--ink);font-weight:600}
+.counts .d{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.band{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 16px 14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.tiles{display:flex}
+.tiles img{width:40px;height:40px;border-radius:10px;border:2px solid #FFFFFF;margin-left:-10px}
+.tiles img:first-child{margin-left:0}
+.modes{display:flex;gap:6px;flex-wrap:wrap}
+.mode{font-size:13px;font-weight:500;color:var(--muted);background:var(--sunken);border-radius:999px;padding:2px 10px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;box-shadow:0 1px 2px rgba(28,25,23,.06);min-width:0}
+.card.s-run{border-color:#86D9A4;box-shadow:0 0 0 3px #ECFDF3}
+.card.s-conn{border-color:#A9C1F5}
+.card.s-busy{border-color:#F5C77E}
+.card.s-warn{border-color:#E9A55E}
+.card.s-lost{border-color:#F2A7A7}
+.card.s-off{opacity:.6}
+.head{display:flex;gap:12px;align-items:center}
+.tile{width:56px;height:56px;border-radius:12px;flex-shrink:0;display:block}
+.who{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.name{font-size:17px;line-height:24px;font-weight:600;margin:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:6px}
+.name .icon{width:16px;height:16px;color:var(--warn)}
+.side{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.metric{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.metric.batt{font-weight:600;color:var(--ink)}
+.metric.low{color:var(--danger)}
+.metric .icon{width:16px;height:16px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill .spin{width:11px;height:11px}
+.p-near{background:var(--sunken);color:var(--muted)}
+.p-conn{background:var(--ready-tint);color:var(--ready)}
+.p-run{background:var(--run-tint);color:var(--run)}
+.p-busy{background:var(--busy-tint);color:var(--brand-text)}
+.p-warn{background:var(--warn-tint);color:var(--warn)}
+.p-lost{background:var(--danger-tint);color:var(--danger)}
+.p-off{background:var(--sunken);color:var(--muted)}
+.detail{margin:0;font-size:14px;line-height:20px;color:var(--muted);overflow-wrap:anywhere}
+.lbl{font-size:12px;line-height:16px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0}
+.ai{display:flex;flex-direction:column;gap:6px}
+.select{appearance:none;-webkit-appearance:none;width:100%;height:40px;border:1px solid var(--ctrl);border-radius:10px;background:#FFFFFF url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B635A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center;padding:0 34px 0 12px;font:inherit;font-size:14px;color:var(--ink);box-sizing:border-box;text-overflow:ellipsis}
+.select.def{border-color:#E9A55E;background-color:#FFFBF2}
+.select.sm{height:36px;width:auto}
+.sub{font-size:13px;line-height:18px;color:var(--muted);margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{font-size:12px;line-height:18px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--warn-tint);color:var(--warn)}
+.tag-dark{background:#1C1917;color:#FFFFFF;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+.actions{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}
+.actions .grow{flex:1 1 auto}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:14px;line-height:20px;padding:10px 12px;border-radius:10px;background:var(--sunken);color:var(--ink);margin:0}
+.note .icon{width:18px;height:18px;margin-top:1px}
+.note.ok{background:var(--run-tint);color:var(--run)}
+.note.warn{background:var(--warn-tint);color:var(--warn)}
+.note.err{background:var(--danger-tint);color:var(--danger)}
+.note .nacts{display:flex;gap:6px;margin-top:8px}
+.postures{display:flex;gap:6px}
+.postures .btn{flex:1 1 0;min-height:40px;font-size:14px;padding:0 8px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);background:#1C1917;color:#F5F2EE;border-radius:12px;padding:10px 16px;font-size:14px;display:flex;gap:8px;align-items:center;box-shadow:0 12px 32px -12px rgba(28,25,23,.5);white-space:nowrap}
+.toast .icon{width:18px;height:18px}
+.away{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.ghost{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px 0 4px;border:1px dashed #D6CFC5;border-radius:999px;color:var(--muted);font-size:14px}
+.ghost img{width:28px;height:28px;border-radius:999px;opacity:.6}
+.setuprow{display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 6px 0 4px;border:1px dashed #D6CFC5;border-radius:999px;font-size:14px;color:var(--ink)}
+.setuprow img{width:34px;height:34px;border-radius:999px}
+.warnbar{display:flex;align-items:center;gap:10px;padding:8px 24px;background:var(--warn-tint);color:var(--warn);font-size:14px;border-bottom:1px solid #F5D7A6;flex-shrink:0}
+.warnbar.err{background:var(--danger-tint);color:var(--danger);border-bottom-color:#F2C4C4}
+.btn-bar{min-height:32px;font-size:14px;padding:0 12px;border-radius:10px;background:#1C1917;color:#FFFFFF}
+.btn-bar:hover{color:#FFFFFF}
+.dim{opacity:.5;pointer-events:none}
+.ph{background:var(--card);border:1px solid var(--border);border-radius:16px;height:230px}
+.scrim{position:absolute;left:0;right:0;top:0;bottom:0;background:rgba(28,25,23,.30)}
+.sheet{position:absolute;top:0;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:-24px 0 48px -24px rgba(28,25,23,.35);display:flex;flex-direction:column;animation:inr 260ms var(--drawer) both}
+@keyframes inr{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.sheet-head{display:flex;align-items:center;gap:12px;padding:16px 16px 16px 20px;border-bottom:1px solid var(--border)}
+.sheet-head .tile{width:48px;height:48px;border-radius:10px}
+.sheet-body{flex:1 1 auto;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:22px}
+.sec{display:flex;flex-direction:column;gap:10px}
+.sechd{display:flex;align-items:center;gap:8px}
+.facts{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0;font-size:14px;line-height:20px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.field{display:flex;flex-direction:column;gap:6px}
+.field>label,.flabel{font-size:14px;font-weight:500}
+.input{height:40px;border:1px solid var(--ctrl);border-radius:10px;padding:0 12px;font:inherit;font-size:14px;background:#FFFFFF;color:var(--ink);box-sizing:border-box;width:100%}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:20px;cursor:pointer}
+.check input{width:18px;height:18px;margin:1px 0 0;accent-color:#1C1917;flex-shrink:0}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;flex-wrap:wrap}
+.row+.row{border-top:1px solid var(--border)}
+.rowmain{flex:1 1 220px;min-width:0}
+.rowtitle{margin:0;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mono{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:13px;color:var(--muted)}
+.prov{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:var(--sunken);font-size:12px;font-weight:600;color:var(--ink)}
+.acc{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.acc+.acc{margin-top:8px}
+.acchd{display:flex;align-items:center;gap:10px;padding:10px 12px;font-weight:600;font-size:14px}
+.acchd img{width:28px;height:28px;border-radius:8px}
+.accbody{padding:0 12px 12px 50px;font-size:14px;line-height:21px}
+.accbody ol,.accbody ul{margin:0;padding-left:18px}
+.steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px}
+.steps>li{display:flex;gap:12px}
+.num{width:24px;height:24px;border-radius:50%;background:#1C1917;color:#FFFFFF;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.stepbody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:21px}
+.stepbody ul{margin:0;padding-left:18px;color:var(--muted)}
+.cap{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stagger{animation:in 300ms var(--ease) both}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.stagger,.ldot,.spin,.sheet,.busy::after{animation:none}}
+.app{min-height:1000px}</style>
+</helmet>
+<div class="app" style="flex-direction: row;">
+  <main class="main" style="max-width: none; margin: 0; width: 720px; padding: 32px 40px; box-sizing: border-box;">
+    <h1 class="h1" style="font-size: 20px;">Add WiFi: every result</h1>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <p class="cap" style="margin: 8px 0 0;">Before Join</p>
+      <p class="note warn"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span>Type the hotspot name.</span></p>
+      <p class="note warn"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span>A WiFi password has at least 8 characters.</span></p>
+      <p class="cap" style="margin: 8px 0 0;">Joining</p>
+      <p class="note"><span class="spin" style="margin-top: 3px;" aria-hidden="true"></span><span>Joining "Lab Phone"… up to a minute. Keep that hotspot on.</span></p>
+      <p class="note"><span class="spin" style="margin-top: 3px;" aria-hidden="true"></span><span>Saving "HOT-WiFi" as the lab WiFi…</span></p>
+      <p class="cap" style="margin: 8px 0 0;">Done</p>
+      <p class="note ok"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Pepper joined "Lab Phone" and will remember it. Move this laptop there too.</span></p>
+      <p class="note ok"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>reachy3 is already on "Lab Phone". Its password is updated.</span></p>
+      <p class="note warn"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>reachy3 saved "Lab Phone" but can't see it now, so it stays on "HOT-WiFi".</span></p>
+      <p class="cap" style="margin: 8px 0 0;">Didn't work</p>
+      <p class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span>Pepper couldn't join "Lab Phone". Wrong password? It is back on "HOT-WiFi".</span></p>
+      <p class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span>Pepper is starting its app. Wait for it, then try again.</span></p>
+      <p class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span>"reachy-mini-ap" is the robot's own setup network.</span></p>
+      <p class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span>Couldn't ask the hub. Is Robot Hub running?</span></p>
+    </div>
+  </main>
+  <aside class="sheet" style="position: absolute;" aria-label="Pepper details">
+    <div class="sheet-head">
+      <img class="tile" src="img/robot-pepper.png" alt="">
+      <div class="who"><p class="name">Pepper</p><span class="pill p-run"><span class="dot"></span>Running</span></div>
+      <span class="metric batt"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="17" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line></svg>62%</span>
+      <a class="btn btn-ghost btn-sm btn-icon" href="Hub.dc.html" aria-label="Close"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></a>
+    </div>
+    <div class="sheet-body">
+      <section class="sec">
+        <p class="detail" style="color: #1C1917; font-size: 15px;">System running</p>
+        <dl class="facts">
+          <dt>Robot</dt><dd>Pepper</dd>
+          <dt>Address</dt><dd>10.0.4.41 on HOT-WiFi</dd>
+          <dt>Robot software</dt><dd>NAOqi 2.5.10.7</dd>
+          <dt>Listens with</dt><dd>Pepper's own four microphones</dd>
+          <dt>Battery</dt><dd>62%</dd>
+          <dt>App</dt><dd>Dashboard on this laptop, port 8780</dd>
+          <dt>Seen</dt><dd>1 s ago</dd>
+        </dl>
+        <div style="display: flex; gap: 8px;"><button class="btn btn-quiet" type="button" style="min-height: 40px;"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"></path><line x1="8" y1="2" x2="8" y2="5"></line><line x1="2" y1="8" x2="5" y2="8"></line><line x1="16" y1="19" x2="16" y2="22"></line><line x1="19" y1="16" x2="22" y2="16"></line></svg>Disconnect</button><button class="btn btn-ghost" type="button" style="min-height: 40px;"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy details</button></div>
+      </section>
+      <section class="sec"><div class="ai"><p class="lbl">Speaks through (GPT)</p><select class="select" aria-label="GPT key"><option selected>Lab OpenAI · GPT · …5b12</option><option>Default: first GPT key</option><option>My OpenAI · GPT · …3c07</option></select><p class="lbl" style="margin-top: 4px;">Voice key</p><select class="select" aria-label="Voice key"><option>Lab ElevenLabs · …e01b</option><option>Default: first ElevenLabs key</option></select><p class="sub">Applies next start</p></div></section>
+      <section class="sec">
+        <div class="sechd"><h3 class="lbl" style="flex: 1 1 auto;">Add WiFi</h3><span class="tag tag-dark">Lab staff</span></div>
+        <div class="field"><label for="ssid2">WiFi name</label><input id="ssid2" class="input" type="text" value="Lab Phone"></div>
+        <div class="field"><label for="pw2">Password</label><input id="pw2" class="input" type="password" value="password1"></div>
+        <p class="sub">8 to 63 characters. Turn the hotspot on first, 2.4 GHz.</p>
+        <div style="display: flex;"><button class="btn btn-dark busy" type="button" disabled="{{yes}}">Joining…</button></div>
+        <p class="note"><span class="spin" style="margin-top: 3px;" aria-hidden="true"></span><span>Joining "Lab Phone"… up to a minute. Keep that hotspot on.</span></p>
+      </section>
+    </div>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return { yes: true }; }
+}
+</script>
+</body>
+</html>

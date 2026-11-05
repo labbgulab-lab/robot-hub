@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live logs drawer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}a:hover{color:#7A3900}
+.app{--page:#FAF8F5;--card:#FFFFFF;--sunken:#F4F1EC;--border:#E8E3DC;--ink:#1C1917;--muted:#6B635A;--brand:#FD9903;--run:#15803D;--run-tint:#ECFDF3;--ease:cubic-bezier(0.23,1,0.32,1)}
+.app{position:relative;min-height:800px;background:var(--page);color:var(--ink);font-family:Inter,system-ui,"Segoe UI",sans-serif;font-size:15px;line-height:22px;display:flex;flex-direction:column;overflow:hidden}
+.top{height:64px;box-sizing:border-box;padding:0 24px;display:flex;align-items:center;gap:8px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{height:30px;width:auto;display:block}
+.spacer{flex:1 1 auto}
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--sunken);color:var(--muted);font-size:13px;font-weight:500;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:15px;cursor:pointer;white-space:nowrap;transition:transform 120ms var(--ease),background-color 150ms ease}
+.btn:active{transform:scale(0.97)}
+.btn:focus-visible{outline:2px solid #FDB241;outline-offset:2px}
+.btn-ghost{background:transparent;color:var(--ink)}
+.btn-on{background:var(--sunken);color:var(--ink)}
+.btn-icon{padding:0;width:44px}
+.icon{width:20px;height:20px;flex-shrink:0}
+.main{flex:1 1 auto;width:100%;max-width:1120px;margin:0 auto;box-sizing:border-box;padding:32px;opacity:.55}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;height:150px}
+.drawer{position:absolute;left:0;right:0;bottom:0;height:400px;background:#171412;color:#E7E2DA;border-radius:20px 20px 0 0;box-shadow:0 -16px 48px -16px rgba(28,25,23,.35);display:flex;flex-direction:column;animation:up 260ms cubic-bezier(0.32,0.72,0,1) both}
+@keyframes up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.drawer{animation:none}}
+.grab{width:40px;height:4px;border-radius:999px;background:#3A3530;margin:8px auto 0}
+.dhead{display:flex;align-items:center;gap:10px;padding:8px 16px 12px 24px;flex-wrap:wrap}
+.dtitle{font-weight:600;font-size:15px;color:#F5F2EE;display:flex;align-items:center;gap:8px}
+.pulse{width:8px;height:8px;border-radius:50%;background:#5EE08A}
+.filter{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:500;background:transparent;color:#B9B1A6;border:1px solid #3A3530;cursor:pointer;font-family:inherit}
+.filter.on{background:#F5F2EE;color:#1C1917;border-color:#F5F2EE}
+.dbtn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:10px;border:0;background:#2A2622;color:#F5F2EE;font:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:transform 120ms var(--ease)}
+.dbtn:active{transform:scale(0.97)}
+.dbtn:focus-visible,.filter:focus-visible{outline:2px solid #FDB241;outline-offset:2px}
+.lines{flex:1 1 auto;overflow:auto;padding:4px 24px 16px;font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:12.5px;line-height:21px;font-variant-numeric:tabular-nums;border-top:1px solid #2A2622}
+.ln{display:flex;gap:14px;white-space:pre-wrap}
+.t{color:#9C948A;flex-shrink:0}
+.src{color:#9C948A;flex-shrink:0;width:64px}
+.ok{color:#5EE08A}
+.warn{color:#FFC56B}
+.err{color:#FF8A8A}
+/* topbar v2 */
+.top{gap:6px;padding:0 20px 0 24px}
+.chip{color:#1C1917;text-decoration:none;font-variant-numeric:tabular-nums}
+.chip .cdot{width:7px;height:7px;border-radius:50%;background:#15803D}
+.chip-warn{background:#FFF1D6;color:#8A3B00}.chip-warn .cdot{background:#8A3B00}
+.tgl{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;padding:0 8px;white-space:nowrap}
+.switch{position:relative;width:40px;height:24px;border-radius:999px;border:0;background:#D6CFC5;cursor:pointer;flex-shrink:0;padding:0}
+.switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch.on{background:#1C1917}.switch.on span{transform:translateX(16px)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#6B635A;padding:0 8px}
+.ldot{width:8px;height:8px;border-radius:50%;background:#15803D}
+.btn-sm{min-height:36px;font-size:14px;padding:0 12px;border-radius:10px}
+.btn-sm.btn-icon{width:36px;padding:0}
+.logo{margin-right:8px}
+a.btn{text-decoration:none;color:#1C1917}
+.muted{color:#6B635A}
+</style>
+</helmet>
+<div class="app">
+  <header class="top">
+    <img class="logo" src="img/labalab-logo.png" alt="LabaLab">
+    <a class="chip" href="Network.dc.html" title="Network: ready"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="20" r="1"></circle></svg>HOT-WiFi<span class="muted">2.4 GHz</span><span class="cdot"></span></a>
+    <span class="spacer"></span>
+    <span class="tgl" title="Connect each robot when it shows up"><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Auto-connect"><span></span></button>Auto-connect</span>
+    <button class="btn btn-ghost btn-sm" type="button" title="Look for robots now"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Scan</button>
+    <span class="live" title="Robot Hub is running"><span class="ldot" aria-hidden="true"></span>Live</span>
+    <a class="btn btn-ghost btn-sm" href="Hub.dc.html" style="background: #F4F1EC;" aria-pressed="true"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>Logs</a>
+    <a class="btn btn-ghost btn-sm btn-icon" href="Settings.dc.html" aria-label="Settings"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg></a>
+  </header>
+  <main class="main" aria-hidden="true"><div class="grid"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></main>
+
+  <section class="drawer" aria-label="Live logs">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="dhead">
+      <span class="dtitle"><span class="pulse" aria-hidden="true"></span>Live logs</span>
+      <span style="width: 8px;"></span>
+      <button class="filter on" type="button" aria-pressed="true">All</button>
+      <button class="filter" type="button" aria-pressed="false">reachy1</button>
+      <button class="filter" type="button" aria-pressed="false">reachy3</button>
+      <button class="filter" type="button" aria-pressed="false">Furhat</button>
+      <button class="filter" type="button" aria-pressed="false">Pepper</button>
+      <button class="filter" type="button" aria-pressed="false">NAO</button>
+      <button class="filter" type="button" aria-pressed="false">Hub</button>
+      <span class="spacer"></span>
+      <button class="dbtn" type="button"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy all</button>
+      <button class="dbtn" type="button"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Save a report for the lab</button>
+      <button class="dbtn" type="button" aria-label="Close logs" style="padding: 0 10px;"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+    </div>
+    <div class="lines" role="log" aria-live="polite">
+      <div class="ln"><span class="t">14:02:31</span><span class="src">Hub</span><span>Looking for robots on HOT-WiFi</span></div>
+      <div class="ln"><span class="t">14:02:33</span><span class="src">Hub</span><span>Found reachy1, reachy3, reachy6 and Furhat</span></div>
+      <div class="ln"><span class="t">14:02:40</span><span class="src">reachy1</span><span>Connecting</span></div>
+      <div class="ln"><span class="t">14:02:42</span><span class="src">reachy1</span><span class="ok">Connected. Said hello.</span></div>
+      <div class="ln"><span class="t">14:02:47</span><span class="src">reachy1</span><span>Starting the conversation with Gemini (key "Lab Gemini ...a91f")</span></div>
+      <div class="ln"><span class="t">14:02:55</span><span class="src">reachy1</span><span class="ok">Talking. Listening through Microphone (Wireless Mic Rx)</span></div>
+      <div class="ln"><span class="t">14:03:12</span><span class="src">reachy1</span><span>Heard: "hi, what's your name?"</span></div>
+      <div class="ln"><span class="t">14:03:13</span><span class="src">reachy1</span><span>Answered in 1.1 s</span></div>
+      <div class="ln"><span class="t">14:04:02</span><span class="src">Furhat</span><span class="warn">Not answering. Trying again in 5 s</span></div>
+      <div class="ln"><span class="t">14:04:07</span><span class="src">Furhat</span><span class="ok">Back</span></div>
+      <div class="ln"><span class="t">14:05:20</span><span class="src">reachy3</span><span>Said hello</span></div>
+      <div class="ln"><span class="t">14:06:41</span><span class="src">reachy1</span><span>Heard: "tell me about the lab"</span></div>
+      <div class="ln"><span class="t">14:06:42</span><span class="src">reachy1</span><span>Answered in 1.3 s</span></div>
+      <div class="ln"><span class="t">14:07:05</span><span class="src">Pepper</span><span>Speaking through Lab OpenAI (...5b12, picked on its card). Voice: Lab ElevenLabs (...e01b, default)</span></div>
+      <div class="ln"><span class="t">14:07:09</span><span class="src">Pepper</span><span>pepper_app: dashboard on http://127.0.0.1:8780/</span></div>
+      <div class="ln"><span class="t">14:07:31</span><span class="src">NAO</span><span class="err">NAO app refuses to start without OPENAI_API_KEY in its .env</span></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

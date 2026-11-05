@@ -21,11 +21,11 @@ import random
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
-from ..config import REPO_ROOT
+from ..config import DATA_DIR
 
 log = logging.getLogger("hub.group.phrases")
 
-CACHE_DIR = REPO_ROOT / "cache" / "group_phrases"
+CACHE_DIR = DATA_DIR / "cache" / "group_phrases"
 
 PHRASES = {
     "en": {

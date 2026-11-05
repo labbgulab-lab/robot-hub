@@ -255,9 +255,13 @@ def test_a_failed_connect_is_not_promoted_to_connected(config):
     hub.adapters["fake"] = _Refuses(None)
 
     result = asyncio.run(_first(hub.connect("fake")))
-    assert result["ok"] is False
+    assert result["ok"] is False and result["code"] == "CONNECT_FAILED"
     hub._apply_health("fake", {"online": True, "detail": "Studio is serving"})
-    assert hub.registry.get("fake").state == ERROR
+    card = hub.registry.get("fake")
+    # Since the student app (2026-11-05): a failed Connect is not "Lost"
+    # (ERROR means a real loss); it stays Available with a sticky reason.
+    assert card.state not in (ERROR, CONNECTED)
+    assert card.connect_error == "Studio never answered the login"
     assert asyncio.run(_first(hub.launch("fake")))["error"] == "connect first"
 
 

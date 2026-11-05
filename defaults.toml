@@ -1,0 +1,114 @@
+# Robot Hub's shipped defaults: the student app runs on these.
+#
+# Load order (hub/config.py): this file, then (lab checkout only) config.toml
+# or config.example.toml in this folder, then config.toml in the data folder
+# (ROBOT_HUB_DATA). Each layer overrides only the keys it sets.
+#
+# Nothing secret belongs here: this repo is public. Furhat's Studio password
+# "admin" is the maker's published default.
+
+auto_connect = false
+
+[server]
+# 127.0.0.1 only: the student app never listens on a network interface
+# (no firewall prompt, no admin; docs/BUILD-PLAN.md "No admin, no firewall").
+host = "127.0.0.1"
+port = 8099
+
+[discovery]
+# mDNS binds UDP 5353 on the network, which Windows Firewall asks an admin
+# about. The netscan sweep is outbound only, and HOT-WiFi needs it anyway.
+mdns = false
+netscan = true
+usb = true
+netscan_interval_s = 5.0
+netscan_max_hosts = 256
+netscan_nearby_24s = 4
+expected_subnet = ""
+
+[network]
+# The lab WiFi: open, no internet; every Reachy's fallback network.
+lab_wifi = "HOT-WiFi"
+lab_wifi_open = true
+hotspot = ""
+
+[ports]
+range_start = 9100
+range_end = 9199
+
+# ---------------------------------------------------------------- robots
+
+[robots.furhat]
+enabled = true
+display_name = "Furhat"
+announce = "I am Furhat, I am connected and ready to run."
+  [robots.furhat.settings]
+  # Studio's login. A password saved in Settings replaces this one.
+  username = "admin"
+  password = "admin"
+  voice = ""
+
+[robots.reachy_wireless]
+enabled = true
+display_name = "Reachy-Mini"
+announce = "I am {name}, I am connected and ready to run."
+  # The lab's robots, keyed by unit_id (== daemon hardware_id).
+  [robots.reachy_wireless.units."6563a10e4204345e"]
+  display_name = "reachy1"
+  [robots.reachy_wireless.units."1bf3f0e96e9b0151"]
+  display_name = "reachy2"
+  [robots.reachy_wireless.units."b967ec76e88a0fdd"]
+  display_name = "reachy3"
+  [robots.reachy_wireless.units."bc4a70b8c1261981"]
+  display_name = "reachy4"
+  [robots.reachy_wireless.units."ab90483fd9d70e58"]
+  display_name = "reachy5"
+  [robots.reachy_wireless.units."5488f5938df1c506"]
+  display_name = "reachy6"
+  [robots.reachy_wireless.units."615bf833069fcfa5"]
+  display_name = "reachy7"
+  [robots.reachy_wireless.units."5110e9ec9a4b990c"]
+  display_name = "reachy8"
+  [robots.reachy_wireless.settings]
+  # The reachy_chat source bundled next to robot-hub; Launch deploys it onto
+  # the robot. Relative paths start at the robot-hub folder.
+  reachy_chat_path = "../reachy_chat"
+  # Blank: reachy_chat's own venv if there is one, else the hub's Python.
+  python = ""
+  # Reachy listens through its own microphone (STUDENT-APP-PLAN S13).
+  mic_mode = "robot"
+  volume = 100
+  mic_device = ""
+  mic_match = "USBAudio"
+  daemon_port = 8000
+  ssh_user = "pollen"
+  ssh_password = ""
+
+[robots.reachy_lite]
+enabled = true
+display_name = "Reachy-Mini-Lite"
+announce = "I am Reachy Mini Lite, I am connected and ready to run."
+  [robots.reachy_lite.settings]
+  daemon_url = "http://127.0.0.1:8000"
+  # Blank: found in Program Files or %LOCALAPPDATA%\Programs.
+  control_app = ""
+
+[robots.naoqi]
+enabled = true
+display_name = "NAOqi"
+announce = "I am NAO, I am connected and ready to run."
+  [robots.naoqi.settings]
+  # Blank: the NAO/Pepper kit in C:\LabaLab\naoqi-sdk, else
+  # %PUBLIC%\LabaLab\naoqi-sdk (it carries its own Python 2.7).
+  python2 = ""
+  pynaoqi_sdk = ""
+  port = 9559
+  # The NAO app (NAO_LLM) is a lab-staff tool; it is not in the student bundle.
+  nao_llm_path = "../NAO_LLM"
+  nao_llm_python = ""
+
+[robots.pepper]
+enabled = true
+display_name = "Pepper"
+announce = "I am Pepper, I am connected and ready to run."
+  [robots.pepper.settings]

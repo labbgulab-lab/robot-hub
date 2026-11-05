@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pepper dashboard states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}a:hover{color:#7A3900}
+.app{--page:#FAF8F5;--card:#FFFFFF;--sunken:#F4F1EC;--border:#E8E3DC;--ctrl:#8C8378;--ink:#1C1917;--muted:#6B635A;--brand:#FD9903;--brand-hover:#F08A00;--brand-text:#A84E00;--ready:#1D4ED8;--ready-tint:#EEF4FF;--run:#15803D;--run-tint:#ECFDF3;--warn:#8A3B00;--warn-tint:#FFF1D6;--busy-tint:#FFF4E0;--danger:#B91C1C;--danger-tint:#FEF2F2;--ease:cubic-bezier(0.23,1,0.32,1);--drawer:cubic-bezier(0.32,0.72,0,1)}
+.app{position:relative;min-height:800px;background:var(--page);color:var(--ink);font-family:Inter,system-ui,"Segoe UI",sans-serif;font-size:15px;line-height:22px;display:flex;flex-direction:column;overflow:hidden}
+.top{height:64px;box-sizing:border-box;padding:0 20px 0 24px;display:flex;align-items:center;gap:6px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{height:30px;width:auto;display:block;margin-right:8px}
+.spacer{flex:1 1 auto}
+.icon{width:20px;height:20px;flex-shrink:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--sunken);color:var(--ink);font-size:13px;font-weight:500;white-space:nowrap;text-decoration:none;font-variant-numeric:tabular-nums}
+a.chip:hover{color:var(--ink);background:#ECE7E0}
+.chip .cdot{width:7px;height:7px;border-radius:50%;background:#15803D}
+.chip-warn{background:var(--warn-tint);color:var(--warn)}
+.chip-warn .cdot{background:var(--warn)}
+.tgl{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;padding:0 8px;white-space:nowrap}
+.switch{position:relative;width:40px;height:24px;border-radius:999px;border:0;background:#D6CFC5;cursor:pointer;flex-shrink:0;padding:0;transition:background-color 180ms ease}
+.switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform 180ms var(--ease)}
+.switch.on{background:#1C1917}
+.switch.on span{transform:translateX(16px)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);padding:0 8px;white-space:nowrap}
+.ldot{width:8px;height:8px;border-radius:50%;background:#15803D;animation:pulse 2s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(21,128,61,.45)}100%{box-shadow:0 0 0 7px rgba(21,128,61,0)}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:transform 120ms var(--ease),background-color 150ms ease;box-sizing:border-box}
+.btn:active{transform:scale(0.97)}
+.btn:focus-visible,.switch:focus-visible,.select:focus-visible,.input:focus-visible,.chip:focus-visible{outline:2px solid #A84E00;outline-offset:2px}
+.btn-primary{background:var(--brand);color:var(--ink)}
+.btn-primary:hover{background:var(--brand-hover);color:var(--ink)}
+.btn-ghost{background:transparent;color:var(--ink)}
+.btn-ghost:hover{background:var(--sunken);color:var(--ink)}
+.btn-quiet{background:var(--sunken);color:var(--ink)}
+.btn-quiet:hover{background:#ECE7E0;color:var(--ink)}
+.btn-stop{background:var(--danger-tint);color:var(--danger)}
+.btn-arm{background:var(--warn-tint);color:var(--warn);box-shadow:inset 0 0 0 1px #E9A55E}
+.btn-dark{background:#1C1917;color:#FFFFFF}
+.btn-sm{min-height:36px;font-size:14px;padding:0 12px;border-radius:10px}
+.btn-icon{padding:0;width:44px}
+.btn-sm.btn-icon{width:36px}
+.btn[disabled]{opacity:.45;cursor:default}
+.busy{position:relative;overflow:hidden}
+.busy::after{content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.28) 0 8px,transparent 8px 16px);background-size:22px 22px;animation:slide 1s linear infinite}
+@keyframes slide{to{background-position:22px 0}}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite;flex-shrink:0;box-sizing:border-box}
+@keyframes spin{to{transform:rotate(360deg)}}
+.main{flex:1 1 auto;width:100%;max-width:1200px;margin:0 auto;box-sizing:border-box;padding:28px 32px 40px;display:flex;flex-direction:column;gap:24px}
+.pagehead{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+.h1{font-size:26px;line-height:32px;font-weight:700;letter-spacing:-.02em;margin:0}
+.h2{font-size:17px;line-height:24px;font-weight:600;margin:0}
+.muted{color:var(--muted)}
+.small{font-size:14px;line-height:20px}
+.counts{display:flex;gap:16px;align-items:center;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.counts b{color:var(--ink);font-weight:600}
+.counts .d{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.band{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 16px 14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.tiles{display:flex}
+.tiles img{width:40px;height:40px;border-radius:10px;border:2px solid #FFFFFF;margin-left:-10px}
+.tiles img:first-child{margin-left:0}
+.modes{display:flex;gap:6px;flex-wrap:wrap}
+.mode{font-size:13px;font-weight:500;color:var(--muted);background:var(--sunken);border-radius:999px;padding:2px 10px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;box-shadow:0 1px 2px rgba(28,25,23,.06);min-width:0}
+.card.s-run{border-color:#86D9A4;box-shadow:0 0 0 3px #ECFDF3}
+.card.s-conn{border-color:#A9C1F5}
+.card.s-busy{border-color:#F5C77E}
+.card.s-warn{border-color:#E9A55E}
+.card.s-lost{border-color:#F2A7A7}
+.card.s-off{opacity:.6}
+.head{display:flex;gap:12px;align-items:center}
+.tile{width:56px;height:56px;border-radius:12px;flex-shrink:0;display:block}
+.who{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.name{font-size:17px;line-height:24px;font-weight:600;margin:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:6px}
+.name .icon{width:16px;height:16px;color:var(--warn)}
+.side{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.metric{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.metric.batt{font-weight:600;color:var(--ink)}
+.metric.low{color:var(--danger)}
+.metric .icon{width:16px;height:16px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill .spin{width:11px;height:11px}
+.p-near{background:var(--sunken);color:var(--muted)}
+.p-conn{background:var(--ready-tint);color:var(--ready)}
+.p-run{background:var(--run-tint);color:var(--run)}
+.p-busy{background:var(--busy-tint);color:var(--brand-text)}
+.p-warn{background:var(--warn-tint);color:var(--warn)}
+.p-lost{background:var(--danger-tint);color:var(--danger)}
+.p-off{background:var(--sunken);color:var(--muted)}
+.detail{margin:0;font-size:14px;line-height:20px;color:var(--muted);overflow-wrap:anywhere}
+.lbl{font-size:12px;line-height:16px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0}
+.ai{display:flex;flex-direction:column;gap:6px}
+.select{appearance:none;-webkit-appearance:none;width:100%;height:40px;border:1px solid var(--ctrl);border-radius:10px;background:#FFFFFF url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B635A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center;padding:0 34px 0 12px;font:inherit;font-size:14px;color:var(--ink);box-sizing:border-box;text-overflow:ellipsis}
+.select.def{border-color:#E9A55E;background-color:#FFFBF2}
+.select.sm{height:36px;width:auto}
+.sub{font-size:13px;line-height:18px;color:var(--muted);margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{font-size:12px;line-height:18px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--warn-tint);color:var(--warn)}
+.tag-dark{background:#1C1917;color:#FFFFFF;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+.actions{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}
+.actions .grow{flex:1 1 auto}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:14px;line-height:20px;padding:10px 12px;border-radius:10px;background:var(--sunken);color:var(--ink);margin:0}
+.note .icon{width:18px;height:18px;margin-top:1px}
+.note.ok{background:var(--run-tint);color:var(--run)}
+.note.warn{background:var(--warn-tint);color:var(--warn)}
+.note.err{background:var(--danger-tint);color:var(--danger)}
+.note .nacts{display:flex;gap:6px;margin-top:8px}
+.postures{display:flex;gap:6px}
+.postures .btn{flex:1 1 0;min-height:40px;font-size:14px;padding:0 8px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);background:#1C1917;color:#F5F2EE;border-radius:12px;padding:10px 16px;font-size:14px;display:flex;gap:8px;align-items:center;box-shadow:0 12px 32px -12px rgba(28,25,23,.5);white-space:nowrap}
+.toast .icon{width:18px;height:18px}
+.away{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.ghost{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px 0 4px;border:1px dashed #D6CFC5;border-radius:999px;color:var(--muted);font-size:14px}
+.ghost img{width:28px;height:28px;border-radius:999px;opacity:.6}
+.setuprow{display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 6px 0 4px;border:1px dashed #D6CFC5;border-radius:999px;font-size:14px;color:var(--ink)}
+.setuprow img{width:34px;height:34px;border-radius:999px}
+.warnbar{display:flex;align-items:center;gap:10px;padding:8px 24px;background:var(--warn-tint);color:var(--warn);font-size:14px;border-bottom:1px solid #F5D7A6;flex-shrink:0}
+.warnbar.err{background:var(--danger-tint);color:var(--danger);border-bottom-color:#F2C4C4}
+.btn-bar{min-height:32px;font-size:14px;padding:0 12px;border-radius:10px;background:#1C1917;color:#FFFFFF}
+.btn-bar:hover{color:#FFFFFF}
+.dim{opacity:.5;pointer-events:none}
+.ph{background:var(--card);border:1px solid var(--border);border-radius:16px;height:230px}
+.scrim{position:absolute;left:0;right:0;top:0;bottom:0;background:rgba(28,25,23,.30)}
+.sheet{position:absolute;top:0;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:-24px 0 48px -24px rgba(28,25,23,.35);display:flex;flex-direction:column;animation:inr 260ms var(--drawer) both}
+@keyframes inr{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.sheet-head{display:flex;align-items:center;gap:12px;padding:16px 16px 16px 20px;border-bottom:1px solid var(--border)}
+.sheet-head .tile{width:48px;height:48px;border-radius:10px}
+.sheet-body{flex:1 1 auto;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:22px}
+.sec{display:flex;flex-direction:column;gap:10px}
+.sechd{display:flex;align-items:center;gap:8px}
+.facts{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0;font-size:14px;line-height:20px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.field{display:flex;flex-direction:column;gap:6px}
+.field>label,.flabel{font-size:14px;font-weight:500}
+.input{height:40px;border:1px solid var(--ctrl);border-radius:10px;padding:0 12px;font:inherit;font-size:14px;background:#FFFFFF;color:var(--ink);box-sizing:border-box;width:100%}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:20px;cursor:pointer}
+.check input{width:18px;height:18px;margin:1px 0 0;accent-color:#1C1917;flex-shrink:0}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;flex-wrap:wrap}
+.row+.row{border-top:1px solid var(--border)}
+.rowmain{flex:1 1 220px;min-width:0}
+.rowtitle{margin:0;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mono{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:13px;color:var(--muted)}
+.prov{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:var(--sunken);font-size:12px;font-weight:600;color:var(--ink)}
+.acc{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.acc+.acc{margin-top:8px}
+.acchd{display:flex;align-items:center;gap:10px;padding:10px 12px;font-weight:600;font-size:14px}
+.acchd img{width:28px;height:28px;border-radius:8px}
+.accbody{padding:0 12px 12px 50px;font-size:14px;line-height:21px}
+.accbody ol,.accbody ul{margin:0;padding-left:18px}
+.steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px}
+.steps>li{display:flex;gap:12px}
+.num{width:24px;height:24px;border-radius:50%;background:#1C1917;color:#FFFFFF;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.stepbody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:21px}
+.stepbody ul{margin:0;padding-left:18px;color:var(--muted)}
+.cap{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stagger{animation:in 300ms var(--ease) both}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.stagger,.ldot,.spin,.sheet,.busy::after{animation:none}}
+
+.ttl{font-weight:700;font-size:17px;letter-spacing:-.01em;margin:0 8px 0 4px;white-space:nowrap}
+.tabs{display:flex;gap:4px;background:var(--sunken);padding:4px;border-radius:12px}
+.tab{display:flex;flex-direction:column;justify-content:center;padding:3px 14px;border-radius:9px;font-weight:600;font-size:14px;line-height:18px;color:var(--ink);text-decoration:none;min-height:40px;box-sizing:border-box}
+.tab small{font-size:11.5px;font-weight:500;color:var(--muted);line-height:14px}
+.tab.on{background:#FFFFFF;box-shadow:0 1px 2px rgba(28,25,23,.10)}
+a.tab:hover{color:var(--ink)}
+.save{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--run);padding:0 8px;white-space:nowrap}
+.save.warn{color:var(--warn)}
+.save .icon{width:16px;height:16px}
+.pnl{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0;box-sizing:border-box}
+.pnlh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pnlh h2,.pnlh h3{font-size:12px;line-height:16px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0}
+.frow{display:grid;grid-template-columns:104px minmax(0,1fr);align-items:center;gap:8px 10px}
+.frow>label,.frow>.fl{font-size:14px;font-weight:500;color:var(--ink)}
+.frow .select,.frow .input{height:36px}
+.srow{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500}
+.srow .grow{flex:1 1 auto;min-width:0}
+.used{display:inline-flex;gap:4px;flex-wrap:wrap}
+.used span{font-size:11px;font-weight:600;line-height:16px;padding:0 6px;border-radius:5px;background:var(--sunken);color:var(--muted);white-space:nowrap}
+.ta{border:1px solid var(--ctrl);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;line-height:20px;resize:none;width:100%;box-sizing:border-box;color:var(--ink);background:#FFFFFF}
+.cnt{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;background:var(--sunken);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink)}
+.badge .mono{font-size:12px}
+.rng{display:flex;align-items:center;gap:8px;font-size:13px;font-variant-numeric:tabular-nums}
+.rng input[type=range]{accent-color:#1C1917;width:120px}
+.sub-badge{font-size:11px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:6px;background:var(--ready-tint);color:var(--ready)}
+.sub-badge.speak{background:#EEF4FF;color:#1D4ED8}
+.sub-badge.listen{background:var(--run-tint);color:var(--run)}
+.sub-badge.think{background:var(--busy-tint);color:var(--brand-text)}
+.log{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:12px;line-height:19px;background:#171412;color:#E7E2DA;border-radius:10px;padding:10px 12px;overflow:hidden;flex:1 1 auto;min-height:0}
+.log div{white-space:pre-wrap;overflow-wrap:anywhere}
+.log .t{color:#9C948A}.log .w{color:#FFC56B}.log .e{color:#FF8A8A}.log .d{color:#8C847A}
+.chat{display:flex;flex-direction:column;gap:10px;flex:1 1 auto;min-height:0;overflow:hidden}
+.bub{max-width:78%;padding:10px 14px;border-radius:14px;font-size:16px;line-height:24px}
+.bub.robot{align-self:flex-start;background:#FFF4E0;border-top-left-radius:4px}
+.bub.person{align-self:flex-end;background:var(--sunken);border-top-right-radius:4px}
+.bub .meta{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin-top:4px;flex-wrap:wrap}
+.bub.saying{box-shadow:0 0 0 2px #FDB241}
+.mbtn.on[disabled]{opacity:1;cursor:default}
+.chk.wait{background:#FFFFFF;border:1px dashed #D6CFC5;color:var(--muted)}
+.chk .spin{width:11px;height:11px}
+.sys{align-self:center;font-size:12.5px;color:var(--muted);background:var(--sunken);border-radius:999px;padding:3px 12px}
+.sys.err{background:var(--danger-tint);color:var(--danger)}
+.cur{display:inline-block;width:.55em;color:#A84E00;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.mtag{font-size:11.5px;font-weight:600;padding:0 6px;line-height:18px;border-radius:5px;background:#FFFFFF;color:var(--muted);border:1px solid var(--border)}
+.stage{display:grid;grid-template-columns:minmax(0,1.25fr) 230px minmax(0,1.6fr);gap:20px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 18px}
+.phase{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.pdot{width:9px;height:9px;border-radius:50%;background:currentColor}
+.big{font-size:22px;line-height:28px;font-weight:700;letter-spacing:-.015em;margin:2px 0 0}
+.det{font-size:14px;color:var(--muted);margin:2px 0 0}
+.timer{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.bar{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden;margin-top:6px}
+.bar span{display:block;height:100%;background:#1C1917;border-radius:999px}
+.modes2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto auto;gap:8px}
+.mbtn{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;min-height:52px;padding:6px 12px;border-radius:12px;border:1px solid var(--border);background:#FFFFFF;font:inherit;font-weight:600;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.mbtn small{font-size:12px;font-weight:500;color:var(--muted)}
+.mbtn.on{background:var(--run-tint);border-color:#86D9A4;color:var(--run)}
+.mbtn.int{border-left:4px solid #C2410C}
+.mbtn.free{border-left:4px solid #0E7490}
+.mbtn.grp{border-left:4px solid #2563EB}
+.mbtn[disabled]{opacity:.45;cursor:default}
+.substrip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;grid-column:1 / -1;border-top:1px solid var(--border);padding-top:10px;font-size:14px}
+.okline{color:var(--run);font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.warnline{color:var(--warn);font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.chk{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:500;background:var(--sunken);color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chk.ok{background:var(--run-tint);color:var(--run)}
+.chk.bad{background:var(--danger-tint);color:var(--danger)}
+.chips2{display:flex;gap:6px;flex-wrap:wrap;grid-column:1 / -1}
+.seat{background:var(--card);border:1px solid var(--border);border-top:4px solid var(--sc);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.seat.speaking{box-shadow:0 0 0 3px #BFD3FB;background:#FBFCFF}
+.seat.out{opacity:.5}
+.seathd{display:flex;align-items:center;gap:8px}
+.sn{width:24px;height:24px;border-radius:7px;background:var(--sc);color:#FFFFFF;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lab{flex:1 1 auto;min-width:0;height:34px;border:1px solid var(--ctrl);border-radius:9px;padding:0 10px;font:inherit;font-size:15px;font-weight:600;color:var(--ink);box-sizing:border-box}
+.rtag{font-size:12px;color:var(--muted);background:var(--sunken);border-radius:6px;padding:1px 6px;white-space:nowrap}
+.gtag{font-size:12px;font-weight:600;border-radius:6px;padding:1px 6px;white-space:nowrap}
+.meter{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden;flex:1 1 auto}
+.meter span{display:block;height:100%;background:#15803D}
+.meter.deaf span{background:#C9C2B8}
+.ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer;padding:0}
+.ib[disabled]{opacity:.4}
+.ib .icon{width:16px;height:16px}
+.checks3{display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px}
+.checks3 label{display:inline-flex;align-items:center;gap:6px}
+.checks3 input{width:16px;height:16px;accent-color:#1C1917;margin:0}
+.seg{display:flex;border:1px solid var(--ctrl);border-radius:9px;overflow:hidden;height:32px}
+.seg button{flex:1 1 0;border:0;background:#FFFFFF;font:inherit;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;padding:0 6px;font-variant-numeric:tabular-nums}
+.seg button+button{border-left:1px solid var(--border)}
+.seg button.on{background:#1C1917;color:#FFFFFF}
+.seg.lvl button.on{background:#C2410C}
+.vline{font-size:12.5px;color:var(--muted)}
+.fl2{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 -4px}
+.tr{display:flex;flex-direction:column;justify-content:flex-end;gap:2px;overflow:hidden;flex:1 1 auto;min-height:0}
+.ln2{display:grid;grid-template-columns:4px minmax(0,1fr);gap:10px;padding:8px 10px 8px 0;border-radius:8px}
+.ln2 .cb{border-radius:4px;background:var(--sc)}
+.ln2 .lh{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.ln2 .who{font-weight:700;color:var(--sc);font-size:13.5px;display:inline;flex:none}
+.ln2 .tx{font-size:17px;line-height:25px;color:var(--ink);margin-top:2px}
+.ln2.now{background:#EEF4FF}
+.ln2.cut .tx{text-decoration:line-through;color:var(--muted)}
+.cuttag{font-size:11.5px;font-weight:700;color:var(--warn);background:var(--warn-tint);border-radius:5px;padding:0 6px}
+.ln2.people{background:#FFFBF2}
+.ln2.people .cb{background:#D97706}
+.ln2.people .who{color:#8A3B00}
+.note2{font-size:12.5px;color:var(--muted);font-style:italic;padding:3px 0 3px 14px;margin:0}
+.plive{border:1px solid #F5C77E;background:#FFFBF2;border-radius:12px;padding:8px 12px;font-size:17px;line-height:25px}
+.plive b{display:block;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#8A3B00}
+.steer{display:flex;gap:8px;align-items:center}
+.kbd{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:5px;border:1px solid var(--border);background:#FFFFFF;font-size:11.5px;font-weight:600;color:var(--muted);font-family:inherit;box-sizing:border-box}
+.jump{align-self:center;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;background:#1C1917;color:#FFFFFF;font-size:13px;font-weight:600;border:0}
+.fold{border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:10px}
+.modal{position:absolute;background:#FFFFFF;border-radius:18px;box-shadow:0 24px 64px -16px rgba(28,25,23,.45);display:flex;flex-direction:column;gap:14px;padding:20px 22px}
+.modal h2{font-size:19px;margin:0}
+
+.pchip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:999px;background:var(--sunken);font-size:13px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pchip .pdot{width:8px;height:8px}
+.st{font-size:11.5px;font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:7px;white-space:nowrap}
+.st.idle{background:var(--sunken);color:var(--muted)}
+.st.wait{background:var(--run-tint);color:var(--run)}
+.st.think{background:var(--busy-tint);color:var(--brand-text)}
+.st.speak{background:#EEF4FF;color:#1D4ED8}
+.st.paused{background:#FFE8CC;color:#8A3B00}
+.st.stuck{background:var(--danger-tint);color:var(--danger)}
+.tg2{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;min-height:30px}
+.tg2 .grow{flex:1 1 auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tg2.off{opacity:.45}
+.info{position:relative;display:inline-flex;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;color:var(--muted);cursor:help}
+.info .icon{width:16px;height:16px}
+.tip{position:absolute;z-index:5;background:#1C1917;color:#F5F2EE;font-size:12.5px;line-height:17px;font-weight:500;padding:7px 10px;border-radius:8px;width:230px;box-shadow:0 10px 24px -10px rgba(0,0,0,.5)}
+.tip::after{content:"";position:absolute;width:8px;height:8px;background:#1C1917;transform:rotate(45deg)}
+.tip.up{bottom:26px;left:-12px}.tip.up::after{bottom:-4px;left:17px}
+.newtag{font-size:10.5px;font-weight:700;letter-spacing:.05em;padding:1px 5px;border-radius:5px;background:#FFF4E0;color:#A84E00;text-transform:uppercase}
+.chips4{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.qp{display:flex;align-items:center;gap:6px;text-align:left;padding:6px 9px;border-radius:9px;border:1px solid var(--border);background:#FFFFFF;font:inherit;font-size:13px;line-height:17px;color:var(--ink);cursor:pointer}
+.qp b{font-size:10px;letter-spacing:.04em;color:var(--muted);background:var(--sunken);border-radius:4px;padding:0 4px;flex-shrink:0}
+.mv{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.mv .btn{min-height:34px;font-size:12.5px;padding:0 4px;white-space:normal;line-height:15px}
+.pb{max-width:84%;padding:8px 12px;border-radius:12px;font-size:15px;line-height:22px}
+.pb .who2{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:1px}
+.pb.pep{align-self:flex-start;background:var(--sunken)}
+.pb.pep.part{opacity:.65}
+.pb.per{align-self:flex-end;background:#EEF4FF}
+.pb.woz{align-self:flex-start;background:#FFFFFF;border:1.5px dashed #FD9903}
+.ev{align-self:center;font-size:12px;font-weight:500;padding:2px 10px;border-radius:999px;background:var(--warn-tint);color:var(--warn)}
+.ev.tap{background:var(--run-tint);color:var(--run)}
+.ev.web{background:#EEF4FF;color:#1D4ED8}
+.heard{align-self:stretch;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);border:1px dashed #D6CFC5;border-radius:10px;padding:5px 8px}
+.wave{display:inline-flex;gap:2px;align-items:center;height:14px}
+.wave span{width:3px;border-radius:2px;background:#15803D}
+.cam{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:4/3;background:linear-gradient(135deg,#3B342E,#57493E 40%,#6E5E50 70%,#2E2925)}
+.fbox{position:absolute;border:2px solid #4ADE80;border-radius:4px}
+.livebadge{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.6);color:#FFFFFF;font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;letter-spacing:.03em}
+.tabprev{position:relative;border-radius:12px;overflow:hidden;aspect-ratio:16/10;background:linear-gradient(160deg,#FFF7EB,#FFE7C2);border:6px solid #1C1917;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:10px}
+.tabprev .q{font-weight:700;font-size:15px;color:#1C1917;text-align:center}
+.tabopts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+.tabopt{border-radius:10px;padding:12px 4px;text-align:center;font-weight:700;font-size:15px;color:#FFFFFF;cursor:pointer;border:0;font-family:inherit}
+.thumbs{display:flex;gap:6px;overflow:hidden}
+.thumb{width:62px;height:40px;border-radius:6px;background:linear-gradient(135deg,#E8E3DC,#F4F1EC);border:2px solid transparent;flex-shrink:0;font-size:10px;color:var(--muted);display:flex;align-items:flex-end;padding:2px 4px;box-sizing:border-box}
+.thumb.on{border-color:#FD9903}
+.drop{border:1.5px dashed #D6CFC5;border-radius:10px;padding:8px 10px;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.app{min-height:3150px}</style>
+</helmet>
+<div class="app" style="padding: 32px; box-sizing: border-box;"><div style="display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 24px 20px; align-items: start;"><section><p class="cap">Web search: the hover</p><div class="pnl" style="padding-top: 64px; padding-right: 70px;"><div class="tg2"><span class="grow">Web search <span class="newtag">new</span><span class="info" tabindex="0" aria-label="About web search"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span class="tip up" role="tooltip">Pepper can look things up online. Answers may take a few seconds longer.</span></span></span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Web search"><span></span></button></div></div></section>
+<section><p class="cap">Web search: looking it up</p><div class="pnl" style="gap: 8px;"><div class="srow"><span class="st think">SEARCHING</span><span class="sub">Pepper is looking it up online · 2 s</span></div><div class="pb pep" style="max-width: 100%;"><span class="who2">Pepper</span>Let me check…</div><span class="ev web"><svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>Searched the web: "Beer Sheva weather today" · 3.1 s</span></div></section>
+<section><p class="cap">Web search: not available</p><div class="pnl" style="gap: 8px;"><div class="tg2 off"><span class="grow">Web search<span class="info" tabindex="0" aria-label="About web search" title="Pepper can look things up online. Answers may take a few seconds longer."><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span></span><span class="sub">Not in the scripted demo</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Web search"><span></span></button></div><div class="tg2 off"><span class="grow">Web search<span class="info" tabindex="0" aria-label="About web search" title="Pepper can look things up online. Answers may take a few seconds longer."><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span></span><span class="sub">No internet on this network</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Web search"><span></span></button></div><div class="tg2 off"><span class="grow">Web search<span class="info" tabindex="0" aria-label="About web search" title="Pepper can look things up online. Answers may take a few seconds longer."><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span></span><span class="sub">This key can't search</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Web search"><span></span></button></div></div></section>
+<section><p class="cap">Web search: failed</p><div class="pnl" style="gap: 8px;"><span class="ev web" style="background: #FEF2F2; color: #B91C1C;">Web search failed: timeout. Pepper answered without it.</span><p class="sub">Pepper never waits more than 8 s; it answers from what it knows and says so.</p></div></section>
+<section><p class="cap">Robot link</p><div class="pnl" style="gap: 8px; align-items: flex-start;"><span class="pchip"><span class="pdot" style="background: #A84E00;"></span>Starting its agent… up to 60 s</span><span class="pchip"><span class="pdot" style="background: #B91C1C;"></span>The agent's connection dropped · trying again in 20 s</span><span class="pchip"><span class="pdot" style="background: #B91C1C;"></span>Dashboard server stopped · retrying</span><div class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><div>The agent never called back on port 8782. Is Windows Firewall blocking Python on this network?<div class="nacts"><button class="btn btn-dark" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Allow Pepper</button></div></div></div></div></section>
+<section><p class="cap">Tablet link</p><div class="pnl" style="gap: 8px; align-items: flex-start;"><span class="pchip"><span class="pdot" style="background: #15803D;"></span>Tablet live · 1 s</span><span class="pchip"><span class="pdot" style="background: #B91C1C;"></span>Tablet not connected yet · people see nothing<button class="btn btn-dark" type="button" style="min-height: 24px; font-size: 12px; padding: 0 8px; margin-left: 4px;">Reload</button></span><span class="pchip">Tablet lost · 6 s ago · people see nothing<button class="btn btn-dark" type="button" style="min-height: 24px; font-size: 12px; padding: 0 8px; margin-left: 4px;">Reload</button></span></div></section>
+<section><p class="cap">Keys</p><div class="pnl" style="gap: 8px;"><span class="badge" style="background: #FEF2F2; color: #B91C1C;">No GPT key · add one on the Pepper card</span><span class="badge" style="background: #FFF1D6; color: #8A3B00;">No ElevenLabs key · Wizard of Oz uses the OpenAI voice</span><p class="sub">The scripted demo needs both keys. Free conversation needs GPT.</p></div></section>
+<section><p class="cap">Start refused</p><div class="pnl" style="gap: 6px;"><div class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"></circle><path d="m21 2-9.6 9.6"></path><path d="m15.5 7.5 3 3L22 7l-3-3"></path></svg><div>The scripted demo listens with ElevenLabs. Add an ElevenLabs key.</div></div><div class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><div>Pepper isn't connected yet. Wait for the robot chip to turn green.</div></div><div class="note warn"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><div>Pick an ElevenLabs voice first.</div></div></div></section>
+<section style="grid-column: span 2;"><p class="cap">AI stuck</p><div class="pnl" style="gap: 8px;"><div class="warnbar err" style="border-radius: 10px; border: 1px solid #F2C4C4; padding: 10px 12px;"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span>The AI stopped answering. Speak for Pepper from Wizard of Oz.</span><span class="spacer"></span><button class="btn btn-dark" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Restart AI</button></div><div class="srow"><span class="st stuck">AI STUCK</span><span class="sub">The Wizard of Oz cards flash</span></div></div></section>
+<section><p class="cap">Paused by you</p><div class="pnl" style="gap: 8px;"><div class="srow"><span class="st paused">PAUSED · YOU</span><span class="sub">AI paused · you have the floor</span></div><button class="btn btn-primary" type="button" style="min-height: 40px;"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>Resume AI</button></div></section>
+<section><p class="cap">Turn info (scripted demo)</p><div class="pnl" style="gap: 8px;"><div class="srow"><span class="st wait">WAITING FOR ANSWER</span></div><p class="sub">Waiting for an answer · 0:09 · asks again at 0:12</p><div style="display: flex; gap: 6px;"><button class="btn btn-quiet" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Repeat question</button><button class="btn btn-ghost" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Skip</button></div></div></section>
+<section style="grid-column: span 2;"><p class="cap">Scripted demo: what's used</p><div class="pnl" style="gap: 8px;"><div class="tg2 off"><span class="grow">Vision</span><span class="sub">Not in the scripted demo</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Vision"><span></span></button></div><div class="tg2 off"><span class="grow">AI drives screen</span><span class="sub">The script drives it</span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="AI drives screen"><span></span></button></div><div class="tg2"><span class="grow">Gestures</span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Gestures"><span></span></button></div><div class="tg2 off"><span class="grow">Web search<span class="info" tabindex="0" aria-label="About web search" title="Pepper can look things up online. Answers may take a few seconds longer."><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span></span><span class="sub">Not in the scripted demo</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Web search"><span></span></button></div><p class="sub">Settings it ignores are greyed with the reason. Engine picks only the voice: the demo always listens with ElevenLabs.</p></div></section>
+<section><p class="cap">Walking while charging</p><div class="pnl"><div class="note warn"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="17" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line></svg><div>Pepper is charging. Unplug the charger and close the flap, then press Walking again.</div></div></div></section>
+<section><p class="cap">Empty states</p><div class="pnl" style="gap: 8px;"><p class="muted" style="margin: 0; text-align: center;">Press Start conversation and Pepper begins talking.</p><div class="cam" style="background: #2A2521; display: flex; align-items: center; justify-content: center; color: #A79F95; font-size: 13px; aspect-ratio: 16/7;">No camera picture yet</div><p class="sub">No presentations yet: upload one.</p><p class="sub">No ElevenLabs voices (key?)</p></div></section>
+<section><p class="cap">Tablet not connected</p><div class="pnl"><div class="tabprev" style="background: #2A2521; border-color: #1C1917;"><span style="color: #FFFFFF; font-weight: 700;">Screen not connected</span><span style="color: #D8D1C7; font-size: 13px;">People in front of Pepper see nothing</span></div></div></section>
+<section><p class="cap">Tablet emoji check (More menu)</p><div class="pnl" style="gap: 8px;"><div style="display: flex; gap: 6px;"><button class="btn btn-quiet" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Emoji test</button><button class="btn btn-dark" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Mark broken</button></div><div class="field"><label>Which numbers show as empty boxes or wrong?</label><input class="input" type="text" value="4, 17, 30"></div><p class="sub">45 candidates · 42 allowed now</p></div></section>
+<section><p class="cap">More menu</p><div class="pnl" style="gap: 2px; padding: 6px;"><button class="btn btn-ghost" type="button" style="justify-content: flex-start; min-height: 36px; font-size: 14px;">Tablet emoji check</button><button class="btn btn-ghost" type="button" style="justify-content: flex-start; min-height: 36px; font-size: 14px;">Put a message or choice on the screen</button><button class="btn btn-ghost" type="button" style="justify-content: flex-start; min-height: 36px; font-size: 14px;">Lab facts (what Pepper may say about the lab)</button><button class="btn btn-ghost" type="button" style="justify-content: flex-start; min-height: 36px; font-size: 14px;">Rehearse without the robot</button></div></section>
+<section><p class="cap">Put on the screen yourself</p><div class="pnl" style="gap: 8px;"><div class="seg"><button type="button" class="on">Message</button><button type="button">Choice</button></div><input class="input" type="text" value="Welcome to Laba Lab!" maxlength="300"><div style="display: flex; justify-content: flex-end;"><button class="btn btn-dark" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Show</button></div></div></section>
+<section><p class="cap">Uploads and deletes</p><div class="pnl" style="gap: 6px;"><p class="sub">Turning tour.pdf into slides… 7/12</p><div class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><div>Only images and PDFs. Save PowerPoint as PDF first.</div></div><div class="note err"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><div>hero.png is over 15 MB.</div></div><div class="note"><div>Delete "Lab tour" (6 slides) from this laptop?<div class="nacts"><button class="btn btn-stop" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Delete</button><button class="btn btn-ghost" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Cancel</button></div></div></div></div></section>
+<section style="grid-column: span 3;"><p class="cap">Toasts</p><div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start;"><div class="toast" style="position: static; transform: none; background: #7F1D1D;">No conversation is running.</div><div class="toast" style="position: static; transform: none; background: #7F1D1D;">Pepper isn't connected.</div><div class="toast" style="position: static; transform: none; background: #7F1D1D;">Couldn't speak it: the voice service timed out.</div><div class="toast" style="position: static; transform: none; background: #7F1D1D;">Only Stand was tested on this robot.</div><div class="toast" style="position: static; transform: none;">42 emoji allowed on Pepper's screen</div><div class="toast" style="position: static; transform: none;">No camera picture yet</div><div class="toast" style="position: static; transform: none; background: #7F1D1D;">The dashboard server isn't answering</div></div></section>
+<section><p class="cap">Before Start</p><section class="pnl" style="gap: 10px;">
+      <div class="pnlh" style="gap: 8px;"><h2>Conversation</h2><span class="st idle">IDLE</span><span class="spacer"></span><span class="sub" title="The model that answers right now">GPT Realtime 2.1</span></div>
+      <div class="frow"><label>Experience</label><select class="select" aria-label="Experience"><option>Feelings Together (demo) · scripted</option><option disabled>Feelings Together (research demo) · with emoji (not for the demo)</option><option selected>Free conversation</option></select>
+        <label>Engine</label><select class="select" aria-label="Engine"><option selected>ElevenLabs ears + voice, GPT brain</option><option>GPT Realtime (speech to speech)</option></select>
+        <label>Language</label><select class="select" aria-label="Language"><option selected>Hebrew</option><option>English</option><option>Auto</option></select>
+        <label>Voice</label><select class="select" aria-label="Voice"><option>Rachel (English)</option><option selected>Noa (Hebrew)</option><option>Sarah (English)</option></select></div>
+      
+      <div class="tg2"><span class="grow">Vision</span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Vision"><span></span></button></div>
+      <div class="tg2 off"><span class="grow">AI drives screen</span><span class="sub">Not in free conversation</span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="AI drives screen"><span></span></button></div>
+      <div class="tg2 off"><span class="grow">Gestures</span><span class="sub">Not in free conversation</span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Gestures"><span></span></button></div>
+      <div class="tg2"><span class="grow">Web search <span class="newtag">new</span><span class="info" tabindex="0" aria-label="About web search" title="Pepper can look things up online. Answers may take a few seconds longer."><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span></span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Web search"><span></span></button></div>
+      <div style="display: flex; gap: 8px;"><button class="btn btn-primary" type="button" style="min-height: 44px; flex: 1 1 auto;"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>Start conversation</button><button class="btn btn-quiet" type="button" style="min-height: 44px;" title="Shown after you speak for Pepper with pause AI on" disabled="{{yes}}"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>Resume AI</button></div>
+      
+      <div class="srow" style="font-size: 13px; font-weight: 500; color: #6B635A; gap: 14px;"><span>Turns <b style="color: #1C1917;">0</b></span><span><svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><b style="color: #1C1917;">00:00</b></span><span>~<b style="color: #1C1917;">–</b> ms</span><span>Step <b style="color: #1C1917;">–</b></span></div>
+    </section><p class="sub" style="margin-top: 6px;">Start is busy while it opens the mic and the screen.</p></section>
+<section><p class="cap">Scripted demo running</p><section class="pnl" style="gap: 10px;">
+      <div class="pnlh" style="gap: 8px;"><h2>Conversation</h2><span class="st speak">SPEAKING</span><span class="spacer"></span><span class="sub" title="The model that answers right now">gpt-4.1 reacts · ElevenLabs voice</span></div>
+      <div class="frow"><label>Experience</label><select class="select" aria-label="Experience"><option selected>Feelings Together (demo) · scripted</option><option disabled>Feelings Together (research demo) · with emoji (not for the demo)</option><option>Free conversation</option></select>
+        <label>Engine</label><select class="select" aria-label="Engine"><option selected>ElevenLabs ears + voice, GPT brain</option><option>GPT Realtime (speech to speech)</option></select>
+        <label>Language</label><select class="select" aria-label="Language"><option selected>Hebrew</option><option>English</option><option>Auto</option></select>
+        <label>Voice</label><select class="select" aria-label="Voice"><option>Rachel (English)</option><option selected>Noa (Hebrew)</option><option>Sarah (English)</option></select></div>
+      <p class="sub" style="margin-top: -4px; display: block;"><svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Experience, Engine, Language and Voice apply at the next Start. Wizard of Oz uses a new voice at once.</p>
+      <div class="tg2 off"><span class="grow">Vision</span><span class="sub">Not in the scripted demo</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Vision"><span></span></button></div>
+      <div class="tg2 off"><span class="grow">AI drives screen</span><span class="sub">The script drives it</span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="AI drives screen"><span></span></button></div>
+      <div class="tg2"><span class="grow">Gestures</span><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Gestures"><span></span></button></div>
+      <div class="tg2 off"><span class="grow">Web search <span class="newtag">new</span><span class="info" tabindex="0" aria-label="About web search" title="Pepper can look things up online. Answers may take a few seconds longer."><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span></span><span class="sub">Not in the scripted demo</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Web search"><span></span></button></div>
+      <div style="display: flex; gap: 8px;"><button class="btn btn-stop" type="button" style="min-height: 44px; flex: 1 1 auto;"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>End conversation</button><button class="btn btn-quiet" type="button" style="min-height: 44px;" title="Shown after you speak for Pepper with pause AI on" disabled="{{yes}}"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>Resume AI</button></div>
+      <div class="srow" style="font-size: 13px; font-weight: 500; color: #6B635A; gap: 8px; flex-wrap: wrap;"><span class="grow">Waiting for an answer · 0:09 · asks again at 0:12</span><button class="btn btn-quiet" type="button" style="min-height: 28px; font-size: 12.5px; padding: 0 8px;">Repeat question</button><button class="btn btn-ghost" type="button" style="min-height: 28px; font-size: 12.5px; padding: 0 8px;">Skip</button></div>
+      <div class="srow" style="font-size: 13px; font-weight: 500; color: #6B635A; gap: 14px;"><span>Turns <b style="color: #1C1917;">12</b></span><span><svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><b style="color: #1C1917;">04:31</b></span><span>~<b style="color: #1C1917;">840</b> ms</span><span>Step <b style="color: #1C1917;">2/9 Choice</b></span></div>
+    </section></section>
+<section><p class="cap">Mic line</p><div class="pnl" style="gap: 8px;"><div class="srow" style="font-size: 13.5px; color: #15803D;"><span class="wave"><span style="height: 6px;"></span><span style="height: 12px;"></span><span style="height: 9px;"></span><span style="height: 14px;"></span></span>listening</div><div class="meter" style="flex: none; height: 5px;"><span style="width: 42%;"></span></div><span class="sub" style="color: #15803D;">hearing: "and what's the weather like in Beer Sh"</span><span class="sub">Pepper speaking · mic shut</span><span class="sub">Pepper's turn · mic shut</span><span class="sub">AI paused · you have the floor</span></div></section>
+<section><p class="cap">Robot not connected</p><div class="pnl" style="gap: 8px;"><div style="display: flex; gap: 6px; flex-wrap: wrap;"><span class="pchip"><span class="pdot" style="background: #B91C1C;"></span>Started without a robot address</span><span class="pchip"><span class="pdot" style="background: #A84E00;"></span>Laptop audio only (test mode)</span></div><div class="mv" style="opacity: .45;"><button class="btn btn-quiet" type="button" disabled="{{yes}}">Wave</button><button class="btn btn-quiet" type="button" disabled="{{yes}}">Nod yes</button><button class="btn btn-quiet" type="button" disabled="{{yes}}">Shake no</button><button class="btn btn-quiet" type="button" disabled="{{yes}}">Walking</button><button class="btn btn-quiet" type="button" disabled="{{yes}}">Stand</button></div><span class="rng" style="opacity: .45;"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg><input type="range" disabled value="60" aria-label="Volume"></span><p class="sub">Moves, volume and camera wait for the robot.</p></div></section>
+<section><p class="cap">Voice list follows the Engine</p><div class="pnl" style="gap: 8px;"><div class="frow"><label>Engine</label><select class="select" aria-label="Engine"><option>GPT Realtime (speech to speech)</option></select><label>Voice</label><select class="select" aria-label="Voice"><option selected>marin</option><option>cedar</option><option>alloy</option><option>ash</option><option>ballad</option><option>coral</option><option>echo</option><option>sage</option><option>shimmer</option><option>verse</option></select></div></div></section>
+<section style="grid-column: span 3;"><p class="cap">Tablet pages</p><div class="pnl"><div style="display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px;"><div style="display: flex; flex-direction: column; gap: 4px;"><div class="tabprev" style="border-width: 4px; gap: 4px;"><b style="font-size: 12px;">Hi, I'm Pepper!</b><span style="font-size: 10px;">Come closer and say hello</span><img src="img/labalab-logo.png" alt="" style="height: 9px; position: absolute; bottom: 4px;"></div><span class="sub">Welcome</span></div><div style="display: flex; flex-direction: column; gap: 4px;"><div class="tabprev" style="border-width: 4px; gap: 4px;"><b style="font-size: 18px;">★</b><span style="font-size: 11px;">Welcome to Laba Lab!</span><img src="img/labalab-logo.png" alt="" style="height: 9px; position: absolute; bottom: 4px;"></div><span class="sub">Message</span></div><div style="display: flex; flex-direction: column; gap: 4px;"><div class="tabprev" style="border-width: 4px; background: #000000;"><span style="color: #FFFFFF; font-size: 11px;">slide, no logo</span></div><span class="sub">Slide</span></div><div style="display: flex; flex-direction: column; gap: 4px;"><div class="tabprev" style="border-width: 4px; background: #000000;"></div><span class="sub">Blank</span></div><div style="display: flex; flex-direction: column; gap: 4px;"><div class="tabprev" style="border-width: 4px; display: grid; grid-template-columns: repeat(5,1fr); padding: 6px; gap: 2px; font-size: 9px;"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span></div><span class="sub">Emoji test</span></div><div style="display: flex; flex-direction: column; gap: 4px;"><div class="tabprev" style="border-width: 4px;"><b style="font-size: 12px;">Hi, I'm Pepper!</b><span style="position: absolute; right: 6px; bottom: 6px; width: 7px; height: 7px; border-radius: 50%; background: #DC2626;"></span></div><span class="sub">Lost link: a red dot, no text</span></div></div></div></section>
+<section><p class="cap">Choice on the screen yourself</p><div class="pnl" style="gap: 8px;"><div class="seg"><button type="button">Message</button><button type="button" class="on">Choice</button></div><input class="input" type="text" value="Which robot do you like?" maxlength="120"><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;"><input class="input" type="text" value="Pepper" maxlength="40"><input class="input" type="text" value="NAO" maxlength="40"><input class="input" type="text" placeholder="Option 3 (optional)" maxlength="40"><input class="input" type="text" placeholder="Option 4 (optional)" maxlength="40"></div><div style="display: flex; justify-content: flex-end;"><button class="btn btn-dark" type="button" style="min-height: 32px; font-size: 13px; padding: 0 10px;">Show</button></div></div></section>
+<section><p class="cap">Walking</p><div class="pnl" style="gap: 8px;"><div class="pb woz" style="max-width: 100%;"><span class="who2">Pepper · you (Wizard of Oz)</span><span dir="rtl" style="display: block;">אני הולך להסתובב קצת, תפנו לי מקום!</span></div><span class="ev" style="align-self: flex-start;">Gesture: walking</span><span class="sub" style="color: #8A3B00;">The walk line couldn't be made; Pepper walks anyway.</span></div></section>
+<section><p class="cap">No speaker</p><div class="note warn"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg><div>Pepper's speaker can't play audio: the AI can't talk. Wizard of Oz still works in Pepper's own voice (English).</div></div></section>
+<section><p class="cap">Web search rules</p><div class="pnl" style="gap: 6px;"><span class="sub">Questions about the lab still use only the lab facts.</span><span class="sub">Applies at once, also mid-conversation.</span><span class="sub">While it searches, the "AI stopped answering" alarm waits.</span><div class="tg2 off"><span class="grow">Web search<span class="info" tabindex="0" aria-label="About web search" title="Pepper can look things up online. Answers may take a few seconds longer."><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span></span><span class="sub">No GPT key</span><button class="switch" type="button" role="switch" aria-checked="false" aria-label="Web search"><span></span></button></div></div></section>
+<section><p class="cap">Log and AI recovery</p><div class="pnl" style="gap: 6px;"><span class="sub">Copied</span><span class="sub" style="color: #B91C1C;">Copy failed</span><span class="ev" style="align-self: flex-start;">The connection dropped and was restored (last 20 turns kept)</span></div></section>
+<section><p class="cap">More upload messages</p><div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;"><div class="toast" style="position: static; transform: none; background: #7F1D1D;">Couldn't read tour.pdf: it is password protected.</div><div class="toast" style="position: static; transform: none;">Upload a presentation first</div><div class="toast" style="position: static; transform: none;">Lab tour (12 slides) is ready and selected</div><div class="toast" style="position: static; transform: none; background: #7F1D1D;">No presentation selected: the AI has no slides now</div></div></section></div></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":3150}}'>
+class Component extends DCLogic {
+  renderVals() { return { yes: true }; }
+}
+</script>
+</body>
+</html>

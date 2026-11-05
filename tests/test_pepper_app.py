@@ -46,12 +46,13 @@ async def _fake_agent(port, token, *, answer=True):
 
 
 def test_the_link_carries_commands_audio_mic_and_camera():
+    """Fallback mode: the agent connects back (the direct mode is in test_pepper_link.py)."""
     async def run():
-        link = RobotLink("127.0.0.1", 0)
-        await link.start(deploy=False)
+        link = RobotLink("127.0.0.1", 0, back_port=0, back_host="127.0.0.1")
+        await link.listen_back()
         mic = []
         link.on_mic = mic.append
-        agent = asyncio.create_task(_fake_agent(link.listen_port, link.token))
+        agent = asyncio.create_task(_fake_agent(link.back_port, link.token))
         for _ in range(100):
             if link.connected and mic:
                 break
@@ -72,9 +73,9 @@ def test_the_link_carries_commands_audio_mic_and_camera():
 
 def test_an_agent_with_the_wrong_token_is_refused():
     async def run():
-        link = RobotLink("127.0.0.1", 0)
-        await link.start(deploy=False)
-        await _fake_agent(link.listen_port, "not-the-token", answer=False)
+        link = RobotLink("127.0.0.1", 0, back_port=0, back_host="127.0.0.1")
+        await link.listen_back()
+        await _fake_agent(link.back_port, "not-the-token", answer=False)
         await asyncio.sleep(0.1)
         assert not link.connected
     asyncio.run(run())

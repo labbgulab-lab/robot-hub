@@ -1,12 +1,16 @@
-"""Pepper's operator dashboard and screen server.
+"""Pepper's operator dashboard.
 
-One HTTP server on 0.0.0.0:8780:
-  /            /api/*      the operator dashboard -- this laptop only (127.0.0.1)
-  /screen      /screen/*   the page on Pepper's chest tablet, and its taps
+One HTTP server on 127.0.0.1:8780 (this laptop only, since 2026-11-05):
+  /            /api/*      the operator dashboard
+  /screen      /screen/*   the chest tablet's page, for the simulator and the
+                           dashboard's preview (thumbnails, slide pictures)
 
-The tablet must reach the laptop over the hotspot, which is why this is not
-bound to 127.0.0.1 like the old Say-It page. Everything that controls Pepper is
-refused unless the request comes from this laptop and names it as the host.
+Pepper's real chest tablet loads its page from the agent ON the robot
+(http://198.18.0.1:8791/screen, agent/pepper_agent.py): this laptop never
+listens on the network, so Windows never asks a student about the firewall.
+The tablet's state, taps, heartbeat and slide files travel over the agent link
+(robot.py). Everything that controls Pepper is still refused unless the
+request comes from this laptop and names it as the host.
 """
 
 from __future__ import annotations
@@ -23,11 +27,11 @@ from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import eleven
+from . import eleven, websearch
 from .audio import AudioRouter
 from .brain import DEFAULT_EXPERIENCE, ENGINES, EXPERIENCES, MODEL, NOT_FOR_DEMO, VOICES, Brain, experience
 from .script import REACT_MODEL, SCRIPTS, ScriptRunner
-from .robot import RobotLink, laptop_ip_towards
+from .robot import AGENT_PORT, BACK_PORT, TABLET_PORT, RobotLink
 from .screen import EMOJI_CANDIDATES, IMAGE_TYPES, Screen
 from .speech import QUICK_PHRASES, Speech, is_hebrew
 
@@ -43,19 +47,22 @@ TABLET_RESHOW_S = 20.0
 # demo, Hebrew, ElevenLabs ears and voice ("Laura", a premade ElevenLabs voice).
 DEFAULTS = {"experience": DEFAULT_EXPERIENCE, "engine": "eleven", "language": "he",
             "voice": "marin", "el_voice": "FGY2WhTYpPnrIDTdsKH5", "vision": False, "ai_screen": True,
-            "gestures": True, "camera": 0, "deck": None,
+            "gestures": True, "web_search": True, "camera": 0, "deck": None,
             "pause_ai": True, "tell_ai": True, "emoji_broken": []}
+# Options a running conversation picks up at once; the others wait for the next Start.
+LIVE_OPTIONS = {"vision", "ai_screen", "deck", "emoji_broken", "web_search"}
 
 
 class PepperApp:
-    def __init__(self, robot_ip: str, port: int, agent_port: int, data_dir: Path) -> None:
+    def __init__(self, robot_ip: str, port: int, agent_port: int, data_dir: Path,
+                 back_port: int = BACK_PORT, tablet_port: int = TABLET_PORT) -> None:
         self.robot_ip, self.port = robot_ip, port
         self.data = data_dir
         self.data.mkdir(parents=True, exist_ok=True)
         self.key = os.environ.get("OPENAI_API_KEY", "").strip()
         self.eleven_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
         self.el_voices: list[dict] = []
-        self.robot = RobotLink(robot_ip, agent_port,
+        self.robot = RobotLink(robot_ip, agent_port, back_port=back_port, tablet_port=tablet_port,
                                ssh_user=os.environ.get("PEPPER_SSH_USER", "nao"),
                                ssh_password=os.environ.get("PEPPER_SSH_PASSWORD", "nao"))
         self.router = AudioRouter(self.robot)
@@ -72,6 +79,8 @@ class PepperApp:
         self.phrases_ready = 0
         self.robot.on_event = self._on_robot
         self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.web_check = "unknown"       # can this laptop search? (websearch.probe)
+        self.sim = False                 # the simulator (pepper_app.sim) runs this app
 
     # ------------------------------------------------------------ settings
     def _cfg_path(self) -> Path:
@@ -141,16 +150,50 @@ class PepperApp:
     def snapshot(self) -> dict:
         return {"cfg": self.cfg, "health": self.health(), "logs": list(self.logs),
                 "chat": list(self.chat), "screen": self.screen.state(),
-                "ai": self.brain.public() if self.brain else {"state": "off", "model": MODEL},
+                "ai": self.ai_public(),
                 "decks": self.screen.decks(), "experiences": {k: v[0] for k, v in EXPERIENCES.items()},
                 "experiences_off": sorted(NOT_FOR_DEMO),
                 "engines": ENGINES, "voices": VOICES, "el_voices": self.el_voices,
                 "emoji_candidates": EMOJI_CANDIDATES, "phrases": QUICK_PHRASES,
-                "has_key": bool(self.key), "has_eleven": bool(self.eleven_key)}
+                "has_key": bool(self.key), "has_eleven": bool(self.eleven_key),
+                "has_openai": bool(self.key), "keys": self.key_badges(),
+                "web": self.web_state(), "live_options": sorted(LIVE_OPTIONS), "sim": self.sim}
+
+    def key_badges(self) -> dict:
+        """The keys this dashboard was started with (the hub picks them at Launch)."""
+        return {"gpt": {"has": bool(self.key), "tail": self.key[-4:] if len(self.key) > 12 else ""},
+                "eleven": {"has": bool(self.eleven_key),
+                           "tail": self.eleven_key[-4:] if len(self.eleven_key) > 12 else ""}}
+
+    def model_for(self) -> str:
+        """The model that answers in the chosen experience."""
+        return REACT_MODEL if self.cfg["experience"] in SCRIPTS else MODEL
+
+    def ai_public(self) -> dict:
+        if self.brain is not None and self.brain.running:
+            return self.brain.public()
+        off = self.brain.public() if self.brain is not None else {"state": "off"}
+        return {**off, "state": "off", "running": False, "model": self.model_for()}
+
+    def web_state(self) -> dict:
+        return websearch.availability(self.cfg["experience"], bool(self.key), self.web_check)
+
+    async def check_web(self) -> None:
+        """Is web search possible on this network with this key? (a free call)"""
+        if not self.key:
+            return
+        self.web_check = "checking"
+        self.broadcast("web", self.web_state())
+        self.web_check = await websearch.probe(self.key)
+        if self.web_check != "ok":
+            self.log("WARNING", "web search: {}".format(websearch.REASONS.get(self.web_check, self.web_check)))
+        self.broadcast("web", self.web_state())
+        if self.brain and self.brain.running:
+            await self.brain.update(self._brain_cfg())
 
     def health(self) -> dict:
         r = self.robot
-        return {"robot": {"state": r.state, "detail": r.detail, "ip": self.robot_ip,
+        return {"robot": {"state": r.state, "detail": r.detail, "ip": self.robot_ip, "mode": r.mode,
                           "info": r.info, "status": r.status, "speaker_mode": r.speaker_mode},
                 "screen": self.screen.health(), "speaking": self.router.speaking,
                 "mic_level": self.router.mic_level, "mic_on": self.router.mic_on,
@@ -161,6 +204,19 @@ class PepperApp:
     def _on_robot(self, kind: str, data: dict) -> None:
         if kind == "log":            # a line from the agent on the robot (e.g. Walking)
             self.log(data.get("level", "INFO"), data.get("msg", ""))
+            return
+        if kind == "tablet":         # the chest tablet polled the agent: its heartbeat
+            self.screen.heartbeat(str(data.get("ip") or ""), str(data.get("ua") or ""))
+            return
+        if kind == "tap":            # a tap on the chest tablet, through the agent
+            try:
+                v, i = int(data.get("v", -1)), int(data.get("i", -1))
+            except (TypeError, ValueError):
+                return
+            asyncio.ensure_future(self.tablet_tap(v, i))
+            return
+        if kind == "media":          # the agent wants a slide file for the tablet
+            asyncio.ensure_future(self.send_media(data))
             return
         if kind == "link":
             r = self.robot
@@ -173,6 +229,7 @@ class PepperApp:
     async def _robot_ready(self) -> None:
         r = self.robot
         try:
+            self.push_screen()        # no reply: the tablet page may have failed to start on the robot
             await r.call("camera", index=self.cfg["camera"], fps=self.camera_fps())
             if self.router.mic_on:
                 await r.call("mic", on=True)
@@ -190,8 +247,8 @@ class PepperApp:
             self.log("INFO", "pepper: speaker via {}".format(r.speaker_mode))
 
     async def show_tablet(self) -> None:
-        laptop = laptop_ip_towards(self.robot_ip)
-        self.tablet_url = "http://{}:{}/screen".format(laptop, self.port)
+        # Served by the agent on the robot, whichever way the link was opened.
+        self.tablet_url = self.robot.tablet_url
         self.tablet_shown_at = time.monotonic()
         res = await self.robot.call("tablet_show", url=self.tablet_url, timeout=15)
         self.log("INFO", "screen: asked Pepper's tablet to open {} ({})".format(
@@ -218,6 +275,10 @@ class PepperApp:
                 self.log("INFO" if on else "ERROR",
                          "screen: tablet {}".format("calling in again" if on else "stopped calling in"))
             was_screen = on
+            # No internet when web search was turned on: look again now and then.
+            if (n % 240 == 0 and self.web_check == "no_internet" and self.cfg.get("web_search")
+                    and self.cfg["experience"] == "free"):
+                asyncio.ensure_future(self.check_web())
             if (r.connected and not on and time.monotonic() - self.tablet_shown_at > TABLET_RESHOW_S):
                 try:
                     await self.show_tablet()
@@ -281,11 +342,57 @@ class PepperApp:
             self.add_chat("heard", data["text"], why=data.get("why", ""))
         elif kind == "hearing":
             self.broadcast("hearing", data)
+        elif kind == "search":
+            q = str(data.get("query") or "")
+            if data.get("ok"):
+                self.add_chat("web", "Searched the web: \"{}\" · {} s".format(q, data.get("secs")), ok=True)
+                self.log("INFO", "web_search \"{}\" {} s, {} source{}".format(
+                    q, data.get("secs"), data.get("sources"), "" if data.get("sources") == 1 else "s"))
+            else:
+                self.add_chat("web", "Web search failed: {}. Pepper answered without it.".format(
+                    data.get("error") or "no answer"), ok=False)
+                self.log("WARNING", "web_search \"{}\" failed after {} s: {}".format(
+                    q, data.get("secs"), data.get("error")))
 
     def _frame_png(self) -> Optional[bytes]:
         if self.robot.connected and self.robot.last_frame is not None:
             return self.robot.last_frame[1]
         return None
+
+    def push_screen(self) -> None:
+        """The tablet's page on the robot polls the agent: give it the new state."""
+        self.robot.notify("screen_state", state=self.screen.state())
+
+    async def tablet_tap(self, v: int, i: int) -> bool:
+        """A tap on Pepper's tablet (through the agent or /screen/tap) or in the preview."""
+        label = self.screen.tap(v, i)
+        if label is None:
+            return False
+        self.broadcast("screen", self.screen.state())
+        self.push_screen()
+        self.add_chat("tap", label)
+        self.log("INFO", "screen: tap “{}”{}".format(
+            label, " -> sent to AI" if self.brain and self.brain.running else ""))
+        if self.brain and self.brain.running:
+            await self.brain.tap(label)
+        return True
+
+    async def send_media(self, req: dict) -> None:
+        rid = req.get("rid")
+        try:
+            path = self.screen.slide_path(str(req.get("deck") or ""), str(req.get("file") or ""))
+            data = await asyncio.to_thread(path.read_bytes)
+            ok = True
+        except (KeyError, OSError):
+            data, ok = b"", False
+        self.robot.send_data({"rid": rid, "ok": ok}, data)
+
+    async def _say_line(self, text: str) -> None:
+        """A pre-made line in the conversation's voice (web search's "Let me check")."""
+        if not self.robot.connected:
+            return
+        pcm = await self._synth_now(text)
+        self.router.play(pcm)
 
     async def _flush_speech(self) -> None:
         # Awaited, not fire-and-forget: the agent runs commands in arrival order,
@@ -345,6 +452,7 @@ class PepperApp:
     def set_screen(self, item: dict, by: str) -> None:
         state = self.screen.show(item, by, self.screen_emoji())
         self.broadcast("screen", state)
+        self.push_screen()
         what = {"choice": "choice: " + " / ".join(o["label"] for o in item.get("options", [])),
                 "message": "message", "slide": "slide {}".format(item.get("index", 0) + 1),
                 "welcome": "welcome", "blank": "blank",
@@ -360,13 +468,14 @@ class PepperApp:
             except KeyError:
                 deck = None
         return {**self.cfg, "pictures": sorted(self.screen.images_by_name()), "deck": deck,
-                "emoji_ok": self.emoji_ok()}
+                "emoji_ok": self.emoji_ok(),
+                "web_ok": self.web_check not in ("no_internet", "no_access", "no_key")}
 
     async def start_conversation(self) -> None:
         if self.brain and self.brain.running:
             return
         if not self.robot.connected:
-            raise HTTPException(409, "Pepper isn't connected yet -- wait for the Robot pill to turn green")
+            raise HTTPException(409, "Pepper isn't connected yet. Wait for the robot chip to turn green.")
         scripted = self.cfg["experience"] in SCRIPTS
         if scripted and not isinstance(self.brain, ScriptRunner):
             self.brain = ScriptRunner(openai_key=self.key, eleven_key=self.eleven_key,
@@ -378,7 +487,8 @@ class PepperApp:
                                play=self.router.play, flush=self._flush_speech, tool=self._tool,
                                emit=self._brain_event, frame=self._frame_png,
                                speaking=lambda: self.router.speaking,
-                               choice_open=self._choice_open, fallback=self._fallback_voice)
+                               choice_open=self._choice_open, fallback=self._fallback_voice,
+                               say_line=self._say_line)
         else:
             self.brain.history.clear()
         self.router.listener = self.brain.push_mic
@@ -397,10 +507,12 @@ class PepperApp:
         self.add_chat("event", "Conversation started")
         provider, voice = self.voice_now()
         self.log("INFO", "conversation: start · {} · engine={} · {} · lang={} · voice={}:{} · "
-                 "vision={}".format(
+                 "vision={}{}".format(
                      self.cfg["experience"], self.cfg["engine"], REACT_MODEL if scripted else MODEL,
                      self.cfg["language"],
-                     provider, self._voice_name(voice), "on" if self.cfg["vision"] else "off"))
+                     provider, self._voice_name(voice), "on" if self.cfg["vision"] else "off",
+                     " · web search={}".format("on" if getattr(self.brain, "web_on", False) else "off")
+                     if self.cfg["experience"] == "free" else ""))
 
     def _choice_open(self) -> bool:
         return self.screen.item.get("kind") == "choice" and not self.screen.picked
@@ -416,7 +528,7 @@ class PepperApp:
         await self._flush_speech()
         self.add_chat("event", "Conversation ended")
         self.log("INFO", "conversation: end")
-        self.broadcast("ai", self.brain.public() if self.brain else {"state": "off"})
+        self.broadcast("ai", self.ai_public())
 
     def _voice_name(self, voice: str) -> str:
         return next((v["name"] for v in self.el_voices if v["id"] == voice), voice)
@@ -427,6 +539,7 @@ class PepperApp:
         await self.brain.stop()
         self.log("INFO", "ai: restarting the session (keeps the conversation so far)")
         await self.brain.start(self._brain_cfg(), greet=False)
+        self.add_chat("event", "AI restarted (the last 20 turns kept)")
 
     async def woz_say(self, text: str, pause_ai: bool, tell_ai: bool) -> str:
         """Always the conversation's voice, Hebrew or English (2026-10-12: the
@@ -492,7 +605,8 @@ class PepperApp:
         if not (self.eleven_key if provider == "eleven" else self.key):
             return
         self.phrases_ready = await self.speech.warm(voice, QUICK_PHRASES, provider)
-        await self.speech.warm(voice, list(WALK_LINES.values()), provider)
+        await self.speech.warm(voice, list(WALK_LINES.values()) + list(websearch.CHECK_LINES.values()),
+                               provider)
         self.log("INFO", "woz: {} of {} quick phrases ready offline ({}: {})".format(
             self.phrases_ready, len(QUICK_PHRASES), provider, self._voice_name(voice)))
 
@@ -507,8 +621,9 @@ class PepperApp:
             await self.robot.stop_agent()
 
 
-def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> FastAPI:
-    P = PepperApp(robot_ip, port, agent_port, data_dir)
+def create_app(robot_ip: str, port: int, agent_port: int = AGENT_PORT, data_dir: Path = HERE / "data",
+               back_port: int = BACK_PORT, tablet_port: int = TABLET_PORT) -> FastAPI:
+    P = PepperApp(robot_ip, port, agent_port, data_dir, back_port=back_port, tablet_port=tablet_port)
 
     class ToApp(logging.Handler):
         def emit(self, record: logging.LogRecord) -> None:
@@ -527,6 +642,8 @@ def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> Fas
         async def voices_then_phrases():
             await P.load_el_voices()
             await P.warm_phrases()
+            if P.cfg.get("web_search") and P.cfg["experience"] == "free":
+                await P.check_web()
         tasks = [asyncio.create_task(P.ticker()), asyncio.create_task(voices_then_phrases())]
         P.log("INFO", "dashboard on http://127.0.0.1:{}/ · Pepper {} · OpenAI key {} · ElevenLabs key {}".format(
             port, robot_ip or "(none)", "found" if P.key else "MISSING",
@@ -534,6 +651,7 @@ def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> Fas
         yield
         for t in tasks:
             t.cancel()
+        await P.robot.close()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.pepper = P
@@ -573,9 +691,34 @@ def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> Fas
             raise HTTPException(404)
         return FileResponse(path, headers={"Cache-Control": "no-store"})
 
+    @app.get("/static/vendor/{name}")
+    async def vendor(name: str):
+        # pdf.js, bundled: the lab WiFi may have no internet (parity C21).
+        path = STATIC / "vendor" / name
+        if "/" in name or "\\" in name or not path.is_file():
+            raise HTTPException(404)
+        return FileResponse(path, media_type="application/javascript" if name.endswith(".js") else None)
+
+    @app.get("/static/fonts/{name}")
+    async def fonts(name: str):
+        # Inter and JetBrains Mono, vendored (OFL): no font CDN on the lab WiFi.
+        path = STATIC / "fonts" / name
+        if "/" in name or "\\" in name or not name.endswith(".woff2") or not path.is_file():
+            raise HTTPException(404)
+        return FileResponse(path, media_type="font/woff2")
+
     @app.get("/api/status")
     async def status():
-        return {"ok": True, **P.health(), "ai": P.brain.public() if P.brain else {"state": "off"}}
+        return {"ok": True, **P.health(), "ai": P.ai_public()}
+
+    @app.get("/api/lab_facts")
+    async def lab_facts():
+        from .brain import LAB_FACTS
+        try:
+            text = LAB_FACTS.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        return {"file": "pepper_app/lab_facts.md", "text": text}
 
     @app.websocket("/api/ws")
     async def ws(sock: WebSocket):
@@ -607,11 +750,18 @@ def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> Fas
             await P._quiet_call("camera", index=P.cfg["camera"], fps=P.camera_fps())
         if set(changed) & {"voice", "el_voice", "engine"}:
             asyncio.ensure_future(P.warm_phrases())
-        if P.brain and P.brain.running and set(changed) & {"vision", "ai_screen", "deck", "emoji_broken"}:
+        if P.brain and P.brain.running and set(changed) & LIVE_OPTIONS:
             await P.brain.update(P._brain_cfg())
         if changed:
-            P.log("INFO", "options: " + ", ".join("{}={}".format(k, v) for k, v in changed.items()))
+            P.log("INFO", "options: " + ", ".join("{}={}".format(
+                k, ("on" if v else "off") if isinstance(v, bool) else v) for k, v in changed.items()))
+        if (changed.get("web_search") or "experience" in changed) and P.cfg.get("web_search") \
+                and P.cfg["experience"] == "free" and P.web_check in ("unknown", "no_internet"):
+            asyncio.ensure_future(P.check_web())
         P.broadcast("cfg", P.cfg)
+        P.broadcast("web", P.web_state())
+        if "experience" in changed:
+            P.broadcast("ai", P.ai_public())
         return {"ok": True, "cfg": P.cfg}
 
     @app.post("/api/conversation/start")
@@ -706,6 +856,8 @@ def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> Fas
     async def face_tracking(request: Request):
         on = bool((await body(request)).get("on"))
         await robot_call("face_tracking", on=on)
+        P.robot.status = {**(P.robot.status or {}), "awareness": on}   # shown at once, not in 3 s
+        P.broadcast("health", P.health())
         P.log("INFO", "motion: face tracking {}".format("on" if on else "off"))
         return {"ok": True, "on": on}
 
@@ -753,10 +905,13 @@ def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> Fas
         elif kind == "emoji_test":
             item = {"kind": "emoji_test", "cells": [[i + 1, e] for i, e in enumerate(EMOJI_CANDIDATES)]}
         elif kind == "message":
-            item = {"kind": "message", "text": str(d.get("text", ""))[:300]}
+            text = str(d.get("text", "")).strip()[:300]
+            if not text:
+                raise HTTPException(400, "type the message first")
+            item = {"kind": "message", "text": text}
         elif kind == "choice":
-            opts = [{"label": str(o.get("label", ""))[:40]}
-                    for o in (d.get("options") or [])[:4] if isinstance(o, dict) and o.get("label")]
+            opts = [{"label": str(o.get("label", "")).strip()[:40]}
+                    for o in (d.get("options") or [])[:4] if isinstance(o, dict) and str(o.get("label") or "").strip()]
             if len(opts) < 2:
                 raise HTTPException(400, "a choice needs at least two options")
             item = {"kind": "choice", "question": str(d.get("question", ""))[:120], "options": opts}
@@ -869,17 +1024,10 @@ def create_app(robot_ip: str, port: int, agent_port: int, data_dir: Path) -> Fas
     async def screen_tap(request: Request):
         d = await body(request)
         try:
-            label = P.screen.tap(int(d.get("v", -1)), int(d.get("i", -1)))
+            v, i = int(d.get("v", -1)), int(d.get("i", -1))
         except (TypeError, ValueError):
-            label = None
-        if label is None:
             return {"ok": False}
-        P.broadcast("screen", P.screen.state())
-        P.add_chat("tap", label)
-        P.log("INFO", "screen: tap “{}”{}".format(label, " -> sent to AI" if P.brain and P.brain.running else ""))
-        if P.brain and P.brain.running:
-            await P.brain.tap(label)
-        return {"ok": True}
+        return {"ok": await P.tablet_tap(v, i)}
 
     @app.get("/screen/media/{deck_id}/{file}")
     async def screen_media(deck_id: str, file: str):

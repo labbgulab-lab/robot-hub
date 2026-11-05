@@ -1,0 +1,5 @@
+# Packages only the student app needs (installed into the portable runtime by
+# tools/build_release.ps1, on top of requirements.txt).
+# The tray icon of launch/launch.pyw:
+pystray==0.19.5
+pillow>=10.4

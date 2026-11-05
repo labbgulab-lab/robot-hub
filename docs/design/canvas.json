@@ -1,0 +1,342 @@
+{
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-11-04T19:50:00Z"
+ },
+ "title": "Robot Hub student app",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "Install.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 1280,
+   "h": 800,
+   "title": "1. Install: one line on the GitHub page",
+   "expand": "fill",
+   "is_interactive": true
+  },
+  "Main.dc.html": {
+   "x": 1360,
+   "y": 0,
+   "w": 1280,
+   "h": 800,
+   "title": "2. First open: add a key",
+   "expand": "fill",
+   "is_interactive": true
+  },
+  "KeyLater.dc.html": {
+   "x": 2720,
+   "y": 0,
+   "w": 1280,
+   "h": 800,
+   "title": "3. Closed without a key: warning bar stays",
+   "expand": "fill"
+  },
+  "Hub.dc.html": {
+   "x": 0,
+   "y": 1200,
+   "w": 1280,
+   "h": 1000,
+   "title": "4. Robots: every card keeps its key, Connect, Start, battery",
+   "expand": "fill",
+   "is_interactive": true
+  },
+  "RobotPanel.dc.html": {
+   "x": 1360,
+   "y": 1200,
+   "w": 1280,
+   "h": 900,
+   "title": "5. Robot details (the ... button): facts, key, Add WiFi",
+   "expand": "fill"
+  },
+  "RobotPanel2.dc.html": {
+   "x": 2720,
+   "y": 1200,
+   "w": 1280,
+   "h": 1000,
+   "title": "6. Pepper details, and every Add WiFi result",
+   "expand": "fill"
+  },
+  "Network.dc.html": {
+   "x": 4080,
+   "y": 1200,
+   "w": 1280,
+   "h": 1240,
+   "title": "7. Network (the WiFi chip): opens by itself on a problem",
+   "expand": "fill"
+  },
+  "Logs.dc.html": {
+   "x": 5440,
+   "y": 1200,
+   "w": 1280,
+   "h": 800,
+   "title": "8. Live logs drawer",
+   "expand": "fill"
+  },
+  "Settings.dc.html": {
+   "x": 0,
+   "y": 2840,
+   "w": 1280,
+   "h": 1900,
+   "title": "9. Settings: keys, robots, staff tools",
+   "expand": "fill"
+  },
+  "Files.dc.html": {
+   "x": 1360,
+   "y": 2840,
+   "w": 1280,
+   "h": 1180,
+   "title": "10. Robot files (lab staff)",
+   "expand": "fill"
+  },
+  "Setup.dc.html": {
+   "x": 2720,
+   "y": 2840,
+   "w": 1280,
+   "h": 800,
+   "title": "11. One-time setup for Pepper and NAO",
+   "expand": "fill",
+   "is_interactive": true
+  },
+  "Hotspot.dc.html": {
+   "x": 4080,
+   "y": 2840,
+   "w": 1280,
+   "h": 800,
+   "title": "12. Demo on a phone hotspot (5 devices)",
+   "expand": "fill",
+   "is_interactive": true
+  },
+  "CardStates.dc.html": {
+   "x": 0,
+   "y": 5140,
+   "w": 1640,
+   "h": 2950,
+   "title": "13. Every robot card state",
+   "expand": "fill"
+  },
+  "NoRobots.dc.html": {
+   "x": 1720,
+   "y": 5140,
+   "w": 1280,
+   "h": 800,
+   "title": "14. No robots found",
+   "expand": "fill"
+  },
+  "AppStates.dc.html": {
+   "x": 3080,
+   "y": 5140,
+   "w": 1280,
+   "h": 1180,
+   "title": "15. App states: starting, stopped, update, Logs dot, network chip",
+   "expand": "fill"
+  },
+  "FlowStates.dc.html": {
+   "x": 4440,
+   "y": 5140,
+   "w": 1280,
+   "h": 1020,
+   "title": "16. Key and setup states, failures",
+   "expand": "fill"
+  },
+  "RATalk.dc.html": {
+   "x": 0,
+   "y": 8540,
+   "w": 1600,
+   "h": 1000,
+   "title": "reachy_app 1. Talk: one Reachy",
+   "expand": "fill",
+   "is_interactive": true
+  },
+  "RATable.dc.html": {
+   "x": 1680,
+   "y": 8540,
+   "w": 1680,
+   "h": 1180,
+   "title": "reachy_app 2. Group: before start",
+   "expand": "fill"
+  },
+  "RATableLive.dc.html": {
+   "x": 3440,
+   "y": 8540,
+   "w": 1680,
+   "h": 1240,
+   "title": "reachy_app 3. Group: live",
+   "expand": "fill",
+   "is_interactive": true
+  },
+  "RADialogs.dc.html": {
+   "x": 5200,
+   "y": 8540,
+   "w": 1400,
+   "h": 900,
+   "title": "reachy_app 4. Groups and Copy dialogs",
+   "expand": "fill"
+  },
+  "RAShow.dc.html": {
+   "x": 0,
+   "y": 10200,
+   "w": 1600,
+   "h": 1080,
+   "title": "reachy_app 5. Wizard of Oz: operator board",
+   "expand": "fill"
+  },
+  "RATalkStates.dc.html": {
+   "x": 1680,
+   "y": 10200,
+   "w": 1600,
+   "h": 1460,
+   "title": "reachy_app 6. Talk and Wizard of Oz states, cue editor",
+   "expand": "fill"
+  },
+  "RATableStates.dc.html": {
+   "x": 3360,
+   "y": 10200,
+   "w": 1600,
+   "h": 1300,
+   "title": "reachy_app 7. Group states",
+   "expand": "fill"
+  },
+  "RAMoreTable.dc.html": {
+   "x": 0,
+   "y": 12060,
+   "w": 1600,
+   "h": 2860,
+   "title": "reachy_app 8. More Group states",
+   "expand": "fill"
+  },
+  "RAMoreTalk.dc.html": {
+   "x": 1680,
+   "y": 12060,
+   "w": 1600,
+   "h": 1500,
+   "title": "reachy_app 9. More Talk and Wizard of Oz states",
+   "expand": "fill"
+  },
+  "PepperDash.dc.html": {
+   "x": 0,
+   "y": 14520,
+   "w": 1680,
+   "h": 1400,
+   "title": "Pepper 1. Dashboard (opened from the Pepper card)",
+   "expand": "fill"
+  },
+  "PepperStates.dc.html": {
+   "x": 1760,
+   "y": 14520,
+   "w": 1600,
+   "h": 3150,
+   "title": "Pepper 2. Every dashboard state, web search",
+   "expand": "fill"
+  },
+  "PepperSim.dc.html": {
+   "x": 3440,
+   "y": 14520,
+   "w": 1400,
+   "h": 700,
+   "title": "Pepper 3. Rehearse without the robot",
+   "expand": "fill"
+  }
+ },
+ "order": [
+  "Install.dc.html",
+  "Main.dc.html",
+  "KeyLater.dc.html",
+  "Hub.dc.html",
+  "RobotPanel.dc.html",
+  "RobotPanel2.dc.html",
+  "Network.dc.html",
+  "Logs.dc.html",
+  "Settings.dc.html",
+  "Files.dc.html",
+  "Setup.dc.html",
+  "Hotspot.dc.html",
+  "CardStates.dc.html",
+  "NoRobots.dc.html",
+  "AppStates.dc.html",
+  "FlowStates.dc.html",
+  "RATalk.dc.html",
+  "RATable.dc.html",
+  "RATableLive.dc.html",
+  "RADialogs.dc.html",
+  "RAShow.dc.html",
+  "RATalkStates.dc.html",
+  "RATableStates.dc.html",
+  "RAMoreTable.dc.html",
+  "RAMoreTalk.dc.html",
+  "PepperDash.dc.html",
+  "PepperStates.dc.html",
+  "PepperSim.dc.html"
+ ],
+ "notes": {
+  "row1": {
+   "x": 0,
+   "y": -300,
+   "text": "First run: install, add a key",
+   "kind": "title1",
+   "maxW": 4000
+  },
+  "row2": {
+   "x": 0,
+   "y": 900,
+   "text": "Every day: robots, details, network, logs",
+   "kind": "title1",
+   "maxW": 6720
+  },
+  "row3": {
+   "x": 0,
+   "y": 2540,
+   "text": "Settings, keys, lab staff tools",
+   "kind": "title1",
+   "maxW": 5360
+  },
+  "row4": {
+   "x": 0,
+   "y": 4840,
+   "text": "Every other hub state",
+   "kind": "title1",
+   "maxW": 5720
+  },
+  "row5": {
+   "x": 0,
+   "y": 8240,
+   "text": "reachy_app: Talk with one Reachy, a Group of Reachys",
+   "kind": "title1",
+   "maxW": 6600
+  },
+  "row6": {
+   "x": 0,
+   "y": 9900,
+   "text": "reachy_app: Wizard of Oz, and every state",
+   "kind": "title1",
+   "maxW": 4960
+  },
+  "row7": {
+   "x": 0,
+   "y": 11760,
+   "text": "reachy_app: the remaining states",
+   "kind": "title1",
+   "maxW": 3280
+  },
+  "row8": {
+   "x": 0,
+   "y": 14220,
+   "text": "Pepper dashboard: same features, lab look, plus web search",
+   "kind": "title1",
+   "maxW": 4840
+  }
+ },
+ "designSystems": [
+  {
+   "title": "LabaLab Robot Hub",
+   "namespace": "robothub",
+   "artifact": "https://claude.ai/artifact/CMzhLMmVrdpdMJ2tPTe7Eb",
+   "version": "1793820536-ef0f",
+   "copiedAt": "2026-11-04T19:50:00Z"
+  }
+ ]
+}

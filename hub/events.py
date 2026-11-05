@@ -53,6 +53,13 @@ class EventBus:
                 ("error" if level == "error" else "info"))(text)
         self.publish(event)
 
+    def add_log(self, level: LogLevel, text: str, **extra: Any) -> None:
+        """A log line that is already in the log file (forwarded from another
+        logger, e.g. the group conversation): to the drawer only."""
+        event = {"type": "log", "level": level, "text": text, **extra}
+        self._log.append(event)
+        self.publish(event)
+
     def recent(self, limit: int = 200) -> list[dict[str, Any]]:
         items = list(self._log)
         return items[-limit:]

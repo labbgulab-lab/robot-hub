@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -17,18 +19,32 @@ import tempfile
 import time
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import applog
+from .app_api import UpdateChecker, make_router as make_app_router, port_owner, read_version
 from .config import REPO_ROOT, load_config
 from .core import Hub
+from .features_api import make_router as make_features_router
 from .group.api import make_router as make_group_router
 from .group.conductor import GroupManager
 from .library import MAX_BYTES, Library, LibraryError
+from .reachy_proxy import make_router as make_reachy_router
+from .transcripts import TranscriptStore, make_router as make_transcripts_router
 from . import wifi
 from .discovery.selfnet import local_ipv4
+
+# Under pythonw (the student app has no console) sys.stdout and sys.stderr are
+# None, and anything that writes to them -- uvicorn's console logging, a stray
+# print -- raises. They go nowhere instead; the log file has everything.
+WINDOWLESS = sys.stdout is None or sys.stderr is None
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,20 +57,15 @@ log = logging.getLogger("hub.main")
 def _log_to_file() -> None:
     """The Activity panel lives in memory, so a failed Launch on someone
     else's laptop left no trace once the window closed (2026-10-06). The same
-    lines go to logs/hub-<date>.log (git-ignored); keys are never logged, only
-    labels. Called from main() only, so tests never write to it."""
-    try:
-        (REPO_ROOT / "logs").mkdir(exist_ok=True)
-        handler = logging.FileHandler(
-            REPO_ROOT / "logs" / time.strftime("hub-%Y-%m-%d.log"), encoding="utf-8")
-    except OSError as exc:
-        log.warning("could not open the hub's log file: %s", exc)
+    lines go to <data>/logs/hub-<date>.log (git-ignored), a new file each day,
+    14 days kept; keys are never logged, only labels. Called from main() only,
+    so tests never write to it."""
+    handler = applog.install_file_log(config.data_dir / "logs")
+    if handler is None:
         return
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s  %(levelname)-7s %(name)-18s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"))
-    logging.getLogger().addHandler(handler)
-    log.info("hub starting; this log is %s", handler.baseFilename)
+    log.info("hub %s starting; this log is %s", read_version(), handler.baseFilename)
+    log.info("data folder %s; config from %s", config.data_dir,
+             ", ".join(config.layers) or "built-in defaults")
 
 # The Furhat detector fingerprints every host on the subnet every few seconds,
 # so httpx at INFO would drown the hub's own log in one line per probe. The
@@ -81,19 +92,61 @@ library = Library(config, hub.keys, hub.bus)
 
 
 group = GroupManager(hub)
+# Readable transcripts of every Reachy conversation (hub/transcripts.py).
+transcripts = TranscriptStore(folder=hub.settings.transcripts_dir,
+                              enabled=lambda: bool(hub.settings.get("save_transcripts")),
+                              publish=hub.bus.publish)
+transcripts.attach_group(group)
+updates = UpdateChecker(read_version())
+# The running uvicorn server, so Quit can end it cleanly (set by main()).
+_server: Any = None
+
+
+async def quit_app() -> None:
+    """Settings > Quit (and the installer): stop every robot program the hub
+    started, then end the server; the lifespan below does the rest."""
+    from .supervisor import get_supervisor
+    log.info("quit requested")
+
+    async def stop(adapter: Any) -> None:
+        try:
+            await asyncio.wait_for(adapter.stop_system(), 20)
+        except Exception as exc:  # noqa: BLE001
+            log.info("stopping %s on quit: %s", getattr(adapter, "display_name", "?"), exc)
+
+    await asyncio.gather(*(stop(a) for a in list(hub.adapters.values())))
+    try:
+        await get_supervisor().stop_all()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("stopping the hub's programs on quit: %s", exc)
+    if _server is not None:
+        _server.should_exit = True
+    else:   # started some other way (uvicorn on the command line)
+        signal.raise_signal(signal.SIGINT)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await hub.start()
-    # The DJI mic watcher and the warm-up of every service the group
-    # conversation uses start with the hub (2026-10-22) -- from main()
-    # only: tests start this app too, and must not make paid API calls.
+    # The group conversation's warnings and errors reach the Logs drawer.
+    forwarder = applog.forward_to_bus(hub.bus, "hub.group", "group")
+    # The DJI mic watcher and the free keep-alive of the group conversation's
+    # services start with the hub -- from main() only (tests start this app
+    # too). No paid warm-up at start since the student app (2026-11-05):
+    # Get ready on the Reachy page still runs every check.
     if os.environ.get("HUB_WARM_AT_START") == "1":
-        await group.startup()
+        await group.startup(warm=False)
+        # Keys: the free test call, at most hourly per key (never a paid call).
+        hub.enable_key_checks()
+    checker_task = None
+    if updates.enabled:
+        checker_task = asyncio.create_task(updates.run())
     try:
         yield
     finally:
+        if checker_task is not None:
+            checker_task.cancel()
+        logging.getLogger("hub.group").removeHandler(forwarder)
         await group.shutdown()
         await hub.stop()
 
@@ -101,6 +154,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Robot Hub", lifespan=lifespan)
 # Several Reachys in one conversation (docs/GROUP-CONVERSATION.md).
 app.include_router(make_group_router(group))
+# Version and updates, Quit, Settings, the log report (hub/app_api.py).
+app.include_router(make_app_router(hub, checker=updates, quit_app=quit_app))
+# Keys, setup, network, robot details, Add WiFi (hub/features_api.py).
+app.include_router(make_features_router(hub))
+# The Reachy app's Talk and Wizard of Oz tabs: the robot's reachy_chat through
+# the hub (hub/reachy_proxy.py), and the "Saving transcript" mark.
+app.include_router(make_reachy_router(hub, transcripts=transcripts))
+app.include_router(make_transcripts_router(transcripts))
 
 
 @app.middleware("http")
@@ -156,18 +217,6 @@ async def post_posture(key: str, body: PostureRequest) -> JSONResponse:
     return JSONResponse(result, status_code=200 if result.get("ok") else 409)
 
 
-class WifiJoin(BaseModel):
-    ssid: str
-    password: str
-    lab: bool = False       # Reachy: save it as the lab WiFi (the fallback)
-
-
-@app.post("/api/robots/{key}/wifi")
-async def post_wifi(key: str, body: WifiJoin) -> JSONResponse:
-    result = await hub.join_wifi(key, body.ssid, body.password, body.lab)
-    return JSONResponse(result, status_code=200 if result.get("ok") else 409)
-
-
 @app.post("/api/rescan")
 async def post_rescan() -> dict[str, Any]:
     """Ask the detectors to sweep again now. Discovery never stops; this only
@@ -175,57 +224,11 @@ async def post_rescan() -> dict[str, Any]:
     return await hub.rescan()
 
 
-class Settings(BaseModel):
-    auto_connect: bool
+# GET/PUT /api/settings live in hub/app_api.py (persisted in settings.json).
 
 
-@app.get("/api/settings")
-async def get_settings() -> dict[str, Any]:
-    return {"auto_connect": hub.config.auto_connect}
-
-
-@app.put("/api/settings")
-async def put_settings(settings: Settings) -> dict[str, Any]:
-    hub.config.auto_connect = settings.auto_connect
-    hub.bus.emit_log("info", "auto-connect {}".format(
-        "on" if settings.auto_connect else "off"))
-    hub.bus.publish({"type": "settings", "auto_connect": settings.auto_connect})
-    return {"auto_connect": hub.config.auto_connect}
-
-
-# ------------------------------------------------------------------- keys
-# Secrets come in here and never go back out: every response is the public
-# view (label + last four characters).
-
-
-class NewKey(BaseModel):
-    provider: str
-    label: str = ""
-    key: str
-
-
-class KeyChoice(BaseModel):
-    key_id: str | None = None
-
-
-@app.get("/api/keys")
-async def get_keys() -> dict[str, Any]:
-    return hub.keys_event()
-
-
-@app.post("/api/keys")
-async def post_key(body: NewKey) -> dict[str, Any]:
-    return hub.add_key(body.provider, body.label, body.key)
-
-
-@app.delete("/api/keys/{key_id}")
-async def delete_key(key_id: str) -> dict[str, Any]:
-    return hub.remove_key(key_id)
-
-
-@app.put("/api/robots/{key}/key")
-async def put_robot_key(key: str, body: KeyChoice) -> dict[str, Any]:
-    return hub.assign_key(key, body.key_id)
+# Keys: GET/POST /api/keys, /api/keys/{id}/check, DELETE, PUT
+# /api/robots/{key}/key live in hub/features_api.py.
 
 
 @app.get("/api/log")
@@ -350,17 +353,57 @@ async def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
 
 
+@app.get("/group.html", response_model=None)
+async def group_page() -> RedirectResponse:
+    """The group page became the Reachy app's Group tab (2026-11-05)."""
+    return RedirectResponse("/reachy.html#group", status_code=307)
+
+
 if WEB_DIR.exists():
     app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 
 
 def main() -> None:
+    global _server
     import uvicorn
+    host, port = config.server.host, config.server.port
+    # One hub per laptop: a second start must not fight the first for the
+    # port (Windows lets two sockets share it). The launcher focuses the
+    # open window; this only refuses.
+    owner = port_owner(host, port)
+    if owner is not None:
+        message = ("Robot Hub is already running at http://127.0.0.1:{}/".format(port)
+                   if owner == "hub" else
+                   "Port {} is in use by another program, so Robot Hub cannot start. "
+                   "Close that program, or set another port in config.toml.".format(port))
+        log.error(message)
+        print(message, file=sys.stderr)
+        raise SystemExit(0 if owner == "hub" else 2)
     _log_to_file()
-    os.environ["HUB_WARM_AT_START"] = "1"   # lifespan: watch the mic, warm the services
-    uvicorn.run("hub.main:app", host=config.server.host, port=config.server.port,
-                reload=False, log_level="info")
+    os.environ["HUB_WARM_AT_START"] = "1"   # lifespan: watch the mic, keep services open
+    updates.enable()                         # background check, at most every 6 h
+    if WINDOWLESS:
+        # A failing log write must never print a traceback to a stderr that
+        # does not exist (pythonw): that is the "'NoneType' ... write" noise.
+        logging.raiseExceptions = False
+    server_config = uvicorn.Config(
+        # The app object, not "hub.main:app": with `python -m hub.main` the
+        # string would import this module a second time, and Quit would reach
+        # the copy that has no server.
+        app, host=host, port=port, reload=False, log_level="info",
+        # An open app window holds a WebSocket; don't wait 25 s for it on Quit.
+        timeout_graceful_shutdown=3,
+        # Without a console uvicorn's own handlers have nowhere to write: its
+        # lines go to the root logger (the log file) instead, minus one line
+        # per request.
+        log_config=None if WINDOWLESS else uvicorn.config.LOGGING_CONFIG,
+        access_log=not WINDOWLESS)
+    _server = uvicorn.Server(server_config)
+    _server.run()
 
 
 if __name__ == "__main__":
-    main()
+    # Run the importable module's main(), so `python -m hub.main` and
+    # `from hub.main import main` share one app, one server and one Quit.
+    from hub.main import main as _main
+    _main()

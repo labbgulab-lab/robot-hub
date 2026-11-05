@@ -80,6 +80,10 @@ def test_the_api_adds_lists_assigns_and_never_echoes_a_secret(tmp_path, monkeypa
     from hub import main
 
     monkeypatch.setattr(main.hub, "keys", KeyStore(tmp_path / "k.json"))
+
+    async def openai_says_yes(url, headers):         # the free test call, faked
+        return 200, {"data": []}
+    monkeypatch.setattr(main.hub, "key_transport", openai_says_yes)
     client = TestClient(main.app)
 
     added = client.post("/api/keys", json={"provider": "gpt", "label": "OpenAI",
@@ -88,7 +92,8 @@ def test_the_api_adds_lists_assigns_and_never_echoes_a_secret(tmp_path, monkeypa
     kid = added["keys"][0]["id"]
 
     assert client.post("/api/keys", json={"provider": "gpt", "key": OAI}).json()["ok"] is False
-    assert client.put("/api/robots/robotA/key", json={"key_id": kid}).json()["assign"] == {"robotA": kid}
+    assert client.put("/api/robots/robotA/key", json={"key_id": kid}).json()["assign"] == {
+        "robotA": {"main": kid}}
     listed = client.get("/api/keys").json()
     assert OAI not in json.dumps(listed) and listed["keys"][0]["tail"] == "0002"
     assert client.delete("/api/keys/" + kid).json()["keys"] == []

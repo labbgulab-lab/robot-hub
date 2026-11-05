@@ -29,6 +29,7 @@ from typing import Any, AsyncIterator, Optional
 import httpx
 
 from . import keyscrub
+from .winproc import no_window
 
 log = logging.getLogger("hub.library")
 
@@ -117,7 +118,7 @@ class Library:
             try:
                 token = subprocess.run(
                     ["gh", "auth", "token"], capture_output=True, text=True,
-                    timeout=10).stdout.strip()
+                    timeout=10, **no_window()).stdout.strip()
             except (OSError, subprocess.SubprocessError):
                 token = ""
         if not token:

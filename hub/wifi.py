@@ -54,8 +54,11 @@ def _band_from_channel(channel: Optional[int]) -> Optional[str]:
 
 
 def _windows() -> dict[str, Any]:
+    """netsh's view of the WiFi link. Field names are localized on a
+    non-English Windows and the SSID is hidden unless Location is on, so a
+    missing answer is "unknown" (no warning), never "not a hotspot"."""
     text = _run(["netsh", "wlan", "show", "interfaces"])
-    info: dict[str, Any] = {"ssid": None, "band": None, "channel": None}
+    info: dict[str, Any] = {"ssid": None, "band": None, "channel": None, "unknown": True}
     if not text:
         return info
     fields: dict[str, str] = {}
@@ -63,17 +66,32 @@ def _windows() -> dict[str, Any]:
         if " : " in line:
             name, _, value = line.partition(" : ")
             fields.setdefault(name.strip().lower(), value.strip())
-    state = fields.get("state", "")
-    if state and state.lower() != "connected":
+    if not fields:
         return info
-    info["ssid"] = fields.get("ssid") or None
-    try:
-        info["channel"] = int(fields.get("channel", ""))
-    except ValueError:
-        pass
-    band = fields.get("band", "")          # Windows 11: "2.4 GHz" / "5 GHz"
-    m = re.search(r"(2\.4|5|6)\s*GHz", band)
-    info["band"] = "{} GHz".format(m.group(1)) if m else _band_from_channel(info["channel"])
+    state = fields.get("state", "")
+    if state and state.lower() not in ("connected",):
+        # English Windows, and not connected: a real "no WiFi" answer.
+        info["unknown"] = False
+        return info
+    ssid = fields.get("ssid") or None
+    if ssid and ssid.lower() in ("", "<hidden>"):
+        ssid = None
+    info["ssid"] = ssid
+    for name in ("channel", "kanal", "canal", "canale", "kanaal", "ערוץ"):
+        try:
+            info["channel"] = int(fields.get(name, ""))
+            break
+        except ValueError:
+            continue
+    # Windows 11: "Band : 2.4 GHz" (the value reads the same in any language).
+    band = None
+    for value in fields.values():
+        m = re.fullmatch(r"(2[.,]4|5|6)\s*GHz", value.strip())
+        if m:
+            band = "{} GHz".format(m.group(1).replace(",", "."))
+            break
+    info["band"] = band or _band_from_channel(info["channel"])
+    info["unknown"] = not ssid and info["band"] is None
     return info
 
 
@@ -141,6 +159,7 @@ def status(addresses: list[str], lab_wifi: str = "") -> dict[str, Any]:
         except ValueError:
             pass
     ssid = info.get("ssid") or ""
+    unknown = bool(info.pop("unknown", False))
     if lab_wifi and ssid == lab_wifi:
         # The robots' own network (since 2026-11-03 the main one, replacing
         # the phone hotspots). Its band is the router's business.
@@ -151,7 +170,7 @@ def status(addresses: list[str], lab_wifi: str = "") -> dict[str, Any]:
         hotspot = "android"
     elif ssid and PHONE_WORDS.search(ssid):
         hotspot = "phone"
-    elif info.get("band") is None and not ssid:
+    elif unknown or (info.get("band") is None and not ssid):
         hotspot = "unknown"
     else:
         hotspot = "no"
@@ -159,20 +178,24 @@ def status(addresses: list[str], lab_wifi: str = "") -> dict[str, Any]:
     problem = None
     if info.get("band") is None and not ssid and not ips:
         problem = "This laptop is not on any network."
-    elif lab_wifi and hotspot != "lab":
-        # With a lab WiFi configured, that is where the robots are: a phone
-        # hotspot is only for working outside the lab.
+    elif unknown and not ssid:
+        # netsh failed, or Windows hides the name (Location off): no warning.
+        problem = None
+    elif lab_wifi and hotspot == "no":
+        # With a lab WiFi configured, that is where the robots are. A phone
+        # hotspot is fine too: that is how a demo outside the lab runs.
         problem = ("This laptop is on {}. The robots are on the lab WiFi “{}” — connect "
                    "this laptop to it.".format(
                        "“{}”".format(ssid) if ssid else "a wired or unknown network", lab_wifi))
-    elif info.get("band") in ("5 GHz", "6 GHz") and hotspot not in ("no", "lab"):
+    elif info.get("band") in ("5 GHz", "6 GHz") and hotspot in ("iphone", "android", "phone"):
         problem = ("Your hotspot is on {} — the robots cannot see it. Turn on 2.4 GHz "
                    "(iPhone: Maximize Compatibility; Android: AP band 2.4 GHz), then "
                    "reconnect this laptop to it.".format(info["band"]))
-    elif hotspot == "no":
-        problem = ("This laptop is on {}, which does not look like a phone hotspot. "
-                   "The robots join your phone's hotspot — connect the laptop to it "
-                   "too.".format("“{}”".format(ssid) if ssid else "a wired or unknown network"))
-    info.update({"hotspot": hotspot, "ok": problem is None, "problem": problem,
-                 "platform": sys.platform, "lab_wifi": lab_wifi or None})
+    # The old "does not look like a phone hotspot" rule is gone (2026-11-05):
+    # a home router or a travel router carries robots just as well.
+    kind = {"lab": "lab", "iphone": "hotspot", "android": "hotspot", "phone": "hotspot",
+            "no": "other", "unknown": "other" if ips else "none"}[hotspot]
+    info.update({"hotspot": hotspot, "kind": kind, "ok": problem is None, "problem": problem,
+                 "platform": sys.platform, "lab_wifi": lab_wifi or None,
+                 "unknown": unknown and not ssid})
     return info

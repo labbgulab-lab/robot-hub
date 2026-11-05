@@ -39,7 +39,7 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
-from . import eleven
+from . import eleven, websearch
 
 log = logging.getLogger("pepper.brain")
 
@@ -127,18 +127,26 @@ FEELINGS_STEPS = {
 # as possible -- no tools, no screen, no gestures, no strict turns, one line.
 FREE = ("This is a free, natural conversation. Answer in ONE short sentence of at most 15 "
         "words, straight to the point, like a friendly person chatting: no lists, no emoji, "
-        "no stage directions. You cannot look anything up or browse the internet, and in this "
+        "no stage directions. {lookup}In this "
         "conversation you do not use your screen or move: never offer to. Greet only once. Answer in "
         "the language the person speaks, Hebrew or English. In Hebrew, speak natural spoken "
         "Hebrew, refer to yourself in the masculine form, and address the person in the "
         "plural (אתם) so you never assume their gender. Start with a one-line hello.")
+NO_LOOKUP = "You cannot look anything up or browse the internet. "
+
+
+def free_prompt(web: bool = False) -> str:
+    """Free conversation's rules; with web search on, the model may look things up."""
+    return FREE.format(lookup=websearch.PROMPT + " " if web else NO_LOOKUP)
+
+
 # key -> (dropdown title, prompt, steps, emoji on the screen?)
 EXPERIENCES: dict[str, tuple[str, str, int, bool]] = {
     # Scripted (pepper_app/script.py): our wording and screens, the AI only reacts.
     "feelings:script": ("Feelings Together (demo) · scripted", "", 9, True),
     "feelings:emoji": ("Feelings Together (research demo) · with emoji",
                        FEELINGS_COMMON + FEELINGS_STEPS["emoji"], 8, True),
-    "free": ("Free conversation", FREE, 0, False),
+    "free": ("Free conversation", free_prompt(), 0, False),
 }
 DEFAULT_EXPERIENCE = "feelings:script"
 # Shown greyed out and not selectable until after the 2026-10-13 demo:
@@ -196,7 +204,7 @@ def lab_facts() -> str:
 
 
 def instructions(exp: str, language: str, vision: bool, screen: bool, pictures: list[str],
-                 deck: Optional[dict], emoji_ok: Optional[list[str]] = None) -> str:
+                 deck: Optional[dict], emoji_ok: Optional[list[str]] = None, web: bool = False) -> str:
     _title, prompt, _steps, with_emoji = experience(exp)
     if exp == "free":
         # The language setting only picks the first line; after that Pepper follows
@@ -204,7 +212,7 @@ def instructions(exp: str, language: str, vision: bool, screen: bool, pictures: 
         start = {"he": "Hebrew", "en": "English"}.get(language, "English")
         follow = ("Say your first line in {}. After that, always answer in the language the "
                   "person just spoke, Hebrew or English.".format(start))
-        return "\n\n".join([BASE, follow, FREE, lab_facts()])
+        return "\n\n".join([BASE, follow, free_prompt(web), lab_facts()])
     parts = [BASE, LANG.get(language, LANG["auto"]), TURNS]
     if vision:
         parts.append(VISION)
@@ -288,16 +296,19 @@ class Brain:
     speaking()         True while Pepper's audio is still playing
     choice_open()      True while a choice waits for a tap
     fallback(text)     speak text another way when the ElevenLabs voice fails
+    say_line(text)     speak a pre-made line now (web search's "Let me check...")
     """
 
     def __init__(self, *, openai_key: str, eleven_key: str, play: Callable[[bytes], None],
                  flush: Callable[[], None], tool: Callable[[str, dict], Any],
                  emit: Callable[[str, dict], None], frame: Callable[[], Optional[bytes]],
                  speaking: Callable[[], bool], choice_open: Callable[[], bool],
-                 fallback: Callable[[str], Awaitable[None]]) -> None:
+                 fallback: Callable[[str], Awaitable[None]],
+                 say_line: Optional[Callable[[str], Awaitable[None]]] = None) -> None:
         self.key, self.eleven_key = openai_key, eleven_key
         self._play_cb, self._flush, self._tool, self._emit = play, flush, tool, emit
         self._frame, self._speaking, self._choice_open, self._fallback = frame, speaking, choice_open, fallback
+        self._say_line = say_line
         self.ws = None
         self.ears: Optional[eleven.ScribeEars] = None
         self.loop: Optional[asyncio.AbstractEventLoop] = None
@@ -340,6 +351,12 @@ class Brain:
         self._last_image = 0.0
         self._image_ids: list[str] = []
         self._img_n = 0
+        # web search (free conversation only)
+        self.searching = False
+        self._search_query = ""
+        self._search_since: Optional[float] = None
+        self._search_task: Optional[asyncio.Task] = None
+        self._search_n = 0
 
     # ---------------------------------------------------------- lifecycle
     async def start(self, cfg: dict[str, Any], greet: bool = True) -> None:
@@ -403,10 +420,15 @@ class Brain:
             "type": "realtime", "model": MODEL,
             "instructions": instructions(exp, lang, bool(c.get("vision")), screen,
                                          c.get("pictures") or [], c.get("deck"),
-                                         c.get("emoji_ok") if with_emoji else None),
-            "tools": [] if self.free else tools(screen, bool(steps), with_emoji),
-            "tool_choice": "none" if self.free else "auto",
+                                         c.get("emoji_ok") if with_emoji else None, web=self.web_on),
         }
+        if self.free:
+            # Free talk has no screen and no gestures; its one tool is web search, when on.
+            session["tools"] = [websearch.TOOL] if self.web_on else []
+            session["tool_choice"] = "auto" if self.web_on else "none"
+        else:
+            session["tools"] = tools(screen, bool(steps), with_emoji)
+            session["tool_choice"] = "auto"
         if self.engine == "eleven":
             session["output_modalities"] = ["text"]
         else:
@@ -440,6 +462,10 @@ class Brain:
         for t in self.tasks:
             t.cancel()
         self.tasks = []
+        if self._search_task is not None:
+            self._search_task.cancel()
+            self._search_task = None
+        self.searching = False
         if self.ears is not None:
             await self.ears.stop()
             self.ears = None
@@ -640,6 +666,11 @@ class Brain:
     def free(self) -> bool:
         return self.cfg.get("experience") == "free"
 
+    @property
+    def web_on(self) -> bool:
+        """Web search: free conversation only, when the toggle is on and the laptop can search."""
+        return self.free and bool(self.cfg.get("web_search")) and self.cfg.get("web_ok", True) is not False
+
     async def _item_text(self, role: str, text: str) -> None:
         await self._send({"type": "conversation.item.create", "item": {
             "type": "message", "role": role, "content": [{"type": "input_text", "text": text}]}})
@@ -676,6 +707,8 @@ class Brain:
             state = "paused"
         elif self.stuck:
             state = "stuck"
+        elif self.searching:
+            state = "searching"
         elif self.turn == "waiting":
             state = "waiting"
         else:
@@ -687,7 +720,9 @@ class Brain:
                 if self.turn == "waiting" and self.waiting_since else None,
                 "expects": self.expects, "reasked": self.reasked, "reask_s": REASK_S,
                 "started_at": self.started_at if self.running else None,
-                "latency_ms": self.latency_ms, "model": MODEL}
+                "latency_ms": self.latency_ms, "model": MODEL,
+                "search": {"query": self._search_query, "since": self._search_since}
+                if self.searching else None}
 
     def _log_latency(self, now: float) -> None:
         """One line per turn: where the time between the answer and Pepper's
@@ -726,14 +761,16 @@ class Brain:
                 continue
             now = time.monotonic()
             # Pepper's turn ends when the reply is complete AND has finished playing.
-            if self.turn == "pepper" and self._reply_done and not self._speaking():
+            if self.turn == "pepper" and self._reply_done and not self._speaking() and not self.searching:
                 expects = "?" in self._last_pepper_text[-160:] or self._choice_open()
                 # After the one re-ask, wait as long as it takes: no second re-ask.
                 self._enter_waiting(expects, reasked=self._reask_turn)
                 if self._queued_answers:
                     await self._on_answer(self._queued_answers.pop(0), source="tap")
                 continue
+            # A web search may take up to 8 s: the "AI stopped answering" alarm waits for it.
             if (self.turn == "pepper" and not self._got_output and not self._reply_done
+                    and not self.searching
                     and self._requested_at and now - self._requested_at > STUCK_AFTER_S):
                 self._requested_at = None
                 self._lost("no answer from the AI for {:.0f} s".format(STUCK_AFTER_S))
@@ -821,7 +858,10 @@ class Brain:
             self._response_active = True
             self._resp_text = ""
         elif kind == "response.function_call_arguments.done":
-            await self._call_tool(msg)
+            if msg.get("name") == "web_search" and self.free:
+                self._start_search(msg)
+            else:
+                await self._call_tool(msg)
         elif kind == "response.done":
             self._response_active = False
             resp = msg.get("response") or {}
@@ -849,6 +889,12 @@ class Brain:
         voice = self._voice
         if voice is not None:
             await voice.finish()
+        if self.searching:
+            # The reply asked for a web search: Pepper's turn goes on, and the
+            # answer is asked for when the result is in (_web_search).
+            if voice is not None:
+                asyncio.ensure_future(self._voice_done(voice, self._last_pepper_text if spoke else ""))
+            return
         # Tools were called but the turn's question was not said (the model
         # spoke first and called the tools after, or only called tools): let it
         # say its line now. A reply that already asked something is complete.
@@ -921,3 +967,68 @@ class Brain:
         self._emit("log", {"level": "INFO", "msg": "ai tool: {}({}) -> {}".format(
             name, json.dumps(args, ensure_ascii=False)[:160], result[:80])})
         self._pending_outputs.append((call_id, result))
+
+    # --------------------------------------------------------- web search
+    def _start_search(self, msg: dict) -> None:
+        try:
+            args = json.loads(msg.get("arguments") or "{}")
+        except ValueError:
+            args = {}
+        query = str(args.get("query") or "").strip()[:200]
+        self.searching, self._search_query, self._search_since = True, query, time.time()
+        self._emit("ai", self.public())
+        self._search_task = asyncio.create_task(self._web_search(msg.get("call_id", ""), query),
+                                                name="web-search")
+
+    async def _web_search(self, call_id: str, query: str) -> None:
+        """Run one search (at most websearch.TIMEOUT_S), then let the model answer."""
+        t0 = time.monotonic()
+        last = next((t for r, t in reversed(self.history) if r == "person"), "")
+        lang = websearch.language_of(last or query, self.cfg.get("language", "auto"))
+        if self._say_line is not None and not self.paused:
+            line = websearch.CHECK_LINES[lang]
+            self._search_n += 1
+            self._emit("chat", {"role": "pepper", "id": "search-{}".format(self._search_n),
+                                "text": line, "partial": False})
+            asyncio.ensure_future(self._say_check(line))
+        ok, answer, sources, err = False, "", 0, ""
+        try:
+            if not query:
+                raise websearch.SearchFailed("an empty query")
+            answer, sources = await asyncio.wait_for(
+                websearch.search(self.key, query, "Hebrew" if lang == "he" else "English"),
+                websearch.TIMEOUT_S)
+            ok = True
+        except asyncio.TimeoutError:
+            err = "timeout"
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            err = str(exc) or type(exc).__name__
+        self._emit("search", {"query": query, "secs": round(time.monotonic() - t0, 1),
+                              "sources": sources, "ok": ok, "error": err})
+        self._search_task = None
+        if not self.running:
+            self.searching = False
+            return
+        result = answer if ok else ("search failed ({}). Say briefly that you could not check it "
+                                    "online, then answer from what you know.".format(err))
+        for _ in range(30):            # the reply that asked must be over before the next one
+            if not self._response_active:
+                break
+            await asyncio.sleep(0.1)
+        await self._send({"type": "conversation.item.create", "item": {
+            "type": "function_call_output", "call_id": call_id, "output": result}})
+        self.searching = False
+        if self.paused:                # the operator took over meanwhile
+            self._emit("ai", self.public())
+            return
+        await self._item_text("system", websearch.FOLLOW_UP)
+        await self._respond(follow_up=True)
+
+    async def _say_check(self, line: str) -> None:
+        try:
+            await self._say_line(line)
+        except Exception as exc:  # noqa: BLE001
+            self._emit("log", {"level": "WARNING", "msg": "web search: could not say the "
+                                                          "'let me check' line ({})".format(exc)})

@@ -30,7 +30,9 @@ start event comes back at all, the sentence names the engine trap from
 
 Settings read from `[robots.furhat.settings]`:
     username   Studio web login (default "admin"); only used for the Launch hint
-    password   Studio password, hashed before it ever leaves this process
+    password   Studio password, hashed before it ever leaves this process.
+               A password saved in Settings (hub/settings.py) replaces it,
+               and FURHAT_PASSWORD in .env replaces both; default "admin".
 Environment:
     FURHAT_API_KEY   optional Realtime API key; absent = that path is unused
 """
@@ -42,6 +44,7 @@ import hashlib
 import json
 from typing import Any, Callable, Optional
 
+from .. import settings as hub_settings
 from .base import AdapterUnavailable, Claim, Found, Health, RobotAdapter
 
 STUDIO_WS_PATH = "/api"
@@ -104,6 +107,10 @@ async def _ws_connect(uri: str, timeout_s: float) -> Any:
     return await asyncio.wait_for(connect(uri, ping_interval=20), timeout_s)
 
 
+class PasswordRefused(RuntimeError):
+    """Studio answered the login and said no."""
+
+
 class StudioBus:
     """One live connection to `ws://<ip>/api`, with the login already done."""
 
@@ -143,9 +150,9 @@ class StudioBus:
                 "Furhat Studio never answered the login on ws://{}{}".format(
                     self.host, STUDIO_WS_PATH))
         if not reply.get("loginApproved"):
-            raise RuntimeError(
-                "Furhat Studio refused the login -- the password in "
-                "config.toml does not match the one set in Studio")
+            raise PasswordRefused(
+                "Furhat Studio refused the password -- set Furhat's password "
+                "in Settings")
         self.session_id = str(reply.get("event_sessionId") or "")
 
     async def close(self) -> None:
@@ -274,17 +281,21 @@ class FurhatAdapter(RobotAdapter):
                         address, type(exc).__name__), "battery": None}
 
     async def connect(self) -> None:
-        password = str(self.settings.get("password")
-                       or self.config.secret("FURHAT_PASSWORD") or "")
-        if not password:
-            raise RuntimeError(
-                "Furhat Studio's password is not set -- put it in .env as "
-                "FURHAT_PASSWORD (or in config.toml under "
-                "[robots.furhat.settings]) so the hub can log in to the "
-                "event bus")
+        # FURHAT_PASSWORD in .env (lab) > Settings > config > "admin", the
+        # maker's published default (hub/settings.py).
+        password = hub_settings.robot_password("furhat", self.config)
         await self.disconnect()
         bus = StudioBus(self.found.address, password)
-        await bus.open()
+        try:
+            await bus.open()
+        except PasswordRefused:
+            hub_settings.note_login("furhat", False)
+            await bus.close()
+            raise
+        except Exception:
+            await bus.close()
+            raise
+        hub_settings.note_login("furhat", True)
         self._bus = bus
         await self._ensure_voice(bus)
         if not self.config.secret("FURHAT_API_KEY"):

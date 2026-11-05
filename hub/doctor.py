@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .config import REPO_ROOT, Config, load_config
+from .winproc import no_window
 
 SUBPROCESS_TIMEOUT_S = 5.0
 
@@ -261,7 +262,7 @@ def _interfaces() -> dict[str, Any]:
 def _run(args: list[str]) -> str:
     try:
         proc = subprocess.run(args, capture_output=True, text=True,
-                              timeout=SUBPROCESS_TIMEOUT_S)
+                              timeout=SUBPROCESS_TIMEOUT_S, **no_window())
     except Exception as exc:  # noqa: BLE001
         return "could not run it: {}".format(exc)
     return (proc.stdout + proc.stderr).strip().splitlines()[0] if (

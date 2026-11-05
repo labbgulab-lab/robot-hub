@@ -76,7 +76,9 @@ class DiscoveryManager:
                          for t in ("reachy_wireless", "reachy_lite", "naoqi", "pepper"))
         if discovery.mdns and wants_mdns:
             self._spawn(MdnsDetector(self.config, self.bus, self._sighting))
-        if discovery.netscan and self.config.robot("furhat").enabled:
+        # Always, not only for Furhat: on the lab WiFi (multicast dropped) and
+        # with mDNS off (the student default) the sweep finds every robot.
+        if discovery.netscan:
             self._spawn(NetscanDetector(self.config, self.bus, self._sighting))
         if discovery.usb and self.config.robot("reachy_lite").enabled:
             self._spawn(UsbWatchDetector(self.config, self.bus, self._sighting))
@@ -94,6 +96,26 @@ class DiscoveryManager:
         await asyncio.gather(
             *(d.rescan() for d in self._detectors if hasattr(d, "rescan")),
             return_exceptions=True)
+
+    def netscan_stats(self) -> dict[str, Any]:
+        """{sweeps, alive, ranges} from the network sweep (hub/network.py)."""
+        for d in self._detectors:
+            if hasattr(d, "stats"):
+                return d.stats()
+        return {"sweeps": 0, "alive": 0, "ranges": []}
+
+    def naoqi_setup_changed(self) -> None:
+        """The NAO/Pepper kit changed: drop the "needs setup" sighting and
+        identify every NAOqi robot again now (no restart)."""
+        for d in self._detectors:
+            if hasattr(d, "forget_naoqi_misses"):
+                d.forget_naoqi_misses()
+        for key in [k for k, f in self._found.items() if f.meta.get("needs_setup")]:
+            self._found.pop(key, None)
+            self._seen.pop(key, None)
+            if self._anonymous.get("naoqi") == key:
+                self._anonymous.pop("naoqi", None)
+            self._call(self._on_lost, "naoqi", key)
 
     async def stop(self) -> None:
         self._running = False

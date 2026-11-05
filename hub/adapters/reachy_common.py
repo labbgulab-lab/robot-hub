@@ -66,6 +66,48 @@ def _httpx() -> Any:
     return httpx
 
 
+def find_battery(status: Any) -> "tuple[Optional[int], Optional[bool]]":
+    """(percent, charging) from any field of the daemon status whose name
+    holds "battery" or "charge"; (None, None) when there is none."""
+    percent: Optional[int] = None
+    charging: Optional[bool] = None
+
+    def as_percent(value: Any) -> Optional[int]:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        number = float(value)
+        if 0.0 <= number <= 1.0 and not isinstance(value, int):
+            number *= 100.0
+        if 0.0 <= number <= 100.0:
+            return int(round(number))
+        return None
+
+    def walk(node: Any, inside: bool, depth: int) -> None:
+        nonlocal percent, charging
+        if depth > 4 or not isinstance(node, dict):
+            return
+        for key, value in node.items():
+            name = str(key).lower()
+            hit = inside or "battery" in name or "charge" in name
+            if isinstance(value, dict):
+                walk(value, hit, depth + 1)
+                continue
+            if not hit:
+                continue
+            if "charging" in name or name in ("plugged", "is_charging", "power_plugged"):
+                if isinstance(value, bool):
+                    charging = value
+                continue
+            if percent is None and ("percent" in name or "level" in name or "charge" in name
+                                    or "battery" in name or "soc" in name):
+                if "voltage" in name or "current" in name or "temp" in name:
+                    continue
+                percent = as_percent(value)
+
+    walk(status, False, 0)
+    return percent, charging
+
+
 def version_tuple(version: Optional[str]) -> tuple[int, ...]:
     if not version:
         return ()
@@ -228,9 +270,15 @@ class PollenDaemon:
         if note:
             detail = "{}; {}".format(detail, note)
 
-        # Battery: swept all 98 endpoints, neither Reachy reports one (2.9).
-        return {"online": online, "degraded": degraded,
-                "detail": detail, "battery": None}
+        # Battery: no daemon we measured reports one (2.9, SDK 1.7.3). A newer
+        # daemon might: any battery/charge field in its status is shown, and
+        # nothing otherwise (STUDENT-APP-PLAN 7b, open question 6).
+        battery, charging = find_battery(status)
+        health: Health = {"online": online, "degraded": degraded,
+                          "detail": detail, "battery": battery}
+        if charging is not None:
+            health["charging"] = charging
+        return health
 
     async def system_status(self) -> dict[str, Any]:
         try:

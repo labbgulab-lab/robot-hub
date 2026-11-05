@@ -1,5 +1,38 @@
 # Robot Hub
 
+## Install (students)
+
+Windows 10 and 11. No admin, Python or Git needed. Open PowerShell
+(press Start, type `PowerShell`, press Enter), paste this line and press Enter:
+
+```powershell
+irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.ps1 | iex
+```
+
+- **What it does:** downloads the app (about 120 MB) from the
+  [latest release](https://github.com/labbgulab-lab/robot-hub/releases/latest)
+  into `%LOCALAPPDATA%\LabaLab\RobotHub`, for your Windows user only. It puts
+  a **LabaLab Robot Hub** icon on the desktop and in the Start menu, and opens
+  the app.
+- **Every later day:** double-click the icon. Closing the window leaves the
+  robots running; Quit is in Settings and in the tray icon.
+- **Update:** run the same line again. Your keys and settings stay.
+- **Commands blocked?** Download `RobotHub-<version>.zip` from the latest
+  release, unzip it and double-click `Install Robot Hub.cmd`.
+- **Uninstall:** in PowerShell,
+  `& ([scriptblock]::Create((irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.ps1))) -Uninstall`.
+  Add `-RemoveData` to delete your keys, settings and logs too.
+
+Lab members who work on the code use the git setup below instead.
+
+**Making a release (lab):** bump `VERSION`, commit, then on Windows run
+`powershell -ExecutionPolicy Bypass -File tools\build_release.ps1` (it builds
+from the committed HEAD of robot-hub and of reachy_chat's `multi-provider`
+branch). Make a GitHub release tagged `v<version>` and upload
+`dist\RobotHub-<version>.zip` and `dist\install.ps1`.
+
+---
+
 One local page for the lab's four robots — **Furhat, Reachy-Mini,
 Reachy-Mini-Lite, NAOqi**.
 

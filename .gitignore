@@ -21,3 +21,12 @@ group.local.json
 
 # Group conversation: voiced interjections, the learned echo map, dry runs (per laptop)
 cache/
+
+# Student app release builds (tools/build_release.ps1)
+dist/
+
+# Student app data kept in the repo root when ROBOT_HUB_DATA is unset (lab checkout)
+/settings.json
+/transcripts/
+/nao_llm/
+/pepper/

@@ -49,11 +49,13 @@ def test_a_2_4ghz_hotspot_on_a_mac_is_fine(monkeypatch):
     assert info["ok"] and info["problem"] is None
 
 
-def test_campus_wifi_is_not_a_hotspot(monkeypatch):
+def test_campus_wifi_is_not_a_hotspot_and_that_is_no_longer_a_warning(monkeypatch):
+    # 2026-11-05: the "does not look like a phone hotspot" rule is gone; a
+    # home or travel router carries robots too.
     _on(monkeypatch, "win32", NETSH.replace("Lab Hotspot", "eduroam").replace("5 GHz", "2.4 GHz"))
     info = wifi.status(["10.12.0.55/16"])
-    assert info["hotspot"] == "no" and not info["ok"]
-    assert "eduroam" in info["problem"]
+    assert info["hotspot"] == "no" and info["kind"] == "other"
+    assert info["ok"] and info["problem"] is None
 
 
 def test_an_android_hotspot_is_known_by_its_name(monkeypatch):
@@ -69,10 +71,14 @@ def test_with_a_lab_wifi_that_is_the_network_to_be_on(monkeypatch):
     info = wifi.status(["172.19.84.41/16"], lab_wifi="Open Lab")
     assert info["ok"] and info["hotspot"] == "lab" and info["lab_wifi"] == "Open Lab"
 
-    _on(monkeypatch, "darwin", json.dumps(MAC))         # a fine 2.4 GHz hotspot...
+    _on(monkeypatch, "darwin", json.dumps(MAC))         # a phone hotspot is fine: demos
     info = wifi.status(["172.20.10.6/28"], lab_wifi="Open Lab")
-    assert not info["ok"], "...is not where the robots are"
-    assert "“Dana Phone”" in info["problem"] and "lab WiFi “Open Lab”" in info["problem"]
+    assert info["ok"] and info["kind"] == "hotspot"
+
+    _on(monkeypatch, "win32", NETSH.replace("Lab Hotspot", "eduroam").replace("5 GHz", "2.4 GHz"))
+    info = wifi.status(["10.12.0.55/16"], lab_wifi="Open Lab")
+    assert not info["ok"], "campus WiFi is not where the robots are"
+    assert "“eduroam”" in info["problem"] and "lab WiFi “Open Lab”" in info["problem"]
 
 
 def test_a_redacted_mac_name_still_reports_the_band(monkeypatch):
@@ -82,3 +88,32 @@ def test_a_redacted_mac_name_still_reports_the_band(monkeypatch):
     _on(monkeypatch, "darwin", json.dumps(redacted))
     info = wifi.status(["172.20.10.6/28"])
     assert info["ssid"] is None and info["band"] == "2.4 GHz" and info["ok"]
+
+
+def test_a_failed_netsh_is_unknown_not_a_warning(monkeypatch):
+    _on(monkeypatch, "win32", "")
+    info = wifi.status(["10.0.0.5/24"], lab_wifi="Open Lab")
+    assert info["unknown"] and info["ok"] and info["problem"] is None
+
+
+def test_a_localized_netsh_still_reads_the_band_and_never_warns(monkeypatch):
+    german = """
+    Name                   : WLAN
+    Status                 : Verbunden
+    SSID                   : Dana Phone
+    Funktyp                : 802.11n
+    Band                   : 2,4 GHz
+    Kanal                  : 6
+"""
+    _on(monkeypatch, "win32", german)
+    info = wifi.status(["172.20.10.6/28"])
+    assert info["ssid"] == "Dana Phone" and info["channel"] == 6
+    assert info["band"] == "2.4 GHz" and info["ok"]
+
+
+def test_location_off_hides_the_name_and_that_is_unknown(monkeypatch):
+    hidden = "\n".join(line for line in NETSH.splitlines()
+                       if not line.strip().startswith(("SSID", "Band", "Channel")))
+    _on(monkeypatch, "win32", hidden)
+    info = wifi.status(["10.0.0.5/24"], lab_wifi="Open Lab")
+    assert info["ssid"] is None and info["unknown"] and info["ok"]

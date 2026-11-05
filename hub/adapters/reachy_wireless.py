@@ -47,7 +47,8 @@ from typing import Any, Optional
 from .. import announce as announce_helper
 from .. import reachy_wifi
 from ..keys import PROVIDER_LABELS, SPEECH_BACKEND
-from ..supervisor import get_supervisor, shared_port_allocator
+from ..supervisor import child_env, get_supervisor, shared_port_allocator
+from ..winproc import hub_python, no_window
 from .base import (AdapterUnavailable, Claim, Found, Health, RobotAdapter,
                    communicate_or_kill, thread_finishing_on_cancel)
 from .reachy_common import DaemonError, DaemonRestarting, PollenDaemon
@@ -377,6 +378,18 @@ class ReachyWirelessAdapter(RobotAdapter):
                 "in config.toml".format(candidate))
         return candidate
 
+    def _deploy_python(self, root: Path) -> Path:
+        """The interpreter for tools/deploy_robot_app.py: the configured one,
+        else reachy_chat's venv, else the hub's own Python. The deploy needs
+        only paramiko, which the hub has, so the student app ships no
+        reachy_chat venv (STUDENT-APP-PLAN 2.2)."""
+        try:
+            return self._python(root)
+        except AdapterUnavailable:
+            if self.config.path(self.type_id, "python") is not None:
+                raise           # a python was set and is missing: say so
+            return hub_python()
+
     def _allocate_port(self) -> int:
         if self._port is not None:
             return self._port
@@ -427,12 +440,15 @@ class ReachyWirelessAdapter(RobotAdapter):
                     or DEFAULT_SSH_PASSWORD)
         return str(self.settings.get("ssh_user") or DEFAULT_SSH_USER), str(password)
 
-    async def join_wifi(self, ssid: str, password: str, lab: bool = False) -> str:
+    async def join_wifi(self, ssid: str, password: str, lab: bool = False,
+                        open_network: bool = False) -> str:
         """The card's "Add WiFi...": teach this robot a hotspot (hub/reachy_wifi.py).
 
         A lab member's hotspot wins over every other network and the robot
-        moves to it now if it can see it; `lab` saves the lab WiFi as the
-        fallback instead and never moves the robot.
+        moves to it now if it can see it; `lab` (save only) saves it as the
+        fallback instead and never moves the robot. `open_network`: a WiFi
+        with no password; the configured lab WiFi counts as open when
+        [network] lab_wifi_open says so.
         """
         user, login = self._ssh_creds()
         host = self.found.address
@@ -441,12 +457,23 @@ class ReachyWirelessAdapter(RobotAdapter):
             return _ssh_run(host, user, login, command, timeout_s, stdin_text)
 
         network = self.config.network
-        open_network = bool(lab and network.lab_wifi_open and network.lab_wifi
-                            and (ssid or "").strip() == network.lab_wifi)
+        open_network = bool(open_network or (
+            lab and network.lab_wifi_open and network.lab_wifi
+            and (ssid or "").strip() == network.lab_wifi))
         return await thread_finishing_on_cancel(
             functools.partial(reachy_wifi.teach, open_network=open_network),
             run, login, ssid, password, lab, self.display_name,
             timeout_s=60.0 + reachy_wifi.WATCH_S + 30)
+
+    # The in-use marker (hub/inuse.py): a marker only counts while the app runs.
+    app_running_command = "pgrep -f '[l]aptop_chat.py|[r]obot_streaming_player.py'"
+
+    async def remote_shell(self, command: str, timeout_s: float = 10.0) -> tuple[int, str]:
+        user, password = self._ssh_creds()
+        return await asyncio.wait_for(
+            asyncio.to_thread(_ssh_run, self.found.address, user, password, command,
+                              timeout_s),
+            timeout_s + 5)
 
     async def _ssh(self, command: str, timeout_s: float = SSH_TIMEOUT_S,
                    stdin_text: Optional[str] = None) -> tuple[int, str]:
@@ -480,14 +507,18 @@ class ReachyWirelessAdapter(RobotAdapter):
         so a factory robot is ready after one Launch instead of three commands.
         """
         root = self._reachy_chat_path()
-        python = self._python(root)
+        python = self._deploy_python(root)
         self.notes.append("syncing reachy_chat onto the robot (a few minutes "
                           "the first time, seconds after that)")
+        # The hub's own SSH password for this robot, so the deploy logs in
+        # the same way the hub does (ROBOT_PASSWORD, read by the tool).
+        _user, password = self._ssh_creds()
         proc = await asyncio.create_subprocess_exec(
             str(python), str(root / "tools" / "deploy_robot_app.py"),
             "--robot-host", self.found.address,
-            cwd=str(root), stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT)
+            cwd=str(root), env=child_env(overrides={"ROBOT_PASSWORD": password}),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT, **no_window())
         try:
             out, _ = await communicate_or_kill(proc, PROVISION_TIMEOUT_S)
         except asyncio.TimeoutError:

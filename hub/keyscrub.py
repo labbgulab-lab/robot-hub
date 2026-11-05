@@ -163,6 +163,27 @@ def _empty_slots(text: str) -> list[str]:
     return names
 
 
+# For log lines: the same key patterns as text, each anchored so a key never
+# continues a word ("task-runner-..." is not an "sk-" key).
+_TEXT_PATTERNS = [re.compile(r"(?<![A-Za-z0-9])" + rx.decode()) for _lit, rx, _what in _PATTERNS]
+KEY_MARK = "[key removed]"
+
+
+def scrub_text(text: str, secrets: Iterable[bytes | str] = ()) -> str:
+    """`text` with every key-shaped run and every exact secret replaced by
+    KEY_MARK. For log lines, child output and the log report, not files."""
+    if not text:
+        return text
+    for value in secrets:
+        raw = value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
+        raw = raw.strip()
+        if len(raw) >= 16 and raw in text:
+            text = text.replace(raw, KEY_MARK)
+    for rx in _TEXT_PATTERNS:
+        text = rx.sub(KEY_MARK, text)
+    return text
+
+
 def _rewrite(src: Path, dst: Path, replace: dict[str, bytes]) -> None:
     """Copy an archive entry by entry, in order (a jar wants its manifest
     first), swapping the contents of the members in `replace`."""

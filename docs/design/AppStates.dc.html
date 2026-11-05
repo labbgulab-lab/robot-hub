@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App states: starting, stopped, update</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}
+.app{min-height:800px;background:#EFEBE5;font-family:Inter,system-ui,"Segoe UI",sans-serif;color:#1C1917;font-size:15px;line-height:22px;box-sizing:border-box;padding:32px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-content:start}
+.cap{margin:0 0 10px;font-size:13px;font-weight:600;color:#6B635A;text-transform:uppercase;letter-spacing:.05em}
+.win{position:relative;height:520px;background:#FAF8F5;border-radius:14px;border:1px solid #E8E3DC;overflow:hidden;display:flex;flex-direction:column}
+.top{height:52px;padding:0 16px;display:flex;align-items:center;gap:8px;background:#FFFFFF;border-bottom:1px solid #E8E3DC;flex-shrink:0}
+.logo{height:24px;width:auto}
+.spacer{flex:1 1 auto}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#FD9903;color:#1C1917}
+.btn-ghost{background:transparent;color:#1C1917}
+.center{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+.mark{width:120px;height:auto}
+.spin{width:22px;height:22px;border-radius:50%;border:2.5px solid #E8E3DC;border-top-color:#FD9903;animation:spin 800ms linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
+.h{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em}
+.muted{color:#6B635A;margin:0}
+.ghost{flex:1 1 auto;padding:16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-content:start;opacity:.35}
+.ghost div{height:110px;border-radius:12px;background:#FFFFFF;border:1px solid #E8E3DC}
+.scrim{position:absolute;inset:52px 0 0 0;background:rgba(250,248,245,.86);display:flex;align-items:center;justify-content:center;padding:24px}
+.box{background:#FFFFFF;border:1px solid #E8E3DC;border-radius:16px;padding:22px;box-shadow:0 24px 64px -16px rgba(28,25,23,.28);display:flex;flex-direction:column;gap:12px;align-items:flex-start;max-width:280px}
+.upd{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 6px 0 12px;border-radius:999px;background:#FFF4E0;color:#A84E00;font-size:13px;font-weight:600}
+.upd button{height:24px;border-radius:999px;border:0;background:#FD9903;color:#1C1917;font:inherit;font-size:12px;font-weight:700;padding:0 10px;cursor:pointer}
+.icon{width:18px;height:18px;flex-shrink:0}
+</style>
+</helmet>
+<div class="app">
+  <section>
+    <p class="cap">Starting (first seconds)</p>
+    <div class="win">
+      <div class="center" role="status">
+        <img class="mark" src="img/labalab-mark.png" alt="LabaLab">
+        <span class="spin" aria-hidden="true"></span>
+        <p class="muted">Starting</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Hub stopped</p>
+    <div class="win">
+      <div class="top"><img class="logo" src="img/labalab-logo.png" alt="LabaLab"></div>
+      <div class="ghost" aria-hidden="true"><div></div><div></div><div></div><div></div></div>
+      <div class="scrim">
+        <div class="box" role="alertdialog" aria-labelledby="st">
+          <p id="st" class="h">Robot Hub stopped</p>
+          <p class="muted">Robots that were talking have stopped too.</p>
+          <button class="btn btn-primary" type="button">Restart</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Update available</p>
+    <div class="win">
+      <div class="top">
+        <img class="logo" src="img/labalab-logo.png" alt="LabaLab">
+        <span class="spacer"></span>
+        <span class="upd">New version<button type="button">Update</button></span>
+      </div>
+      <div class="ghost" style="opacity: .6;" aria-hidden="true"><div></div><div></div><div></div><div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Updating</p>
+    <div class="win">
+      <div class="center" role="status">
+        <img class="mark" src="img/labalab-mark.png" alt="">
+        <span class="spin" aria-hidden="true"></span>
+        <p class="muted">Updating. Robots stop for a minute.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Logs: new error while closed</p>
+    <div class="win">
+      <div class="top">
+        <img class="logo" src="img/labalab-logo.png" alt="LabaLab">
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" style="position: relative;"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>Logs<span style="position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: #B91C1C;" aria-label="New error"></span></button>
+      </div>
+      <div class="ghost" style="opacity: .6;" aria-hidden="true"><div></div><div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Network chip states</p>
+    <div class="win" style="justify-content: center; align-items: flex-start; gap: 10px; padding: 20px;">
+      <span class="upd" style="background: #F4F1EC; color: #6B635A; padding: 0 12px;">HOT-WiFi</span>
+      <span class="upd" style="background: #F4F1EC; color: #6B635A; padding: 0 12px;">Phone hotspot 3/5</span>
+      <span class="upd" style="background: #FFF1D6; color: #8A3B00; padding: 0 12px;">Phone hotspot 5/5</span>
+      <span class="upd" style="background: #FFF1D6; color: #8A3B00; padding: 0 12px;">eduroam</span>
+      <span class="upd" style="background: #FFF1D6; color: #8A3B00; padding: 0 12px;">Hotspot on 5 GHz: turn on 2.4 GHz</span>
+      <span class="upd" style="background: #FFF1D6; color: #8A3B00; padding: 0 12px;">VPN on</span>
+      <span class="upd" style="background: #FEF2F2; color: #B91C1C; padding: 0 12px;">No WiFi</span>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

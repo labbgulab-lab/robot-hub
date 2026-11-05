@@ -57,11 +57,12 @@ async def thread_finishing_on_cancel(func: Callable[..., Any], *args: Any,
         raise
 
 
-class Health(TypedDict):
+class Health(TypedDict, total=False):
     online: bool           # green
     degraded: bool         # amber - a leading indicator tripped
     detail: str            # human sentence for the card
     battery: Optional[int]  # percent, None if the robot cannot report one
+    charging: Optional[bool]  # NAO / Pepper when the probe can tell; else absent
 
 
 ClaimKind = Literal["audio_in", "audio_out", "port", "exclusive"]
@@ -106,8 +107,14 @@ class AdapterUnavailable(RuntimeError):
     """Raised when this robot's local prerequisite is missing (SDK, app, path).
 
     Costs nothing (13.6): the card is disabled with `str(exc)` as the reason,
-    the hub keeps running, no traceback reaches the user.
+    the hub keeps running, no traceback reaches the user. `requirement` names
+    the setup item that fixes it (hub/requirements.py), e.g. "naoqi_kit": the
+    card then says "set up first" instead of a bare reason.
     """
+
+    def __init__(self, message: str = "", requirement: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.requirement = requirement
 
 
 class PostureRefused(RuntimeError):

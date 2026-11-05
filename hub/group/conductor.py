@@ -36,7 +36,7 @@ from typing import Any, Optional
 import httpx
 
 from .. import laptop_mic
-from ..config import REPO_ROOT
+from ..config import DATA_DIR, REPO_ROOT
 from . import moves
 from .ears import Ears, rms_blocks
 from .phrases import Phrases
@@ -47,8 +47,9 @@ from .services import (DIRECTOR_MODEL, DIRECTOR_MODELS, FAST_MODEL, GEMINI_SPARE
 
 log = logging.getLogger("hub.group")
 
-CONFIG_FILE = REPO_ROOT / "group.local.json"
-LOG_DIR = REPO_ROOT / "logs"
+# Writable files live in the data folder (ROBOT_HUB_DATA, else the repo root).
+CONFIG_FILE = DATA_DIR / "group.local.json"
+LOG_DIR = DATA_DIR / "logs"
 REACHY = "reachy_wireless"
 LIVE = ("CONNECTED", "RUNNING", "DEGRADED")
 MODES = ("group", "interrupt", "free")
@@ -139,7 +140,7 @@ ELEVEN_LINE_S = 15.0
 KEEPALIVE_S = 30.0      # touch every service this often (GroupManager._keep_warm)
 PREMADE_MAX_S = 900.0   # a first line made ahead is used within this long
 HEDGE_DIRECTOR_S = 3.5  # no line yet: race the fast writer (normal: 2.5 s)
-ECHO_FILE = REPO_ROOT / "cache" / "group_echo.json"
+ECHO_FILE = DATA_DIR / "cache" / "group_echo.json"
 UNCLEAR = "(said something the robots could not make out)"
 STT_JUNK = {"thank you.", "thanks for watching!", "you", ".", "תודה.", "תודה רבה.",
             "תודה רבה", "תודה", "none", "...", "hmm", "um"}
@@ -4396,14 +4397,17 @@ class GroupManager:
             except Exception:  # noqa: BLE001
                 log.exception("keepalive failed")
 
-    async def startup(self) -> None:
-        """At hub start: watch the laptop's mics, warm every service, keep them warm."""
+    async def startup(self, warm: bool = False) -> None:
+        """At hub start: watch the laptop's mics and keep the services' connections
+        open. The full warm-up makes paid calls, so since the student app
+        (2026-11-05) it runs only when asked (`warm`) or on Get ready."""
         laptop_mic.MIC_WATCH.on_change = lambda dji: self._loop.call_soon_threadsafe(
             self.publish_state) if self._loop is not None else None
         self._loop = asyncio.get_running_loop()
         await asyncio.to_thread(laptop_mic.MIC_WATCH.start)
         self._keeper_task = asyncio.create_task(self._keep_warm())
-        self._startup_warm = asyncio.create_task(self.warm_up(full=True))
+        if warm:
+            self._startup_warm = asyncio.create_task(self.warm_up(full=True))
 
     # ------------------------------------------------- first lines, made ahead
     def premade_sig(self) -> str:

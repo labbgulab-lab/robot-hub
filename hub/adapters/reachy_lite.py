@@ -58,6 +58,25 @@ def _serial_from_meta(meta: dict[str, Any]) -> str:
     return ""
 
 
+
+CONTROL_APP_NAMES = ("reachy-mini-control.exe", "Reachy Mini Control.exe")
+
+
+def find_control_app() -> Optional[Path]:
+    """Pollen's "Reachy Mini Control" in the usual install folders, or None."""
+    import os
+    roots = [os.environ.get(v) for v in ("ProgramFiles", "ProgramFiles(x86)")]
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        roots.append(os.path.join(local, "Programs"))
+    for root in filter(None, roots):
+        for folder in ("Reachy Mini Control", "reachy-mini-control"):
+            for name in CONTROL_APP_NAMES:
+                candidate = Path(root) / folder / name
+                if candidate.is_file():
+                    return candidate
+    return None
+
 class ReachyLiteAdapter(RobotAdapter):
     type_id = "reachy_lite"
     display_name = "Reachy-Mini-Lite"
@@ -149,7 +168,8 @@ class ReachyLiteAdapter(RobotAdapter):
 
     # -------------------------------------------------------- desktop app
     def _control_app(self) -> Path:
-        path = self.config.path(self.type_id, "control_app")
+        # Blank = look where Pollen's installer puts it (the student default).
+        path = self.config.path(self.type_id, "control_app") or find_control_app()
         if path is None:
             raise AdapterUnavailable(
                 "set control_app in config.toml to your Reachy Mini Control "

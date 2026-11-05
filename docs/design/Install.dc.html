@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Install: one line</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}a:hover{color:#7A3900}
+.app{--page:#FAF8F5;--card:#FFFFFF;--sunken:#F4F1EC;--border:#E8E3DC;--ink:#1C1917;--muted:#6B635A;--brand:#FD9903;--brand-hover:#F08A00;--brand-text:#A84E00;--brand-tint:#FFF4E0;--run:#15803D;--run-tint:#ECFDF3;--ease:cubic-bezier(0.23,1,0.32,1)}
+.app{min-height:800px;background:var(--page);color:var(--ink);font-family:Inter,system-ui,"Segoe UI",sans-serif;font-size:15px;line-height:22px;box-sizing:border-box;padding:56px 32px;display:flex;justify-content:center}
+.wrap{width:100%;max-width:1120px;display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+.doc{flex:999 1 560px;min-width:0;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px}
+.side{flex:1 1 360px;min-width:0;display:flex;flex-direction:column;gap:16px}
+.h1{font-size:28px;line-height:34px;font-weight:700;letter-spacing:-.02em;margin:0}
+.muted{color:var(--muted)}
+.step{display:flex;gap:14px;align-items:flex-start}
+.num{width:28px;height:28px;border-radius:999px;background:var(--brand-tint);color:var(--brand-text);font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-variant-numeric:tabular-nums}
+.code{display:flex;align-items:center;gap:12px;background:#171412;color:#E7E2DA;border-radius:12px;padding:14px 14px 14px 18px;font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:13.5px;line-height:20px}
+.code span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:transform 120ms var(--ease),background-color 150ms ease}
+.btn:active{transform:scale(0.97)}
+.btn:focus-visible{outline:2px solid #FDB241;outline-offset:2px}
+.btn-copy{background:#2A2622;color:#F5F2EE;min-height:36px;border-radius:10px;padding:0 12px}
+.btn-copy:hover{background:#3A3530}
+.btn-quiet{background:var(--sunken);color:var(--ink)}
+.icon{width:18px;height:18px;flex-shrink:0}
+.term{background:#171412;color:#E7E2DA;border-radius:16px;padding:20px;font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:12.5px;line-height:21px;font-variant-numeric:tabular-nums}
+.term .m{color:#9C948A}
+.term .g{color:#5EE08A}
+.term .o{color:#FDB241}
+.shortcut{display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
+.mark{width:56px;height:56px;border-radius:14px;background:#FFFFFF;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mark img{width:46px;height:auto;display:block}
+.note{font-size:14px;line-height:20px}
+</style>
+</helmet>
+<div class="app">
+  <div class="wrap">
+    <article class="doc" aria-labelledby="i-title">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <p style="margin: 0; font-size: 13px; font-weight: 600; color: #A84E00; text-transform: uppercase; letter-spacing: .06em;">On the robot-hub GitHub page</p>
+        <h1 id="i-title" class="h1">Install LabaLab Robot Hub</h1>
+        <p class="muted" style="margin: 0; max-width: 62ch;">For Windows 10 and 11. Takes about two minutes. You do not need Python, Git or anything else.</p>
+      </div>
+      <div class="step">
+        <span class="num">1</span>
+        <div><b>Open PowerShell.</b><p class="muted" style="margin: 2px 0 0;">Press the Start button, type <b style="color: #1C1917;">PowerShell</b>, and press Enter.</p></div>
+      </div>
+      <div class="step">
+        <span class="num">2</span>
+        <div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px;">
+          <div><b>Paste this line and press Enter.</b></div>
+          <div class="code">
+            <span>irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.ps1 | iex</span>
+            <button class="btn btn-copy" type="button" onClick="{{copy}}">
+              <sc-if value="{{copied}}" hint-placeholder-val="{{false}}"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>Copied</sc-if>
+              <sc-if value="{{notCopied}}" hint-placeholder-val="{{true}}"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy</sc-if>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <span class="num">3</span>
+        <div><b>That's it.</b><p class="muted" style="margin: 2px 0 0;">The hub opens by itself. Next time, double-click <b style="color: #1C1917;">LabaLab Robot Hub</b> on your desktop. To update, run the same line again.</p></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid #E8E3DC;">
+        <span class="muted note">Your laptop blocks commands?</span>
+        <a class="btn btn-quiet" href="#zip"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Download the zip instead</a>
+        <a href="#guide" class="note" style="font-weight: 500;">Step-by-step guide with pictures</a>
+      </div>
+    </article>
+
+    <aside class="side" aria-label="What happens next">
+      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #6B635A; text-transform: uppercase; letter-spacing: .06em;">What the student sees</p>
+      <div class="term" role="img" aria-label="Installer output: four steps done">
+        <div>LabaLab Robot Hub installer</div>
+        <div class="m">Installing for this Windows user only. No admin needed.</div>
+        <div style="height: 10px;"></div>
+        <div><span class="g">done</span>  Downloading (about 150 MB)</div>
+        <div><span class="g">done</span>  Unpacking</div>
+        <div><span class="g">done</span>  Desktop shortcut</div>
+        <div><span class="o">now </span>  Opening Robot Hub</div>
+        <div style="height: 10px;"></div>
+        <div class="m">You can close this window.</div>
+      </div>
+      <div class="shortcut">
+        <div class="mark"><img src="img/labalab-mark.png" alt=""></div>
+        <div><b>LabaLab Robot Hub</b><p class="muted note" style="margin: 2px 0 0;">The desktop icon. It opens in its own window, not a browser tab.</p></div>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { copied: false }; }
+  renderVals() {
+    var self = this;
+    return {
+      copied: this.state.copied,
+      notCopied: !this.state.copied,
+      copy: function () {
+        self.setState({ copied: true });
+        setTimeout(function () { self.setState({ copied: false }); }, 1600);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

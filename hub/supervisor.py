@@ -30,9 +30,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, Sequence
 
+from . import keyscrub
 from .config import Config
 from .events import EventBus
 from .ports import PortAllocator, is_free
+from .winproc import NO_WINDOW
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -53,6 +55,8 @@ class Managed:
     owner: str = ""
     started_at: float = field(default_factory=time.time)
     pumps: list[asyncio.Task] = field(default_factory=list)
+    # Exact key values this child was handed, blanked out of its output.
+    secrets: list[bytes] = field(default_factory=list)
 
     @property
     def pid(self) -> int:
@@ -149,6 +153,13 @@ def child_env(overrides: Optional[dict[str, str]] = None,
     return env
 
 
+def child_secrets(env: Optional[dict[str, str]]) -> list[bytes]:
+    """The key values handed to a child: every secret-named variable in its
+    environment (the hub's own included), long enough to be a key."""
+    extra = [v for k, v in (env or {}).items() if keyscrub._SECRET_NAME.search(k)]
+    return keyscrub.known_secrets(extra)
+
+
 class Supervisor:
     """Owns every process the hub starts. One instance per hub."""
 
@@ -191,15 +202,17 @@ class Supervisor:
 
         kwargs: dict[str, Any] = {}
         if IS_WINDOWS:
-            # Its own process group, so stopping a child never reaches the hub.
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            # Its own process group, so stopping a child never reaches the hub,
+            # and no console window: the student app runs windowless.
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | NO_WINDOW
         else:
             kwargs["start_new_session"] = True
 
+        env = env or child_env()
         proc = await asyncio.create_subprocess_exec(
             *argv,
             cwd=cwd,
-            env=env or child_env(),
+            env=env,
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -207,11 +220,11 @@ class Supervisor:
         )
 
         managed = Managed(name=name, argv=argv, cwd=cwd, proc=proc,
-                          port=port, owner=owner)
+                          port=port, owner=owner, secrets=child_secrets(env))
         prefix = log_prefix or name
         managed.pumps = [
-            asyncio.create_task(self._pump(proc.stdout, prefix, "info")),
-            asyncio.create_task(self._pump(proc.stderr, prefix, "warn")),
+            asyncio.create_task(self._pump(proc.stdout, prefix, "info", managed.secrets)),
+            asyncio.create_task(self._pump(proc.stderr, prefix, "warn", managed.secrets)),
         ]
         self._children[name] = managed
         self._log("info", "{}: started pid {}{}".format(
@@ -219,9 +232,11 @@ class Supervisor:
         return managed
 
     async def _pump(self, stream: Optional[asyncio.StreamReader],
-                    prefix: str, level: str) -> None:
+                    prefix: str, level: str, secrets: Sequence[bytes] = ()) -> None:
         """Child output becomes log lines. A piped stream nobody reads fills
-        its buffer and deadlocks the child, so this task always runs."""
+        its buffer and deadlocks the child, so this task always runs. Keys are
+        blanked first: a child that prints its config must not put a key in
+        the log drawer, the log file or a log report."""
         if stream is None:
             return
         try:
@@ -229,7 +244,7 @@ class Supervisor:
                 raw = await stream.readline()
                 if not raw:
                     return
-                text = raw.decode("utf-8", "replace").rstrip()
+                text = keyscrub.scrub_text(raw.decode("utf-8", "replace").rstrip(), secrets)
                 if text:
                     self._log(level, "{}: {}".format(prefix, text[:LOG_LINE_LIMIT]))
         except asyncio.CancelledError:

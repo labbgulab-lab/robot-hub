@@ -2,32 +2,62 @@
 """Runs ON Pepper (Python 2.7.6, NAOqi 2.5): the robot half of the Pepper app.
 
 Uploaded and started over SSH by the laptop (pepper_app/robot.py) at every
-Launch. It connects OUT to the laptop -- the direction Pepper's head and tablet
-already reached the laptop on 2026-10-06 (profiles/pepper.md, section D) -- and
-keeps one TCP connection carrying everything:
+Launch, with the tablet page's files next to it (screen/). One TCP connection
+to the laptop carries everything. Since 2026-11-05 the laptop opens it: a
+student laptop may not listen on the network (no admin, no firewall rule), so
 
-    laptop -> robot   J  {"id": n, "cmd": ...}      commands
+  * listen mode (normal): this agent LISTENS on robot port 8790 and the laptop
+    connects out to it. The laptop speaks first: J {"ev": "hello", "token"};
+    a wrong token is closed at once. One laptop at a time: a new connection
+    with the right token replaces the old one (the same laptop reconnecting).
+    The agent answers with its own J {"ev": "hello", "info", ...}.
+  * connect-back mode (fallback, when the laptop could not reach port 8790):
+    the agent connects to the laptop and sends J {"ev": "hello", "token", ...}
+    first, as before 2026-11-05. Windows may then ask about the firewall.
+
+Frames, both modes:
+
+    laptop -> robot   J  {"id": n, "cmd": ...}      commands (no "id": no reply)
                       S  PCM16 24 kHz mono         speech to play
+                      D  4-byte header length + JSON header + bytes
+                                                   a slide file the tablet asked for
     robot -> laptop   J  {"ev": ...} / {"id": n, "ok": ...}
                       M  PCM16 16 kHz mono         front microphone
                       I  PNG                       camera frame (after a J "frame")
 
-Frame = 1 byte type + 4 byte big-endian length + payload.
+Frame = 1 byte type + 4 byte big-endian length + payload. The laptop pings
+every few seconds; LINK_IDLE_S without a frame either way ends the link.
+
+The tablet page is served HERE, on robot port 8791 (the tablet loads
+http://198.18.0.1:8791/screen), in both modes:
+
+    /screen, /screen/render.js, /screen/logo.png   the files uploaded at deploy
+    /screen/state     the latest state the laptop pushed (cmd "screen_state");
+                      each tablet poll is its heartbeat: J {"ev": "tablet"}
+    /screen/tap       J {"ev": "tap", "v", "i"} to the laptop
+    /screen/media/<deck>/<file>
+                      J {"ev": "media", "rid", "deck", "file"} -> the laptop
+                      answers with a D frame; cached in MEDIA_DIR
+While no laptop is linked, /screen/state answers 503, so the tablet shows its
+small red "lost" dot as before.
 
 Standard library + naoqi only: the robot's root filesystem is read-only and
-nothing can be installed (profiles/pepper.md H).
+nothing can be installed (profiles/pepper.md H). Python 2.7.6 on the robot;
+the code also imports under Python 3 so the laptop's tests can run it.
 
 When the laptop has been gone for LAPTOP_GONE_S it gives the robot back: the
 tablet page is hidden, the vendor app's dialog topics are reactivated, and it
 exits. The laptop starts a fresh copy at the next Launch.
 
-    python pepper_agent.py <laptop_ip> <laptop_port> <token_file>
+    python pepper_agent.py listen <port> <token_file> [<tablet_port>]
+    python pepper_agent.py <laptop_ip> <laptop_port> <token_file> [<tablet_port>]
 """
 from __future__ import print_function
 
 import audioop
 import json
 import os
+import re
 import socket
 import struct
 import subprocess
@@ -36,9 +66,29 @@ import threading
 import time
 import zlib
 
+try:                                    # Python 2.7 on the robot
+    import BaseHTTPServer as _http
+    import SocketServer as _socketserver
+    from urlparse import parse_qs, urlparse
+except ImportError:                     # Python 3: the laptop's tests
+    import http.server as _http
+    import socketserver as _socketserver
+    from urllib.parse import parse_qs, urlparse
+
 from naoqi import ALBroker, ALModule, ALProxy
 
 NAOQI_IP, NAOQI_PORT = "127.0.0.1", 9559
+# Tests on the laptop bind 127.0.0.1 (a 0.0.0.0 listener makes Windows ask about the firewall).
+BIND_HOST = os.environ.get("PEPPER_AGENT_HOST", "0.0.0.0")
+TABLET_PORT = 8791
+HERE = os.path.dirname(os.path.abspath(__file__))
+SCREEN_DIR = os.path.join(HERE, "screen")
+MEDIA_DIR = os.environ.get("PEPPER_AGENT_MEDIA", "/home/nao/.pepper_app/media")
+MEDIA_CACHE_MAX = 200 * 1024 * 1024
+MEDIA_WAIT_S = 20.0
+LINK_IDLE_S = 20.0
+HELLO_MAX = 64 * 1024
+FRAME_MAX = 64 * 1024 * 1024
 LAPTOP_GONE_S = 45.0
 STATUS_EVERY_S = 3.0
 VENDOR_TOPIC_PREFIX = "ht_cms"          # Humanizing Technologies app (ht_cms_1_5)
@@ -126,19 +176,78 @@ def png(width, height, rgb):
 
 
 # ---------------------------------------------------------------- the link
-class Link(object):
-    def __init__(self, host, port, token):
-        self.host, self.port, self.token = host, port, token
-        self.sock = None
-        self.wlock = threading.Lock()
-        self.last_ok = time.time()
+def same(a, b):
+    """Constant-time string compare (hmac.compare_digest is 2.7.7+; the robot has 2.7.6)."""
+    if len(a) != len(b):
+        return False
+    diff = 0
+    for x, y in zip(a, b):
+        diff |= ord(x) ^ ord(y)
+    return diff == 0
 
-    def connect(self):
-        s = socket.create_connection((self.host, self.port), timeout=5)
-        s.settimeout(None)
-        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.sock = s
-        self.last_ok = time.time()
+
+def close_sock(s):
+    # shutdown first: a plain close() does not wake a recv() in another thread on Linux.
+    try:
+        s.shutdown(socket.SHUT_RDWR)
+    except Exception:
+        pass
+    try:
+        s.close()
+    except Exception:
+        pass
+
+
+def read_exact(s, n):
+    buf = b""
+    while len(buf) < n:
+        part = s.recv(n - len(buf))
+        if not part:
+            raise IOError("laptop closed the connection")
+        buf += part
+    return buf
+
+
+def read_frame(s, limit=FRAME_MAX):
+    head = read_exact(s, 5)
+    size = struct.unpack(">I", head[1:5])[0]
+    if size > limit:
+        raise IOError("frame of %d bytes is too big" % size)
+    return head[0:1], read_exact(s, size)
+
+
+def frame(kind, payload):
+    return kind + struct.pack(">I", len(payload)) + payload
+
+
+class Link(object):
+    """The one TCP connection to the laptop, whichever side opened it."""
+
+    def __init__(self, token):
+        self.token = token
+        self.sock = None
+        self.wlock = threading.Lock()      # one frame at a time on the wire
+        self.slock = threading.Lock()      # attach / detach
+        self.gone_since = time.time()
+
+    def attach(self, s):
+        s.settimeout(LINK_IDLE_S)
+        try:
+            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except Exception:
+            pass
+        with self.slock:
+            old, self.sock = self.sock, s
+            self.gone_since = None
+        if old is not None and old is not s:
+            close_sock(old)
+
+    def detach(self, s):
+        with self.slock:
+            if self.sock is s:
+                self.sock = None
+                self.gone_since = time.time()
+        close_sock(s)
 
     def send(self, kind, payload):
         s = self.sock
@@ -146,35 +255,208 @@ class Link(object):
             return False
         try:
             with self.wlock:
-                s.sendall(kind + struct.pack(">I", len(payload)) + payload)
+                s.sendall(frame(kind, payload))
             return True
         except Exception:
-            self.close()
+            self.detach(s)
             return False
 
     def send_json(self, obj):
         return self.send(b"J", json.dumps(obj).encode("utf-8"))
 
-    def _read(self, n):
-        buf = b""
-        while len(buf) < n:
-            part = self.sock.recv(n - len(buf))
-            if not part:
-                raise IOError("laptop closed the connection")
-            buf += part
-        return buf
+    def send_pair(self, meta, blob):
+        """A J and the I that belongs to it, together (camera frames)."""
+        s = self.sock
+        if s is None:
+            return False
+        body = json.dumps(meta).encode("utf-8")
+        try:
+            with self.wlock:
+                s.sendall(frame(b"J", body) + frame(b"I", blob))
+            return True
+        except Exception:
+            self.detach(s)
+            return False
 
-    def recv(self):
-        head = self._read(5)
-        kind, size = head[0:1], struct.unpack(">I", head[1:5])[0]
-        return kind, self._read(size)
 
-    def close(self):
-        s, self.sock = self.sock, None
-        if s is not None:
+# ------------------------------------------------------------ the tablet
+MEDIA_DECK = re.compile(r"^[a-z0-9]{8,32}$")
+MEDIA_FILE = re.compile(r"^\d{3}\.(png|jpg|jpeg|gif|webp)$")
+MEDIA_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+               "gif": "image/gif", "webp": "image/webp"}
+SCREEN_FILES = {"/screen": ("screen.html", "text/html; charset=utf-8"),
+                "/screen/": ("screen.html", "text/html; charset=utf-8"),
+                "/screen/render.js": ("screen-render.js", "application/javascript; charset=utf-8"),
+                "/screen/logo.png": ("labalab-logo.png", "image/png")}
+WELCOME_STATE = b'{"v": 0, "item": {"kind": "welcome"}, "by": "start", "picked": null}'
+
+
+class _ThreadedHTTP(_socketserver.ThreadingMixIn, _http.HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+class TabletHandler(_http.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.0"
+
+    def log_message(self, *args):
+        pass
+
+    def _send(self, code, body, ctype="application/json", cache=False):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "max-age=3600" if cache else "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        t = self.server.tablet
+        url = urlparse(self.path)
+        path = url.path
+        if path in SCREEN_FILES:
+            name, ctype = SCREEN_FILES[path]
             try:
-                s.close()
-            except Exception:
+                with open(os.path.join(t.files_dir, name), "rb") as f:
+                    body = f.read()
+            except (IOError, OSError):
+                return self._send(404, b'{"error": "missing"}')
+            return self._send(200, body, ctype, cache=name.endswith(".png"))
+        if path == "/screen/state":
+            if not t.link_up():
+                return self._send(503, b'{"error": "the laptop is not linked"}')
+            if "tablet" in parse_qs(url.query):
+                t.heartbeat(self.client_address[0], self.headers.get("User-Agent") or "")
+            return self._send(200, t.state)
+        if path.startswith("/screen/media/"):
+            parts = path.split("/")
+            if len(parts) == 5:
+                data = t.media(parts[3], parts[4])
+                if data is not None:
+                    return self._send(200, data, MEDIA_TYPES[parts[4].rsplit(".", 1)[1]], cache=True)
+            return self._send(404, b'{"error": "no such slide"}')
+        return self._send(404, b'{"error": "not here"}')
+
+    def do_POST(self):
+        t = self.server.tablet
+        if urlparse(self.path).path != "/screen/tap":
+            return self._send(404, b'{"error": "not here"}')
+        try:
+            n = min(int(self.headers.get("Content-Length") or 0), 4096)
+            d = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+            v, i = int(d.get("v", -1)), int(d.get("i", -1))
+        except Exception:
+            return self._send(400, b'{"ok": false}')
+        if not t.tap(v, i):
+            return self._send(503, b'{"ok": false}')
+        return self._send(200, b'{"ok": true}')
+
+
+class Tablet(object):
+    """The chest tablet's page, served from the robot; state, taps and
+    slides travel over the laptop link."""
+
+    def __init__(self, port, link, files_dir=SCREEN_DIR, cache_dir=MEDIA_DIR):
+        self.port, self.link = port, link
+        self.files_dir, self.cache_dir = files_dir, cache_dir
+        self.state = WELCOME_STATE
+        self.lock = threading.Lock()
+        self.rid = 0
+        self.waiting = {}
+        self.httpd = None
+
+    def start(self):
+        self.httpd = _ThreadedHTTP((BIND_HOST, self.port), TabletHandler)
+        self.httpd.tablet = self
+        self.port = self.httpd.server_address[1]
+        t = threading.Thread(target=self.httpd.serve_forever)
+        t.daemon = True
+        t.start()
+        return self.port
+
+    def stop(self):
+        if self.httpd is not None:
+            self.httpd.shutdown()
+            self.httpd.server_close()
+
+    def link_up(self):
+        return self.link.sock is not None
+
+    def set_state(self, state):
+        self.state = json.dumps(state).encode("utf-8")
+
+    def heartbeat(self, ip, agent):
+        self.link.send_json({"ev": "tablet", "ip": ip, "ua": agent[:120]})
+
+    def tap(self, v, i):
+        return self.link.send_json({"ev": "tap", "v": v, "i": i})
+
+    def media(self, deck, name):
+        """The slide's bytes: from the cache on the robot, else from the laptop."""
+        if not MEDIA_DECK.match(deck or "") or not MEDIA_FILE.match(name or ""):
+            return None
+        path = os.path.join(self.cache_dir, deck, name)
+        if os.path.isfile(path):
+            try:
+                with open(path, "rb") as f:
+                    return f.read()
+            except (IOError, OSError):
+                pass
+        ev = threading.Event()
+        with self.lock:
+            self.rid += 1
+            rid = self.rid
+            self.waiting[rid] = [ev, None]
+        if self.link.send_json({"ev": "media", "rid": rid, "deck": deck, "file": name}):
+            ev.wait(MEDIA_WAIT_S)
+        with self.lock:
+            slot = self.waiting.pop(rid, None)
+        data = slot[1] if slot else None
+        if data is not None:
+            self._store(path, data)
+        return data
+
+    def media_in(self, payload):
+        """A D frame from the laptop: the answer to one media request."""
+        n = struct.unpack(">I", payload[:4])[0]
+        head = json.loads(payload[4:4 + n].decode("utf-8"))
+        with self.lock:
+            slot = self.waiting.get(head.get("rid"))
+        if slot is not None:
+            slot[1] = payload[4 + n:] if head.get("ok") else None
+            slot[0].set()
+
+    def _store(self, path, data):
+        try:
+            d = os.path.dirname(path)
+            if not os.path.isdir(d):
+                os.makedirs(d)
+            tmp = path + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.rename(tmp, path)
+            self._prune()
+        except Exception as e:
+            log("media cache: %s" % last_line(e))
+
+    def _prune(self):
+        files = []
+        for root, _dirs, names in os.walk(self.cache_dir):
+            for name in names:
+                p = os.path.join(root, name)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                files.append((st.st_mtime, st.st_size, p))
+        total = sum(f[1] for f in files)
+        for _mtime, size, p in sorted(files):
+            if total <= MEDIA_CACHE_MAX:
+                break
+            try:
+                os.remove(p)
+                total -= size
+            except OSError:
                 pass
 
 
@@ -330,6 +612,21 @@ class Agent(object):
         self.walking = False
         self.walk_stop = False
         self.webview_url = None
+        self.tablet = None
+        self.tablet_error = None
+
+    def hello(self, mode, token=None):
+        h = {"ev": "hello", "info": info(self.p), "speaker_mode": self.speaker.mode,
+             "pid": os.getpid(), "mode": mode,
+             "tablet_port": self.tablet.port if self.tablet else None,
+             "tablet_error": self.tablet_error}
+        if token is not None:
+            h["token"] = token
+        return h
+
+    def mic_off(self):
+        if MicSink is not None:
+            MicSink.on = False
 
     # ---- helpers
     def _anim(self, name):
@@ -469,7 +766,14 @@ class Agent(object):
             pass
 
     def cmd_mic(self, m):
-        MicSink.on = bool(m.get("on"))
+        if MicSink is not None:
+            MicSink.on = bool(m.get("on"))
+
+    def cmd_screen_state(self, m):
+        """What the chest tablet shows now (pushed by the laptop on every change)."""
+        if self.tablet is None:
+            raise RuntimeError("the tablet page server is not running: %s" % self.tablet_error)
+        self.tablet.set_state(m.get("state") or {})
 
     def cmd_move(self, m):
         name = m.get("name")
@@ -662,13 +966,7 @@ class Agent(object):
                 if img:
                     w, h, data = img[0], img[1], img[6]
                     meta = {"ev": "frame", "w": w, "h": h, "cam": self.cam_index, "faces": self.faces(w, h)}
-                    blob = png(w, h, bytes(data))
-                    with self.link.wlock:     # the J and the I must stay together
-                        s = self.link.sock
-                        if s is not None:
-                            body = json.dumps(meta).encode("utf-8")
-                            s.sendall(b"J" + struct.pack(">I", len(body)) + body
-                                      + b"I" + struct.pack(">I", len(blob)) + blob)
+                    self.link.send_pair(meta, png(w, h, bytes(data)))   # the J and the I stay together
             except Exception as e:
                 log("camera: %s" % last_line(e))
                 self._cam_close()
@@ -678,7 +976,7 @@ class Agent(object):
     def give_back(self):
         """The laptop is gone: leave Pepper as the vendor app expects it."""
         log("laptop gone: hiding the tablet page, restoring the vendor dialog")
-        MicSink.on = False
+        self.mic_off()
         self.speaker.flush()
         self._vendor_restore()
         self.vendor_idle_talk(True)
@@ -710,8 +1008,116 @@ def info(p):
     return out
 
 
-def main():
-    host, port, token_file = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+def serve(link, agent, s):
+    """Frames from the laptop on socket `s`, until it closes or goes quiet."""
+    while True:
+        kind, payload = read_frame(s)
+        if kind == b"S":
+            agent.speaker.push(payload)
+        elif kind == b"D":
+            if agent.tablet is not None:
+                agent.tablet.media_in(payload)
+        elif kind == b"J":
+            msg = json.loads(payload.decode("utf-8"))
+            reply = {"id": msg.get("id")}
+            try:
+                reply.update(agent.handle(msg))
+                reply["ok"] = True
+            except Exception as e:
+                reply.update({"ok": False, "error": last_line(e)})
+                log("%s failed: %s" % (msg.get("cmd"), reply["error"]))
+            if msg.get("id") is not None:
+                link.send_json(reply)
+
+
+def welcome(link, agent, conn, addr):
+    """Listen mode: one laptop's connection. It must name the token first."""
+    try:
+        conn.settimeout(10)
+        kind, payload = read_frame(conn, HELLO_MAX)
+        hello = json.loads(payload.decode("utf-8")) if kind == b"J" else {}
+        if hello.get("ev") != "hello" or not same(str(hello.get("token", "")), link.token):
+            log("refused a connection from %s (bad hello)" % addr[0])
+            close_sock(conn)
+            return
+        conn.sendall(frame(b"J", json.dumps(agent.hello("listen")).encode("utf-8")))
+    except Exception as e:
+        log("a connection from %s failed: %s" % (addr[0], last_line(e)))
+        close_sock(conn)
+        return
+    link.attach(conn)
+    log("laptop %s linked" % addr[0])
+    try:
+        serve(link, agent, conn)
+    except Exception as e:
+        log("laptop link closed (%s)" % last_line(e))
+    finally:
+        link.detach(conn)
+        if link.sock is None:
+            agent.mic_off()
+
+
+def gone_too_long(link):
+    since = link.gone_since
+    return link.sock is None and since is not None and time.time() - since > LAPTOP_GONE_S
+
+
+def listen_loop(link, agent, port):
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind((BIND_HOST, port))
+    srv.listen(4)
+    srv.settimeout(1.0)
+    log("waiting for the laptop on port %d" % port)
+    while True:
+        try:
+            conn, addr = srv.accept()
+        except socket.timeout:
+            conn = None
+        except Exception as e:
+            log("accept: %s" % last_line(e))
+            conn = None
+            time.sleep(1)
+        if conn is not None:
+            t = threading.Thread(target=welcome, args=(link, agent, conn, addr))
+            t.daemon = True
+            t.start()
+        if gone_too_long(link):
+            agent.give_back()
+            os._exit(0)
+
+
+def connect_back_loop(link, agent, host, port):
+    """Fallback: the agent connects to the laptop (as before 2026-11-05)."""
+    told = False
+    while True:
+        s = None
+        try:
+            s = socket.create_connection((host, port), timeout=5)
+            s.sendall(frame(b"J", json.dumps(agent.hello("connect_back", link.token)).encode("utf-8")))
+            link.attach(s)
+            log("connected to the laptop at %s:%d" % (host, port))
+            told = False
+            serve(link, agent, s)
+        except Exception as e:
+            if s is not None:
+                link.detach(s)
+            agent.mic_off()
+            if not told:
+                told = True
+                log("no laptop (%s); retrying" % last_line(e))
+        if gone_too_long(link):
+            agent.give_back()
+            os._exit(0)
+        time.sleep(2)
+
+
+def main(argv):
+    if len(argv) >= 4 and argv[1] == "listen":
+        mode, host, port, token_file = "listen", None, int(argv[2]), argv[3]
+    else:
+        mode, host, port, token_file = "connect_back", argv[1], int(argv[2]), argv[3]
+    tablet_port = int(argv[4]) if len(argv) > 4 else TABLET_PORT
     with open(token_file) as f:
         token = f.read().strip()
     try:
@@ -722,9 +1128,17 @@ def main():
     global MicSink
     broker = ALBroker("HubAgentBroker", "0.0.0.0", 0, NAOQI_IP, NAOQI_PORT)  # noqa: F841 (kept alive)
     MicSink = MicModule("MicSink")
-    link = Link(host, port, token)
+    link = Link(token)
     MicSink.link = link
     agent = Agent(link)
+    tablet = Tablet(tablet_port, link)
+    try:
+        tablet.start()
+        agent.tablet = tablet
+        log("tablet page on port %d" % tablet.port)
+    except Exception as e:
+        agent.tablet_error = last_line(e)
+        log("tablet page server failed: %s" % agent.tablet_error)
     log("speaker mode: %s" % agent.speaker.detect())
     audio = agent.p["ALAudioDevice"]
     audio.setClientPreferences("MicSink", 16000, 3, 0)   # front mic, 16 kHz, deinterleaved
@@ -735,42 +1149,13 @@ def main():
         t.daemon = True
         t.start()
 
-    gone_since = None
-    while True:
-        try:
-            link.connect()
-            link.send_json({"ev": "hello", "token": token, "info": info(agent.p),
-                            "speaker_mode": agent.speaker.mode, "pid": os.getpid()})
-            log("connected to the laptop at %s:%d" % (host, port))
-            gone_since = None
-            while True:
-                kind, payload = link.recv()
-                link.last_ok = time.time()
-                if kind == b"S":
-                    agent.speaker.push(payload)
-                elif kind == b"J":
-                    msg = json.loads(payload.decode("utf-8"))
-                    reply = {"id": msg.get("id")}
-                    try:
-                        reply.update(agent.handle(msg))
-                        reply["ok"] = True
-                    except Exception as e:
-                        reply.update({"ok": False, "error": last_line(e)})
-                        log("%s failed: %s" % (msg.get("cmd"), reply["error"]))
-                    link.send_json(reply)
-        except Exception as e:
-            link.close()
-            MicSink.on = False
-            if gone_since is None:
-                gone_since = time.time()
-                log("no laptop (%s); retrying" % last_line(e))
-            if time.time() - gone_since > LAPTOP_GONE_S:
-                agent.give_back()
-                os._exit(0)
-            time.sleep(2)
+    if mode == "listen":
+        listen_loop(link, agent, port)
+    else:
+        connect_back_loop(link, agent, host, port)
 
 
 MicSink = None
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)

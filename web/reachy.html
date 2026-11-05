@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Reachy app: one Reachy (Talk), several Reachys and the people (Group), or you drive it (Wizard of Oz).">
+<title>Reachy app</title>
+<link rel="icon" href="/photos/labalab-mark.png">
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/reachy.css?v=2026-11-05a">
+</head>
+<body>
+<div class="app" id="app">
+
+<header class="top" style="gap: 10px;">
+  <a class="btn btn-ghost btn-sm" href="/" title="Back to the robots."><i data-ic="back"></i>Robots</a>
+  <span class="ttl">Reachy app</span>
+  <nav class="tabs" role="tablist" aria-label="Reachy app">
+    <a class="tab" id="tab-talk" href="#talk" role="tab" aria-selected="false">Talk<small>one Reachy</small></a>
+    <a class="tab" id="tab-group" href="#group" role="tab" aria-selected="true">Group<small>two or more Reachys</small></a>
+    <a class="tab" id="tab-woz" href="#woz" role="tab" aria-selected="false">Wizard of Oz<small>you drive it</small></a>
+  </nav>
+  <!-- Talk: the brain and key the robot uses, and its volume. -->
+  <div class="hbadges" id="talk-badges" hidden>
+    <span class="badge" id="brain-badge" title="The brain for the next conversation">…</span>
+    <span class="badge" id="key-badge"><span class="mono"></span></span>
+    <span class="rng" title="0-100 sets the robot's speaker. Above 100 the speaker stays at its maximum and the voice itself is boosted. It is sent when you let go.">
+      <i data-ic="vol" data-s="16"></i><input type="range" id="volume" min="0" max="150" step="5" value="100" aria-label="Volume"><b id="volume-value">100%</b></span>
+  </div>
+  <span class="spacer"></span>
+  <span class="save" id="config-badge" role="status" title="Whether your changes are saved. They are kept for next time."></span>
+  <span class="tmark" id="transcript-mark" hidden><span class="rdot" aria-hidden="true"></span>Saving transcript</span>
+  <span class="live off" id="ws-state" title="Live connection to Robot Hub"><span class="ldot" aria-hidden="true"></span><span class="spin" aria-hidden="true"></span><span id="ws-text">Connecting</span></span>
+  <button class="btn btn-ghost btn-sm" type="button" id="logs-btn" title="What Robot Hub is doing, live."><i data-ic="logs"></i>Logs</button>
+</header>
+
+<!-- The hub's own error, or a refused request. Stays until it is fixed. -->
+<div class="warnbar err" id="error-banner" role="alert" hidden><i data-ic="alert"></i><span id="error-text" dir="auto"></span></div>
+
+<!-- ================================================================ picker -->
+<main class="view picker" id="view-picker" hidden aria-labelledby="picker-title">
+  <h1 class="h1" id="picker-title">Which Reachy?</h1>
+  <p class="muted" id="picker-sub" style="margin: 0;">Pick the robot for this tab.</p>
+  <div class="pick-list" id="pick-list"></div>
+  <p class="muted" id="picker-empty" hidden style="margin: 0;">No Reachys nearby. <a href="/">Connect them on Robots</a> and they show up here.</p>
+</main>
+
+<!-- ================================================================== Talk -->
+<main class="view talk-main" id="view-talk" hidden>
+  <div class="talk-left">
+    <section class="pnl" aria-labelledby="robot-title">
+      <div class="pnlh"><h2 id="robot-title" style="flex: 1 1 auto;">Robot</h2>
+        <button class="btn btn-ghost btn-sm" type="button" id="details-btn" style="min-height: 28px; padding: 0 8px; font-size: 13px;" title="Everything the hub knows about this robot, and Add WiFi for lab staff.">Details</button></div>
+      <div class="srow"><img src="/photos/robot-reachy-wireless.png" alt="" style="width: 40px; height: 40px; border-radius: 10px;">
+        <span style="font-weight: 600; font-size: 16px;" id="robot-name">Reachy</span>
+        <span class="okline" id="robot-conn" style="margin-left: auto; font-size: 13px;"><span class="pdot" style="width: 8px; height: 8px;"></span><span>Unknown</span></span>
+        <span class="metric" id="robot-ip" title="The robot's address"><i data-ic="wifi" data-s="14"></i><span>—</span></span></div>
+      <div class="srow" style="font-size: 13.5px; font-weight: 400; color: #6B635A;">
+        <span id="system-pill"></span>
+        <span class="sub-badge" id="substate-badge" hidden aria-live="polite"></span>
+        <span style="margin-left: auto;" id="robot-daemon">Daemon —</span></div>
+      <div id="talk-gate" class="talk-gate" hidden></div>
+      <div id="system-note"></div>
+      <div style="display: flex; gap: 8px;" id="system-buttons">
+        <button class="btn btn-quiet" type="button" id="stop-system-btn" style="min-height: 36px; font-size: 14px; flex: 1 1 0;" disabled title="Ends a running conversation gracefully and closes the robot link. The page and the models stay up."><i data-ic="stop"></i>Stop system</button>
+        <button class="btn btn-quiet" type="button" id="start-system-btn" style="min-height: 36px; font-size: 14px; flex: 1 1 0;" disabled title="Brings the robot side back up. Takes about 7-10 s."><i data-ic="play"></i>Start system</button>
+      </div>
+    </section>
+
+    <section class="pnl talk-needs" aria-labelledby="how-title">
+      <div class="pnlh"><h2 id="how-title">How it talks</h2></div>
+      <div class="frow">
+        <label for="backend-brain">Brain</label><select class="select" id="backend-brain" title="Who listens and thinks."></select>
+        <label for="backend-language">Language</label><select class="select" id="backend-language" title="The conversation language. Auto answers in whichever language the person spoke."></select>
+        <label for="backend-voice" id="backend-voice-label">Brain voice</label><select class="select" id="backend-voice" title="The brain's own voice. It wins over the character voice."></select>
+      </div>
+      <div class="srow"><span class="grow" id="el-label">ElevenLabs v4 voice</span><button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="el-label" id="backend-el" title="Speak with an ElevenLabs v4 voice instead of the brain's own. The brain still thinks."><span></span></button></div>
+      <div class="frow" id="el-voice-row" hidden><label for="backend-el-voice">EL voice</label><select class="select" id="backend-el-voice" title="ElevenLabs voice. The first one in the account if none is chosen."></select></div>
+      <div id="el-warning" hidden></div>
+      <div class="srow"><span class="grow" id="vision-label">Camera vision</span><button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="vision-label" id="backend-vision" title="Let the robot see through its head camera and talk about what it sees. One frame a second, kept in memory only."><span></span></button></div>
+      <p class="sub" id="vision-note" style="margin-top: -6px;" hidden><i data-ic="camera" data-s="14"></i><span></span></p>
+      <p class="sub" id="backend-msg" aria-live="polite"></p>
+    </section>
+
+    <section class="pnl talk-needs" aria-labelledby="char-title">
+      <div class="pnlh"><h2 id="char-title" style="flex: 1 1 auto;">Character</h2>
+        <button class="switch" type="button" role="switch" aria-checked="false" aria-label="Character on" id="persona-toggle" title="Off is the base persona. Off keeps your text; Clear wipes it."><span></span></button></div>
+      <p class="sub" id="persona-summary" style="font-size: 14px;">Base persona</p>
+      <div id="persona-panel" class="talk-gate">
+        <div class="frow"><label for="persona-preset">Start from</label><select class="select" id="persona-preset" title="A ready-made character. Picking one saves it at once and switches the character on."></select></div>
+        <textarea class="ta" rows="4" id="persona-text" dir="auto" aria-label="Who should this Reachy be?" placeholder="e.g. You are a cowboy from the wild west…" title="Layered on top of the base persona, never replacing it. Up to 1500 characters."></textarea>
+        <div style="display: flex; align-items: center; gap: 8px;"><span class="sub" id="persona-hint"></span><span class="cnt" id="persona-count" style="margin-left: auto;"></span></div>
+        <div class="frow"><label for="persona-voice">Voice</label><select class="select" id="persona-voice" title="The character's own voice. Used while Brain voice is Default. Saved with Save."></select></div>
+        <p class="sub" style="margin-top: -6px;">Used while Brain voice is Default. Saved with Save.</p>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button class="btn btn-dark" type="button" id="persona-save" style="min-height: 36px; font-size: 14px;" title="Save the text and the voice, and switch the character on.">Save</button>
+          <button class="btn btn-ghost" type="button" id="persona-reset" style="min-height: 36px; font-size: 14px;" title="Clear the text and go back to the base persona">Clear</button>
+          <span class="sub" id="persona-msg" aria-live="polite"></span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="pnl talk-mid" aria-labelledby="conv-title" style="min-height: 0;">
+    <div class="pnlh" style="gap: 12px;">
+      <h2 id="conv-title">Conversation</h2><span class="mono" id="conv-id" title="Conversation id (also its log folder on the robot)">—</span>
+      <span class="spacer"></span>
+      <span class="badge" title="Turn count">Turn <b id="conv-turns">0</b></span>
+      <span class="badge" title="How long this turn has run"><i data-ic="clock" data-s="14"></i>This turn <b id="turn-duration">0:00</b></span>
+    </div>
+    <div class="chat" id="chat" role="log" aria-live="polite" aria-label="Conversation"></div>
+    <div id="talk-ended"></div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button class="btn btn-primary" type="button" id="action-btn" style="min-height: 48px; padding: 0 22px;" disabled><i data-ic="play"></i><span>Start conversation</span></button>
+      <span class="sub" id="end-hint">The robot speaks first. The person ends it by saying "goodbye" or "להתראות".</span>
+    </div>
+  </section>
+
+  <section class="pnl talk-right" aria-labelledby="log-title" style="min-height: 0;">
+    <div class="pnlh"><h2 id="log-title" style="flex: 1 1 auto;">Event log</h2><span class="sub" id="copy-logs-status" aria-live="polite"></span>
+      <button class="btn btn-ghost" type="button" id="copy-logs-btn" style="min-height: 28px; padding: 0 8px; font-size: 13px;" title="Copy every line shown here."><i data-ic="copy" data-s="16"></i>Copy logs</button></div>
+    <div class="log" id="log" role="log" aria-label="Event log"></div>
+  </section>
+</main>
+
+<!-- ================================================================= Group -->
+<main class="view ra-main" id="view-group" hidden>
+  <section class="stage" id="stage" data-phase="idle" aria-label="Status">
+    <div>
+      <div class="phase idle" id="phase"><span class="pdot"></span><span id="phase-label">Not running</span></div>
+      <p class="big" id="status-line" role="status" aria-live="polite">Not running</p>
+      <p class="det" id="status-detail" dir="auto"></p>
+    </div>
+    <div>
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span class="timer" id="timer-wrap" title="Time so far / when the conversation ends. At the end every robot says a closing line."><span id="timer">0:00</span> / <span id="timer-total">5:00</span></span>
+        <button class="btn btn-quiet" type="button" id="more-time" style="min-height: 30px; font-size: 13px; padding: 0 10px;" disabled title="Add one minute to this conversation while it runs; press again for more. The saved Minutes setting does not change.">+1 min</button>
+      </div>
+      <div class="bar" id="timer-bar"><span id="timer-fill" style="width: 0%;"></span></div>
+    </div>
+    <div class="modes2" id="modes">
+      <button class="mbtn talk" type="button" id="talk-one" hidden title="This Reachy's own app: one robot talking with the people. It opens in the Talk tab.">Talk<small>one robot, its own app</small></button>
+      <button class="mbtn grp mode-button" type="button" id="start-group" data-mode="group" disabled title="The robots debate the topic with each other, and anyone in the room can join in at any time. Talking over a robot cuts it off. While another mode runs, this switches at once.">Group talk<small>robots + people</small></button>
+      <button class="mbtn int mode-button" type="button" id="start-interrupt" data-mode="interrupt" disabled title="A person talks about the topic and the robots cut in: they argue, cheer, mock or correct. How often each one cuts in is its Interrupting level (0-5) on its card.">Interrupt<small>they cut you off</small></button>
+      <button class="mbtn free mode-button" type="button" id="start-free" data-mode="free" disabled title="No topic and no sides: the robots chat freely with the people about anything, follow whatever the room brings up and start fun subjects of their own.">Free talk<small>chat about anything</small></button>
+      <button class="btn btn-primary" type="button" id="get-ready" style="min-height: 52px;" disabled title="Before the audience arrives: connect the robots, check every service with a real request and prepare the first line of each mode, so a mode button speaks at once.">Get ready</button>
+      <button class="btn btn-stop" type="button" id="stop" style="min-height: 52px;" hidden disabled><i data-ic="stop"></i><span>Stop</span></button>
+      <button class="btn btn-ghost" type="button" id="disconnect" style="min-height: 52px;" disabled title="Release the robots. Needed only to change the seats: order, Included, Listens, adding or removing a robot."><i data-ic="unlink"></i>Disconnect</button>
+    </div>
+    <div class="substrip">
+      <span id="mic-state" role="status" title="Who hears the people right now. With the DJI mic plugged into this laptop it is the DJI; if it goes quiet or is unplugged, the robots' own mics take over by themselves."><i data-ic="mic" data-s="16"></i><span>Mic: checking</span></span>
+      <button class="btn btn-ghost" type="button" id="mic-switch" hidden style="min-height: 30px; font-size: 13px; padding: 0 10px;" title="Switch at once, also mid-conversation, between the DJI mic and the robots' own microphones.">Use robots' mics</button>
+      <span class="hint" id="start-hint"></span>
+      <span class="spacer"></span>
+      <button class="chk" type="button" id="checks-pill" hidden aria-expanded="false" aria-controls="ready-checks" title="Every service the conversation needs (writers, voices, speech to text), checked with a real request. Click to see each one.">checks</button>
+    </div>
+    <div class="chips2" id="ready-checks" hidden aria-label="Service checks"></div>
+  </section>
+
+  <div class="g-cols">
+    <!-- What the whole conversation shares. -->
+    <section class="pnl g-session" id="g-session" style="gap: 10px;" aria-labelledby="session-title">
+      <div class="pnlh"><h2 id="session-title" style="flex: 1 1 auto;">This conversation</h2><span class="sub only-live">Change any time</span></div>
+      <div title="What the robots debate. Each robot's side is in its Personality. Empty: they pick something themselves. Free talk has no topic."><p class="fl2" style="margin-bottom: 6px;"><label for="topic">Topic</label> <span class="used"><span>Group</span><span>Interrupt</span></span></p>
+        <textarea class="ta" id="topic" rows="2" maxlength="500" dir="auto" placeholder="What they talk about (empty: they choose)"></textarea></div>
+      <div class="frow">
+        <label for="language" title="Auto: the language the people spoke last (Hebrew or English). Hebrew or English: always that language.">Language</label><select class="select" id="language"></select>
+        <label for="minutes" title="How long a conversation lasts, 0.5 to 60 minutes. At the end every robot says a closing line. While it runs, +1 min adds time.">Minutes</label><input class="input" id="minutes" type="number" min="0.5" max="60" step="0.5">
+      </div>
+      <div class="srow"><span class="grow" id="lab-intro-label" title="Group talk starts with every robot saying one line about the lab (from Pepper's lab facts); the first robot hands over to the topic.">Lab intro <span class="used"><span>Group only</span></span></span><button class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="lab-intro-label" id="lab-intro"><span></span></button></div>
+      <p class="sub" id="voice-note" title="ElevenLabs credits left. Robots on Auto use OpenAI when they run low."></p>
+      <div class="fold">
+        <div class="pnlh"><h3 style="flex: 1 1 auto;" id="room-title">Room and network</h3><button class="fold-btn" type="button" id="room-fold" aria-expanded="true" aria-controls="room-body" aria-labelledby="room-title"><i data-ic="chev" data-s="16"></i></button></div>
+        <p class="sub" id="room-live-note" hidden>Gap, voice threshold, slow network and heads change live. Audience mic and Simulate wait until Stop.</p>
+        <div id="room-body" style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="frow">
+            <label for="listen-gap" title="Silence after a robot line before the next robot speaks, 0.2 to 3 seconds. Longer leaves the people more room to jump in.">Gap</label><div class="rng"><input class="input" id="listen-gap" type="number" min="0.2" max="3" step="0.1"> s</div>
+            <label for="voice-min" title="On the mic-meter scale. A voice quieter than this at every robot does not take the floor. 0 = off.">Voice threshold</label><input class="input" id="voice-min" type="number" min="0" max="0.9" step="0.05">
+            <label for="barge-in" title="How easily a person talking over a robot cuts it off. Off: the people are heard only in the pauses. Careful: only a clearly louder voice cuts in. Normal: the default. Eager: cuts in easily, also on room noise.">People cut in</label>
+            <select class="select" id="barge-in"><option value="off">Off (only in the gaps)</option><option value="careful">Careful</option><option value="normal">Normal</option><option value="eager">Eager</option></select>
+            <label for="people-mic" title="Where the audience is heard. Auto: the DJI mic plugged into this laptop, else the robots' own mics. A change reconnects the robots at the next start.">Audience mic</label>
+            <div class="mic-row"><select class="select" id="people-mic"></select><span class="meter level" data-key="mic:people" title="Audience mic level"><span style="width: 0%;"></span></span></div>
+          </div>
+          <div class="srow"><span class="grow" id="slow-label" title="Voices come compressed (OpenAI and ElevenLabs only): on a phone hotspot raw voice audio arrives slower than it plays.">Slow network</span><button class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="slow-label" id="slow-network"><span></span></button></div>
+          <div class="srow"><span class="grow" id="mirror-label" title="Turn this on if the robots look away from whoever is speaking.">Heads turn the other way</span><button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="mirror-label" id="heads-mirror"><span></span></button></div>
+          <div class="srow"><span class="grow" id="simulate-label" title="No robots needed: every robot talks through this laptop's speaker and listens through its mic. For rehearsing.">Simulate on this laptop</span><button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="simulate-label" id="simulate"><span></span></button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- The robots, left to right as the people see the table. -->
+    <section class="g-robots" id="g-robots" aria-labelledby="robots-title">
+      <div class="pnlh" style="gap: 10px;">
+        <h2 id="robots-title">Robots</h2><span class="sub" id="robots-sub" style="flex: 1 1 200px; min-width: 0;">Left to right, as the people see them. Everything here changes at once, also mid-conversation.</span>
+        <span class="save" id="save-state" role="status" style="padding: 0;"></span>
+        <span class="sub" id="groups-summary"></span>
+        <button class="btn btn-quiet btn-sm" type="button" id="choir-button" style="min-height: 32px; font-size: 13px;" aria-pressed="false" title="Choir: every robot says the same line at the same moment and moves the same way, as one voice; robots you tick later join it too. Press again to make them individuals. Used from the next Start."><i data-ic="users" data-s="14"></i><span>Choir</span></button>
+        <button class="btn btn-quiet btn-sm" type="button" id="groups-button" style="min-height: 32px; font-size: 13px;" title="Put robots in groups: a group can talk as one voice, move as one, or both. Used from the next Start.">Groups…</button>
+      </div>
+      <div class="seats" id="seats"></div>
+      <div class="pnl" id="seats-empty" hidden><p class="muted" style="margin: 0; text-align: center;">No Reachys yet.<br><a href="/">Connect them on Robots</a> and they show up here.</p></div>
+      <p class="sub only-setup"><i data-ic="info" data-s="14"></i>Keys <span class="kbd">0</span> to <span class="kbd">5</span> set every robot's interrupting at once.</p>
+    </section>
+
+    <!-- The conversation itself, newest at the bottom, and the steer box. -->
+    <section class="pnl g-convo" id="g-convo" style="min-height: 0;" aria-labelledby="transcript-title">
+      <div class="pnlh"><h2 id="transcript-title">Conversation <span id="turn-count"></span></h2><span class="spacer"></span><span class="sub only-live">Seat colours match the cards</span></div>
+      <div class="tr" id="transcript" role="log" aria-live="polite" aria-label="Transcript"></div>
+      <p class="muted empty" id="transcript-empty">Nothing said yet.<br>Press a mode when everyone is seated.</p>
+      <button class="jump" type="button" id="jump" hidden title="Scroll down to the newest line."><i data-ic="down" data-s="14"></i><span>Jump to latest</span></button>
+      <div class="plive" id="people-live" hidden aria-live="polite" dir="auto"><b>People, live</b><span id="people-live-text"></span><span class="cur" aria-hidden="true">▌</span></div>
+      <form class="steer" id="nudge-form" autocomplete="off">
+        <input class="input" id="nudge-text" type="text" dir="auto" maxlength="300" aria-label="Steer" placeholder="Steer: e.g. make them argue about it, or ask the people a question" title="Tell the robots what to do next, for example a new angle or a question for the room. The next line follows it, then the debate goes on. It is used once the conversation runs.">
+        <button class="btn btn-dark btn-sm" type="submit" id="nudge-send" title="Send it to the robots now (Enter works too)."><i data-ic="send" data-s="16"></i>Send</button>
+      </form>
+      <p class="sub nudge-last" id="nudge-last">Enter sends · used for the next line</p>
+    </section>
+
+    <section class="pnl g-shortcuts" id="g-shortcuts" style="gap: 8px;" aria-labelledby="shortcuts-title">
+      <div class="pnlh"><h2 id="shortcuts-title">Shortcuts</h2></div>
+      <p class="sub"><span class="kbd">0</span>…<span class="kbd">5</span> every robot's interrupting · <span class="kbd">Enter</span> sends a steer</p>
+    </section>
+  </div>
+</main>
+
+<!-- ========================================================== Wizard of Oz -->
+<main class="view woz-main dark" id="view-woz" hidden>
+  <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0;">
+    <section class="pnl" style="gap: 10px;" aria-label="Now playing">
+      <div class="pnlh" style="gap: 10px;">
+        <img src="/photos/robot-reachy-wireless.png" alt="" style="width: 28px; height: 28px; border-radius: 7px;"><b id="woz-robot">Reachy</b>
+        <span id="woz-state"></span>
+        <span class="pill p-warn" id="conv-warning" hidden style="height: 24px;" title="Firing an audio cue cuts into the live conversation (allowed on purpose, e.g. save lines).">Audio cues cut into the conversation</span>
+        <span class="spacer"></span>
+        <button class="btn btn-sm btn-dk" type="button" id="reload-btn" title="Read the cue script again after a hand edit, without a restart."><i data-ic="refresh" data-s="16"></i>Reload script</button>
+        <button class="btn btn-sm btn-dk" type="button" id="rebuild-btn" title="Re-record any line whose text changed"><i data-ic="refresh" data-s="16"></i><span>Rebuild audio</span></button>
+        <button class="btn woz-stop" type="button" id="stop-btn" title="Silences Reachy at once and sends it back to breathing. Safe any time."><i data-ic="stop"></i>STOP <span class="dk" style="border-color: rgba(255,255,255,.5); color: #FFFFFF;">Esc</span></button>
+      </div>
+      <div class="now">
+        <span style="font-size: 12px; font-weight: 700; letter-spacing: .06em; color: #A79F95;">NOW</span>
+        <span style="font-size: 18px; font-weight: 700;" class="now-label" id="np-label" aria-live="polite">—</span>
+        <span style="font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: #7DD3FC;" id="np-countdown"></span>
+        <div class="nowbar"><span id="np-bar" style="width: 0%;"></span></div>
+        <p style="grid-column: 1 / -1; margin: 0; font-size: 18px; line-height: 26px; min-height: 26px;" id="np-text" dir="auto"></p>
+      </div>
+      <p class="sub"><span class="dk">Space</span> fires the outlined cue and moves on · <span class="dk">↑</span> <span class="dk">↓</span> move without firing · <span class="dk">Esc</span> stop · letter keys fire directly · <span class="dk">S</span> <span class="dk">D</span> <span class="dk">F</span> quick saves</p>
+    </section>
+    <div id="woz-gate" hidden></div>
+    <div class="board" id="board" style="display: flex; flex-direction: column; gap: 12px;"></div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <section class="pnl" aria-labelledby="say-title">
+      <div class="pnlh"><h2 id="say-title">Say anything</h2></div>
+      <form class="steer" id="say-form" autocomplete="off">
+        <input class="input say" id="say-text" type="text" dir="auto" maxlength="600" placeholder="Type a line, press Enter" aria-label="Say" title="Reachy records the line while you type, so Say is instant. Esc stops it.">
+        <button class="btn btn-primary btn-sm" type="submit" id="say-btn">Say</button>
+      </form>
+      <p class="say-status" id="say-status" aria-live="polite"></p>
+      <p class="sub">Reachy says it in its own voice, then goes back to breathing.</p>
+      <div class="pnlh" style="margin-top: 6px;"><h3 style="flex: 1 1 auto;">Quick saves</h3><button class="linkbtn" type="button" id="quick-edit" style="color: #A79F95; font-size: 12.5px;">Edit</button></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;" id="quick-list"></div>
+    </section>
+    <section class="pnl" style="flex: 1 1 auto;" aria-labelledby="said-title">
+      <div class="pnlh"><h2 id="said-title">Said</h2></div>
+      <ul class="hist" id="said-list"></ul>
+      <p class="sub" id="said-empty">Nothing said yet.</p>
+    </section>
+  </div>
+</main>
+
+</div>
+
+<!-- ============================================================== dialogs -->
+<div class="modal-wrap" id="groups-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="groups-title" style="width: 700px;">
+    <div style="display: flex; align-items: center;"><h2 id="groups-title" style="flex: 1 1 auto;">Groups</h2><button class="btn btn-ghost btn-sm btn-icon" type="button" id="groups-close" aria-label="Close"><i data-ic="x"></i></button></div>
+    <p class="sub" style="font-size: 14px; line-height: 20px;">Talk together: one voice, the first robot's voice and settings, under the group's name. Move together: the same gestures. Used from the next Start.</p>
+    <div id="groups-list" style="display: flex; flex-direction: column; gap: 12px;"></div>
+    <p class="muted" id="groups-empty" style="margin: 0;">No groups: every robot is on its own.</p>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <button class="btn btn-quiet" type="button" id="groups-add" style="min-height: 32px; font-size: 13px; padding: 0 10px;"><i data-ic="plus"></i>Add group</button>
+      <button class="btn btn-quiet" type="button" id="groups-choir" style="min-height: 32px; font-size: 13px; padding: 0 10px;"><i data-ic="users"></i>Everyone: one Choir</button>
+      <button class="btn btn-ghost" type="button" id="groups-clear" style="min-height: 32px; font-size: 13px; padding: 0 10px;">No groups</button>
+      <span class="spacer"></span>
+      <button class="btn btn-dark" type="button" id="groups-done" style="min-height: 36px;">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="copy-modal" hidden>
+  <form class="modal" id="copy-form" role="dialog" aria-modal="true" aria-labelledby="copy-title" style="width: 520px;">
+    <h2 id="copy-title">Copy settings</h2>
+    <fieldset><legend>To</legend><div class="checks3" style="gap: 18px;" id="copy-targets"></div></fieldset>
+    <fieldset><legend>What</legend>
+      <div class="copy-what">
+        <label class="check"><input type="checkbox" value="interrupt_level" checked>Interrupting (0-5)</label>
+        <label class="check"><input type="checkbox" value="voice_provider" checked>Voice service</label>
+        <label class="check"><input type="checkbox" value="voices">The voice itself</label>
+        <label class="check"><input type="checkbox" value="writer" checked>Writer</label>
+        <label class="check"><input type="checkbox" value="gestures" checked>Gestures</label>
+        <label class="check"><input type="checkbox" value="vision" checked>Camera</label>
+        <label class="check"><input type="checkbox" value="loudness" checked>Volume</label>
+        <label class="check"><input type="checkbox" value="persona">Personality</label>
+      </div></fieldset>
+    <p class="sub">"The voice itself" copies the saved voice for every service.</p>
+    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+      <button class="btn btn-ghost" type="button" id="copy-cancel" style="min-height: 38px;">Cancel</button>
+      <button class="btn btn-dark" type="submit" id="copy-go" style="min-height: 38px;"><i data-ic="copy"></i>Copy</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-wrap" id="ed-modal" hidden>
+  <div class="modal editor" role="dialog" aria-modal="true" aria-labelledby="ed-title" style="width: 720px; gap: 12px;">
+    <div class="pnlh"><h2 id="ed-title" style="flex: 1 1 auto; font-size: 17px; text-transform: none; letter-spacing: 0; color: #1C1917;">Edit</h2>
+      <button class="btn btn-stop" type="button" id="ed-delete" style="min-height: 32px; font-size: 13px; padding: 0 10px;"><i data-ic="trash"></i>Delete</button></div>
+    <div class="field"><label for="ed-label">Name, on the card</label><input class="input" type="text" id="ed-label" dir="auto"></div>
+    <div class="field"><label for="ed-text">What Reachy says <span class="muted">(empty: motion only)</span></label><textarea class="ta" rows="3" id="ed-text" dir="auto" maxlength="600"></textarea><span class="sub">Changing it re-records the line. Up to 600 characters.</span></div>
+    <div style="display: grid; grid-template-columns: 90px 1fr 1fr; gap: 10px;">
+      <div class="field"><label for="ed-hotkey">Hotkey</label><input class="input" type="text" id="ed-hotkey" maxlength="1" autocomplete="off"></div>
+      <div class="field"><label for="ed-motion-type">Motion</label><select class="select" id="ed-motion-type"><option value="">none</option><option value="emotion">emotion</option><option value="dance">dance</option><option value="head">head</option></select></div>
+      <div class="field"><label for="ed-motion-name">Which</label><select class="select" id="ed-motion-name"></select></div>
+    </div>
+    <div class="field"><label for="ed-boss">Cue line for the presenter <span class="muted">(printed, not spoken)</span></label><input class="input" type="text" id="ed-boss" dir="auto"></div>
+    <div id="ed-confirm" hidden></div>
+    <div id="ed-error"></div>
+    <div style="display: flex; gap: 8px; align-items: center;"><span class="sub">Ctrl+Enter saves · Esc closes</span><span class="spacer"></span>
+      <button class="btn btn-ghost" type="button" id="ed-cancel" style="min-height: 38px;">Cancel</button>
+      <button class="btn btn-dark" type="button" id="ed-save" style="min-height: 38px;">Save</button></div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="quick-modal" hidden>
+  <form class="modal" id="quick-form" role="dialog" aria-modal="true" aria-labelledby="quick-title" style="width: 560px;">
+    <h2 id="quick-title">Quick saves</h2>
+    <p class="sub">The lines on S, D and F. Saved on this laptop.</p>
+    <div class="field"><label for="quick-0">S</label><input class="input" id="quick-0" type="text" dir="auto" maxlength="600"></div>
+    <div class="field"><label for="quick-1">D</label><input class="input" id="quick-1" type="text" dir="auto" maxlength="600"></div>
+    <div class="field"><label for="quick-2">F</label><input class="input" id="quick-2" type="text" dir="auto" maxlength="600"></div>
+    <div id="quick-error"></div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+      <button class="btn btn-ghost" type="button" id="quick-cancel" style="min-height: 38px;">Cancel</button>
+      <button class="btn btn-dark" type="submit" style="min-height: 38px;">Save</button>
+    </div>
+  </form>
+</div>
+
+<!-- Robot details (Talk): facts, Disconnect, Copy details, Add WiFi for staff. -->
+<div class="drawer-wrap" id="details-drawer" hidden>
+  <div class="scrim" data-close="details-drawer"></div>
+  <aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="details-title">
+    <div class="sheet-head"><img class="tile" src="/photos/robot-reachy-wireless.png" alt=""><div style="flex: 1 1 auto;"><h2 class="h2" id="details-title">Robot</h2><p class="sub" id="details-sub"></p></div>
+      <button class="btn btn-ghost btn-sm btn-icon" type="button" data-close="details-drawer" aria-label="Close"><i data-ic="x"></i></button></div>
+    <div class="sheet-body">
+      <section class="sec"><p class="lbl">Facts</p><dl class="facts" id="details-facts"></dl>
+        <div style="display: flex; gap: 8px;"><button class="btn btn-quiet btn-sm" type="button" id="details-copy"><i data-ic="copy" data-s="16"></i>Copy details</button>
+          <button class="btn btn-quiet btn-sm" type="button" id="details-disconnect"><i data-ic="unlink" data-s="16"></i>Disconnect</button></div></section>
+      <section class="sec" id="wifi-sec" hidden>
+        <div class="sechd"><p class="lbl" style="flex: 1 1 auto;">Add WiFi</p><span class="tag tag-dark">Staff</span></div>
+        <p class="sub">Saves a hotspot on the robot without switching to it. It moves over once its current WiFi is gone.</p>
+        <div class="field"><label for="wifi-ssid">Hotspot name</label><input class="input" type="text" id="wifi-ssid" maxlength="32" autocomplete="off"></div>
+        <div class="field"><label for="wifi-pass">Password</label><input class="input" type="password" id="wifi-pass" maxlength="63" autocomplete="new-password"></div>
+        <div style="display: flex;"><button class="btn btn-dark btn-sm" type="button" id="wifi-save">Save on robot</button></div>
+        <div id="wifi-msg" aria-live="polite"></div>
+        <p class="sub" id="wifi-known" style="font-size: 13.5px;"></p>
+      </section>
+    </div>
+  </aside>
+</div>
+
+<div class="drawer-wrap" id="logs-drawer" hidden>
+  <div class="scrim" data-close="logs-drawer"></div>
+  <aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="logs-title">
+    <div class="sheet-head"><h2 class="h2" id="logs-title" style="flex: 1 1 auto;">Logs</h2>
+      <button class="btn btn-ghost btn-sm" type="button" id="logs-copy"><i data-ic="copy" data-s="16"></i>Copy all</button>
+      <button class="btn btn-ghost btn-sm btn-icon" type="button" data-close="logs-drawer" aria-label="Close"><i data-ic="x"></i></button></div>
+    <div class="sheet-body"><div class="logs-list" id="logs-list" role="log" aria-label="Robot Hub log"></div></div>
+  </aside>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- One card per robot, cloned per seat. -->
+<template id="seat-template">
+  <article class="seat">
+    <div class="seathd"><span class="sn">1</span><input class="lab seat-character" type="text" dir="auto" maxlength="30" placeholder="Reachy Mini 1" aria-label="Label" title="This robot's label in the transcript and for the writer. It is never said aloud. Renaming it changes its default voice.">
+      <button class="ib seat-move" type="button" data-move="-1" aria-label="Move left" title="Move one seat to the left"><i data-ic="left" data-s="16"></i></button>
+      <button class="ib seat-move" type="button" data-move="1" aria-label="Move right" title="Move one seat to the right"><i data-ic="right" data-s="16"></i></button></div>
+    <p class="sub warnlab" hidden>Another robot has this label.</p>
+    <div class="seathd" style="gap: 6px; flex-wrap: wrap;"><span class="rtag seat-robot" title="The robot's own name in the hub, whatever its label says."></span><span class="gtag seat-group" hidden></span><span class="seat-state"></span><span class="spacer"></span>
+      <span class="meterwrap"><i data-ic="mic" data-s="14"></i><span class="meter level"><span style="width: 0%;"></span></span></span></div>
+    <div class="checks3 only-full">
+      <label title="Takes part in the conversation. Untick to leave this robot out; it stays connected to the hub. Fixed until Disconnect."><input type="checkbox" class="seat-included">Included</label>
+      <label title="Its microphone hears the people when the DJI mic is not in use. Fixed until Disconnect."><input type="checkbox" class="seat-listen">Listens</label>
+      <label title="It can look through its camera when someone asks what it sees. It never comments on the room unasked."><input type="checkbox" class="seat-vision">Camera</label>
+    </div>
+    <p class="fl2 only-full persona-label">Personality <span class="used"><span>Group</span><span>Interrupt</span></span></p>
+    <textarea class="ta seat-persona only-full" rows="3" maxlength="800" dir="auto" aria-label="Personality" placeholder="This robot's position on the topic and how it argues." title="This robot's position on the topic and how it argues. The writer follows it on every line; a change applies from the next line. Free talk uses its own personalities."></textarea>
+    <p class="fl2 only-full">Voice</p>
+    <div style="display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 6px;">
+      <select class="select seat-provider" aria-label="Voice service" title="Which service speaks for this robot. ElevenLabs: the most natural voices. OpenAI: good voices, needs OpenAI credits. OpenRouter: OpenAI's voices through OpenRouter. Gemini: works with the Gemini key, small daily cap. Auto: ElevenLabs while it has credits, else OpenAI. The voice never changes mid-line."></select>
+      <select class="select seat-voice" aria-label="Voice" title="The voice itself, from that service. Only male voices are listed. Give each robot a different one."></select>
+    </div>
+    <p class="fl2 only-full">Writer</p>
+    <select class="select seat-writer" aria-label="Writer" title="The AI model that writes this robot's lines. Gemini 3.5 Flash: smartest, about 2.5 s. gpt-oss-120b: fastest, about 1.2 s. GPT-5.4 mini: about 2.8 s. GPT-4.1 mini: needs OpenAI credits. Flash-Lite: fast, with the Gemini key. The first robot's writer also writes for the table."></select>
+    <div class="lvrow">
+      <div class="lv"><p class="fl2" style="margin: 0;">Interrupting <span class="used"><span>Interrupt only</span></span></p>
+        <div class="seg lvl level-picker" role="radiogroup" aria-label="Interrupting, 0 to 5">
+          <button type="button" role="radio" data-level="0" title="Never: waits until the person finishes">0</button><button type="button" role="radio" data-level="1" title="Rarely, after the person talks a while">1</button><button type="button" role="radio" data-level="2" title="Now and then">2</button><button type="button" role="radio" data-level="3" title="Regularly">3</button><button type="button" role="radio" data-level="4" title="Often, and piles on">4</button><button type="button" role="radio" data-level="5" title="Every time the person talks">5</button>
+        </div></div>
+      <div class="gest only-full"><p class="fl2" style="margin-bottom: 4px;">Gestures</p>
+        <div class="seg" role="radiogroup" aria-label="Gestures"><button type="button" role="radio" data-gestures="lively" title="Moves its head and antennas on almost every line, and reacts while the others talk.">Lively</button><button type="button" role="radio" data-gestures="calm" title="Moves on about half of its lines and rarely reacts to the others.">Calm</button></div></div>
+      <div class="vol" title="100 = natural level; the robot's speaker is already at its maximum, above 100 the hub boosts the audio"><p class="fl2" style="margin-bottom: 4px;">Volume <b class="volume-value" style="color: #1C1917;">150%</b></p>
+        <input type="range" class="seat-loudness" min="0" max="250" step="5" aria-label="Volume"></div>
+      <b class="volnum only-compact">150%</b>
+    </div>
+    <p class="vline"><span class="card-now"></span><span class="only-compact"> · <button class="linkbtn more-link" type="button">Personality, camera, more</button></span><span class="only-full less-wrap" hidden> · <button class="linkbtn less-link" type="button">Less</button></span></p>
+    <div class="copyrow only-full"><button class="btn btn-ghost btn-sm copy-button" type="button" style="min-height: 30px; font-size: 13px; padding: 0 8px;" title="Copy some of this robot's settings (voice, writer, gestures, volume and more) to other robots. You choose which."><i data-ic="copy" data-s="14"></i>Copy to others</button><span class="spacer"></span>
+      <button class="ib seat-add" type="button" aria-label="Add a laptop robot here"><i data-ic="plus" data-s="16"></i></button><button class="ib seat-remove" type="button" aria-label="Take off the table"><i data-ic="x" data-s="16"></i></button></div>
+  </article>
+</template>
+
+<noscript><p style="padding: 24px;">Enable JavaScript to see the Reachy app.</p></noscript>
+<script src="/reachy-core.js?v=2026-11-05a"></script>
+<script src="/reachy-group.js?v=2026-11-05a"></script>
+<script src="/reachy-talk.js?v=2026-11-05a"></script>
+<script src="/reachy-woz.js?v=2026-11-05a"></script>
+<script src="/reachy.js?v=2026-11-05a"></script>
+</body>
+</html>

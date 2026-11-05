@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Key and setup states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}
+.app{min-height:800px;background:#EFEBE5;font-family:Inter,system-ui,"Segoe UI",sans-serif;color:#1C1917;font-size:15px;line-height:22px;box-sizing:border-box;padding:32px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;align-content:start}
+.cap{margin:0 0 10px;font-size:13px;font-weight:600;color:#6B635A;text-transform:uppercase;letter-spacing:.05em}
+.card{background:#FFFFFF;border:1px solid #E8E3DC;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 24px -12px rgba(28,25,23,.18)}
+.input{height:44px;box-sizing:border-box;border:1px solid #8C8378;border-radius:10px;padding:0 12px;font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:13px;color:#1C1917;display:flex;align-items:center}
+.res{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;font-size:14px;line-height:20px}
+.warn{background:#FFF1D6;color:#8A3B00}
+.bad{background:#FEF2F2;color:#B91C1C}
+.info{background:#F4F1EC;color:#6B635A}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{height:32px;padding:0 12px;border-radius:999px;border:1px solid #E8E3DC;background:#FFFFFF;font:inherit;font-size:13px;font-weight:500;color:#1C1917;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 14px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;align-self:flex-start}
+.btn-primary{background:#FD9903;color:#1C1917}
+.btn-quiet{background:#F4F1EC;color:#1C1917}
+.btn-ghost{background:transparent;color:#1C1917}
+.bar{height:8px;border-radius:999px;background:#F4F1EC;overflow:hidden}
+.bar span{display:block;height:100%;background:#FD9903;border-radius:999px}
+.prog{display:flex;justify-content:space-between;font-size:13px;color:#6B635A;font-variant-numeric:tabular-nums}
+.t{margin:0;font-weight:600}
+.icon{width:18px;height:18px;flex-shrink:0;margin-top:1px}
+.span2{grid-column:span 2}
+</style>
+</helmet>
+<div class="app">
+  <section>
+    <p class="cap">Key: no credit</p>
+    <div class="card">
+      <div class="input">sk-proj-...a91f</div>
+      <div class="res warn" role="alert"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span><b>Works, but no credit left.</b> Ask the lab for a top-up.</span></div>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Key: offline</p>
+    <div class="card">
+      <div class="input">AIzaSy...Qx2c</div>
+      <div class="res info" role="status"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg><span><b>Saved.</b> No internet, so it's checked later.</span></div>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Key: unknown kind</p>
+    <div class="card">
+      <div class="input">x7Gk2...9pLm</div>
+      <p class="t" style="font-size: 14px;">Which service is it from?</p>
+      <div class="chips"><button class="chip" type="button">OpenAI</button><button class="chip" type="button">Gemini</button><button class="chip" type="button">OpenRouter</button><button class="chip" type="button">ElevenLabs</button></div>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Key: only a voice key</p>
+    <div class="card">
+      <div class="input">sk_3f...e01b</div>
+      <div class="res warn" role="status"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span><b>Voices only.</b> Add an OpenAI, Gemini or OpenRouter key to talk.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Key: already added</p>
+    <div class="card">
+      <div class="input">AIzaSy...Qx2c</div>
+      <div class="res warn" role="alert"><span><b>Already added</b> as "Lab Gemini".</span></div>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Key: not a key</p>
+    <div class="card">
+      <div class="input">hello</div>
+      <div class="res warn" role="alert"><span><b>That doesn't look like a key.</b> Paste the whole key.</span></div>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Setup: downloading</p>
+    <div class="card">
+      <p class="t">Pepper and NAO kit</p>
+      <div class="bar"><span style="width: 41%;"></span></div>
+      <div class="prog"><span>Downloading, 147 of 358 MB</span><span>41%</span></div>
+      <button class="btn btn-ghost" type="button">Cancel</button>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Setup: download broke</p>
+    <div class="card">
+      <p class="t">Pepper and NAO kit</p>
+      <div class="res bad" role="alert"><span><b>Download stopped.</b> Check the internet.</span></div>
+      <button class="btn btn-primary" type="button">Try again</button>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Setup: wrong zip</p>
+    <div class="card">
+      <p class="t">Pepper and NAO kit</p>
+      <div class="res bad" role="alert"><span><b>That's not the kit.</b> Pick the zip whose name starts with pynaoqi.</span></div>
+      <button class="btn btn-quiet" type="button">Choose again</button>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Setup: disk full</p>
+    <div class="card">
+      <p class="t">Pepper and NAO kit</p>
+      <div class="res bad" role="alert"><span><b>Not enough space.</b> Free 1.5 GB, then try again.</span></div>
+      <button class="btn btn-quiet" type="button">Try again</button>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Setup: verifying</p>
+    <div class="card">
+      <p class="t">Pepper and NAO kit</p>
+      <div class="prog"><span>Checking it works</span><span></span></div>
+      <div class="bar"><span style="width: 100%; background: #D6CFC5;"></span></div>
+    </div>
+  </section>
+  <section>
+    <p class="cap">Setup: Windows asks for permission</p>
+    <div class="card">
+      <p class="t">Allow Pepper</p>
+      <div class="res info" role="status"><span>Click <b>Yes</b> in the Windows window.</span></div>
+    </div>
+  </section>
+  <section class="span2">
+    <p class="cap">Setup: permission refused (no admin)</p>
+    <div class="card">
+      <p class="t">Allow Pepper</p>
+      <div class="res warn" role="alert"><span><b>Windows said no.</b> Pepper can't reach this laptop (port 8782). The lab needs to allow it once.</span></div>
+      <div style="display: flex; gap: 8px;"><button class="btn btn-quiet" type="button">Check again</button><button class="btn btn-ghost" type="button">Save a report for the lab</button></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1020}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

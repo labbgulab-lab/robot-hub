@@ -25,6 +25,10 @@ DISABLED = "DISABLED"   # robot present but a local prerequisite is missing
 
 STATES = (ABSENT, DETECTED, CONNECTING, CONNECTED, RUNNING, DEGRADED, ERROR, DISABLED)
 
+# Below this a robot's battery is "low": the card turns red and the log warns
+# once per drop (BUILD-PLAN contract; STUDENT-APP-PLAN 7b).
+BATTERY_LOW_PCT = 20
+
 
 @dataclass
 class RobotState:
@@ -49,12 +53,38 @@ class RobotState:
     posture_pending: Optional[str] = None
     posture_note: Optional[str] = None
     posture_failed: bool = False
+    # Why the last Connect failed. Sticky until a Connect succeeds, so a failed
+    # Connect reads as "couldn't connect", not "Lost" (that is a real loss).
+    connect_error: Optional[str] = None
+    battery_low: bool = False              # below BATTERY_LOW_PCT
+    charging: Optional[bool] = None        # NAO / Pepper, when the probe can tell
+    # Another laptop launched this robot's app (a marker file on the robot).
+    in_use_by: Optional[str] = None
+    # A setup item this laptop needs first (hub/requirements.py), e.g. "naoqi_kit".
+    needs_setup: Optional[str] = None
+    # Actions only lab staff get (Settings > Staff tools), e.g. ["nao_app"].
+    staff_only_actions: list[str] = field(default_factory=list)
+    # Laptop resources this robot's app holds right now (shown in facts).
+    holds: list[str] = field(default_factory=list)
     last_seen: float = field(default_factory=time.time)
     meta: dict[str, Any] = field(default_factory=dict)
+
+    def facts(self) -> dict[str, Any]:
+        """The robot details panel: {robot_software, mic, holds, seen_ago}."""
+        software = None
+        if self.daemon_version:
+            prefix = {"reachy_wireless": "Daemon", "reachy_lite": "Daemon",
+                      "naoqi": "NAOqi", "pepper": "NAOqi"}.get(self.type_id, "")
+            software = "{} {}".format(prefix, self.daemon_version).strip()
+        return {"robot_software": software, "mic": self.mic,
+                "holds": list(self.holds),
+                "seen_ago": max(0, int(time.time() - self.last_seen))}
 
     def to_event(self) -> dict[str, Any]:
         d = asdict(self)
         d.pop("meta", None)
+        d.pop("holds", None)
+        d["facts"] = self.facts()
         d["type"] = "robot"
         return d
 

@@ -36,7 +36,9 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
+from ..config import custom_data_dir
 from ..supervisor import child_env, get_supervisor, shared_port_allocator
+from ..winproc import hub_python, no_window
 from .base import (AdapterUnavailable, Claim, Found, Health, PostureRefused,
                    RobotAdapter, communicate_or_kill)
 
@@ -84,12 +86,19 @@ SPEAKER_DEPLOY_TIMEOUT_S = 150.0
 SPEAKER_UP_WAIT_S = 60.0
 
 _PATCH_CONFIG = (
-    "import json, sys, yaml\n"
+    "import json, os, sys, yaml\n"
     "src, dst, host, port, ip = sys.argv[1:6]\n"
     "data = yaml.safe_load(open(src, encoding='utf-8')) or {}\n"
     "data.setdefault('server', {})['host'] = host\n"
     "data['server']['port'] = int(port)\n"
     "data.setdefault('nao', {})['ip'] = ip\n"
+    # NAO_LLM resolves these against the config file's own folder; the copy
+    # lives in the hub's data folder, so pin them to the checkout.
+    "root = os.path.dirname(os.path.abspath(src))\n"
+    "lg = data.get('logging') or {}\n"
+    "for k in ('db_path', 'audio_dir'):\n"
+    "    if lg.get(k) and not os.path.isabs(lg[k]):\n"
+    "        lg[k] = os.path.join(root, lg[k])\n"
     "yaml.safe_dump(data, open(dst, 'w', encoding='utf-8'),\n"
     "               sort_keys=False, allow_unicode=True)\n"
     "print(json.dumps([data.get(s, {}).get('api_key_env')\n"
@@ -298,22 +307,29 @@ class NaoqiAdapter(RobotAdapter):
 
     # ------------------------------------------------------- prerequisites
     def _setting_path(self, key: str) -> Optional[Path]:
-        return self.config.path(self.type_id, key) or self.config.path("naoqi", key)
+        path = self.config.path(self.type_id, key) or self.config.path("naoqi", key)
+        if path is None and key in ("python2", "pynaoqi_sdk"):
+            # Blank (the student default): the NAO/Pepper kit from the setup
+            # step (hub/requirements.py), read fresh, so a kit installed a
+            # moment ago works without a restart.
+            from ..requirements import naoqi_kit_paths
+            path = naoqi_kit_paths(None).get(key)
+        return path
 
     def _require_python2(self) -> Path:
         path = self._setting_path("python2")
         if path is None or not path.is_file():
             raise AdapterUnavailable(
-                "NAO needs Python 2.7: install it and set python2 in "
-                "config.toml (NAOqi's SDK has no Python 3 build)")
+                "Pepper or NAO is here. Set up the Pepper and NAO kit first.",
+                requirement="naoqi_kit")
         return path
 
     def _require_sdk(self) -> Path:
         path = self._setting_path("pynaoqi_sdk")
         if path is None or not (path / "lib").is_dir():
             raise AdapterUnavailable(
-                "the pynaoqi 2.8 SDK was not found: download it and set "
-                "pynaoqi_sdk in config.toml to the folder containing lib/")
+                "Pepper or NAO is here. Set up the Pepper and NAO kit first.",
+                requirement="naoqi_kit")
         return path
 
     # ------------------------------------------------------------ identity
@@ -348,11 +364,14 @@ class NaoqiAdapter(RobotAdapter):
             return DEFAULT_BROKER_PORT
 
     def _env(self) -> dict[str, str]:
-        return child_env(
-            overrides={"PYTHONPATH": str(self._sdk / "lib"),
-                       "PYTHONIOENCODING": "utf-8"},
-            prepend_path=[str(self._sdk / "bin")],
-        )
+        overrides = {"PYTHONPATH": str(self._sdk / "lib"),
+                     "PYTHONIOENCODING": "utf-8"}
+        # The kit's own Python 2.7 (bin/python.exe) finds its standard
+        # library only through PYTHONHOME (STUDENT-APP-PLAN 4.3).
+        home = self._sdk / "lib" / "python2.7"
+        if self._python2.parent == self._sdk / "bin" and home.is_dir():
+            overrides["PYTHONHOME"] = str(home)
+        return child_env(overrides=overrides, prepend_path=[str(self._sdk / "bin")])
 
     async def _call(self, command: str, *, retries: int = CALL_RETRIES,
                     timeout: float = CALL_TIMEOUT_S, answer_any: bool = False,
@@ -403,6 +422,7 @@ class NaoqiAdapter(RobotAdapter):
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **no_window(),
         )
         try:
             stdout, stderr = await asyncio.wait_for(
@@ -440,8 +460,12 @@ class NaoqiAdapter(RobotAdapter):
         detail = "broker answering"
         if isinstance(battery, int):
             detail = "broker answering, battery {}%".format(battery)
-        return {"online": True, "degraded": False, "detail": detail,
-                "battery": battery if isinstance(battery, int) else None}
+        health: Health = {"online": True, "degraded": False, "detail": detail,
+                          "battery": battery if isinstance(battery, int) else None}
+        charging = result.get("charging")
+        if isinstance(charging, bool):
+            health["charging"] = charging
+        return health
 
     async def connect(self) -> None:
         self._identity = await self._call("identity")
@@ -470,16 +494,23 @@ class NaoqiAdapter(RobotAdapter):
         }
 
     # ------------------------------------------------------------- WiFi
-    async def join_wifi(self, ssid: str, passphrase: str) -> str:
+    async def join_wifi(self, ssid: str, passphrase: str,
+                        open_network: bool = False) -> str:
         """Teach the robot another hotspot: it joins now and keeps it.
 
         Returns a sentence for the card. The robot leaves this laptop's
         network on success, so its card goes dim until the laptop follows.
+        `open_network`: a WiFi with no password (connman then never asks).
         """
         ssid = (ssid or "").strip()
         if not ssid or len(ssid.encode("utf-8")) > 32:
             raise RuntimeError("a WiFi name has 1 to 32 characters")
-        if not 8 <= len(passphrase or "") <= 63:
+        if open_network:
+            if passphrase:
+                raise RuntimeError("“{}” is an open WiFi: leave the password "
+                                   "empty".format(ssid))
+            passphrase = ""
+        elif not 8 <= len(passphrase or "") <= 63:
             raise RuntimeError("a WiFi password has 8 to 63 characters")
         user = str(self.settings.get("ssh_user") or DEFAULT_NAO_SSH_USER)
         login = str(self.settings.get("ssh_password")
@@ -498,6 +529,23 @@ class NaoqiAdapter(RobotAdapter):
                     "“{}” (check the password)".format(ssid))
         return ("{} joined “{}” and will remember it. Connect this laptop to "
                 "“{}” to see it again.".format(self.display_name, ssid, ssid))
+
+    # ------------------------------------------------------- remote shell
+    def _ssh_login(self) -> tuple[str, str]:
+        user = str(self.settings.get("ssh_user") or DEFAULT_NAO_SSH_USER)
+        login = str(self.settings.get("ssh_password")
+                    or self.config.secret("NAO_SSH_PASSWORD")
+                    or DEFAULT_NAO_SSH_PASSWORD)
+        return user, login
+
+    async def remote_shell(self, command: str, timeout_s: float = 10.0) -> tuple[int, str]:
+        """One shell command on the robot over SSH (the in-use marker)."""
+        from .reachy_wireless import _ssh_run
+        user, login = self._ssh_login()
+        return await asyncio.wait_for(
+            asyncio.to_thread(_ssh_run, self.found.address, user, login, command,
+                              timeout_s),
+            timeout_s + 5)
 
     async def _still_here(self) -> bool:
         try:
@@ -624,12 +672,17 @@ class NaoqiAdapter(RobotAdapter):
             raise AdapterUnavailable(
                 "NAO_LLM has no config.yaml at {} -- the checkout looks "
                 "incomplete".format(source))
-        target = root / GENERATED_CONFIG
+        # In the hub's data folder, never in the checkout: an update replaces
+        # the app folder, and the checkout is a git tree of its own.
+        target_dir = Path(getattr(self.config, "data_dir", root)) / "nao_llm"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / GENERATED_CONFIG
         proc = await asyncio.create_subprocess_exec(
             str(python), "-c", _PATCH_CONFIG,
             str(source), str(target), "127.0.0.1", str(port), self.found.address,
             cwd=str(root), env=child_env(),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            **no_window())
         out, err = await communicate_or_kill(proc, 30)
         if proc.returncode != 0 or not target.is_file():
             raise RuntimeError(
@@ -688,7 +741,7 @@ class NaoqiAdapter(RobotAdapter):
         # Module form, not the venv's console shims: the .exe shims embed an
         # absolute path to their interpreter and fail silently since the
         # folder move (naoqi/README.md).
-        argv = [str(python), "-m", "main", "--config", config_path.name]
+        argv = [str(python), "-m", "main", "--config", str(config_path)]
         env = child_env(overrides={"PYTHONPATH": str(root)})
 
         await supervisor.start(self._child_name, argv, cwd=root, env=env,
@@ -731,9 +784,10 @@ class NaoqiAdapter(RobotAdapter):
         self.notes.append("starting NAO's speaker server (about a minute; "
                           "NAO stays in its posture)")
         proc = await asyncio.create_subprocess_exec(
-            str(python), "deploy_nao.py", "--config", config_path.name,
+            str(python), "deploy_nao.py", "--config", str(config_path),
             cwd=str(root), env=child_env(overrides={"PYTHONPATH": str(root)}),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            **no_window())
         try:
             out, _ = await communicate_or_kill(proc, SPEAKER_DEPLOY_TIMEOUT_S)
         except asyncio.TimeoutError:
@@ -785,8 +839,9 @@ def _whisper_cached(model: str) -> bool:
 
 
 # Pepper's operator dashboard (robot-hub/pepper_app): Python 3 under the hub's
-# own interpreter, on 0.0.0.0:8780 (the chest tablet loads its page from there;
-# the controls answer this laptop only). It starts its own agent on the robot.
+# own interpreter, on 127.0.0.1:8780. It starts its own agent on the robot and
+# connects OUT to it (robot port 8790); the chest tablet loads its page from the
+# agent on the robot (port 8791), so nothing on the laptop listens on the network.
 PEPPER_DASHBOARD_PORT = 8780
 PEPPER_DASHBOARD_WAIT_S = 30.0
 PEPPER_SHUTDOWN_WAIT_S = 20.0
@@ -852,8 +907,13 @@ class PepperAdapter(NaoqiAdapter):
             self.notes.append("Pepper's dashboard was already running")
             return url
         self._child_name = "pepper_app:{}".format(self.stable_key(self.found))
+        argv = [str(hub_python()), "-m", "pepper_app", self.found.address]
+        if custom_data_dir() is not None:
+            # The student app: Pepper's slides, cached speech and settings go
+            # to <data>/pepper. A lab checkout keeps pepper_app/data.
+            argv += ["--data", str(Path(self.config.data_dir) / "pepper")]
         await supervisor.start(
-            self._child_name, [sys.executable, "-m", "pepper_app", self.found.address],
+            self._child_name, argv,
             cwd=self.config.repo_root, env=self._app_env(), port=PEPPER_DASHBOARD_PORT,
             owner=self.stable_key(self.found), log_prefix="Pepper")
         if not await supervisor.wait_for_http(url + "api/status", PEPPER_DASHBOARD_WAIT_S,

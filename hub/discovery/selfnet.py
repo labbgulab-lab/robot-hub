@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import re
 from typing import Any, Callable, Optional
 
 from ..config import Config
@@ -123,6 +124,52 @@ class SelfNetDetector:
 
 
 # ---------------------------------------------------------------- helpers
+# Adapters that are not the WiFi or cable the robots are on, by name. A VPN
+# hooks outbound connects (the Check Point adapter answers port 80 for hosts
+# that do not exist, 2.9), and a sweep of a VPN or virtual-switch subnet only
+# wastes the round (STUDENT-APP-PLAN 7).
+VPN_NAMES = re.compile(
+    r"(?i)vpn|tailscale|wireguard|wintun|openvpn|tap-windows|\btun\d*\b|check ?point|"
+    r"anyconnect|cisco|fortinet|forticlient|globalprotect|pangp|zerotier|nordlynx|"
+    r"proton|mullvad|zscaler|juniper|pulse secure|sonicwall")
+VIRTUAL_NAMES = re.compile(
+    r"(?i)vethernet|hyper-v|virtualbox|vbox|vmware|vmnet|docker|\bwsl\b|loopback|"
+    r"bluetooth|npcap|default switch")
+
+
+def is_vpn_adapter(name: str) -> bool:
+    return bool(VPN_NAMES.search(name or ""))
+
+
+def is_virtual_adapter(name: str) -> bool:
+    return bool(VIRTUAL_NAMES.search(name or ""))
+
+
+def vpn_adapters() -> list[str]:
+    """Names of VPN / Tailscale adapters that are up and hold an address."""
+    try:
+        import psutil
+    except Exception:  # noqa: BLE001
+        return []
+    import socket
+    try:
+        stats = psutil.net_if_stats()
+        addrs = psutil.net_if_addrs()
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for name, items in addrs.items():
+        stat = stats.get(name)
+        if stat is not None and not stat.isup:
+            continue
+        if not is_vpn_adapter(name):
+            continue
+        if any(a.family == socket.AF_INET and a.address
+               and not a.address.startswith(("127.", "169.254.")) for a in items):
+            out.append(name)
+    return out
+
+
 def local_ipv4() -> list[Any]:
     """Up, non-loopback IPv4 interfaces as ip_interface objects.
 

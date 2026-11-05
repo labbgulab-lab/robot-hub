@@ -35,7 +35,7 @@ Design: the "Robot Hub student app" canvas (23 boards in 6 rows: hub in rows 1-4
 2. **Key.** The popup appears. The student pastes a key, the service is detected from the prefix, and the key is tested. A green "It works" means done. "Later" leaves the warning bar.
 3. **Robots.** Robots on the same WiFi appear as cards. Each card offers Talk, Wizard of Oz for Reachy, and a "Say hi" speaker that makes the robot say its name.
 4. **More robots.** Pepper/NAO and Reachy Lite sit in a quiet "More robots" row with **Set up**. Setup is one download with a progress bar. After that the row disappears for good.
-5. **When something is wrong,** a short bar or card line appears with one button: "Charge it." [Try again], "Another laptop is using it.", "Windows is blocking Pepper." [Allow Pepper], "No robots nearby" [Open WiFi settings].
+5. **When something is wrong,** a short bar or card line appears with one button: "Charge it." [Try again], "Another laptop is using it.", "No robots nearby" [Open WiFi settings].
 6. **Every later day:** double-click the icon, and the robots appear.
 
 ## 2. How it runs
@@ -131,7 +131,7 @@ CheckResult(status="ok"|"missing"|"broken"|"checking", detail, value, version)
 |---|---|---|---|
 | **Reachy Mini (wireless)** | Ready | Nothing beyond the bundle, plus a key | Robot mode only (S13). Slim deploy with the hub's Python (2.2). **"In use by another laptop":** before Launch, check for a running app on the robot and for a marker file the hub writes there. Today Launch kills the other student's app (`hub/adapters/reachy_wireless.py:387-422`). |
 | **Furhat** | Ready | Key, plus the Studio password once | Studio password: entered once on the card, stored with the keys (`hub/adapters/furhat.py:276-284`). The skill gets the student's key at launch (S11, 5.2). |
-| **Pepper** | Setup | NAO/Pepper kit; Windows Firewall allow | Kit (4.3). **Firewall:** `pepper_app` listens on 8780 (tablet) and 8782 (robot connects back). The HOT-WiFi profile is Public, so the Allow button runs one UAC prompt that adds inbound rules for the bundled `python.exe`, scope LocalSubnet. Detect existing Block rules too. Keep the interpreter path stable across updates. |
+| **Pepper** | Setup | NAO/Pepper kit | Kit (4.3). **No firewall step** (decided 2026-11-05, students are not admin): the agent on Pepper listens on robot port 8790 and the laptop connects out; the agent also serves the tablet page on robot port 8791. Nothing on the laptop listens on the network, so Windows never asks. The old connect-back mode is only a fallback, and the robot chip says so. |
 | **NAO** | Setup | Same kit | Connect, say, postures (S12). NAO_LLM is not in the bundle. |
 | **Reachy Mini Lite (USB)** | Setup | Pollen "Reachy Mini Control" app | Locate it through the registry `InstallDir`, Program Files or `%LOCALAPPDATA%\Programs`. Fix: download the MSI from Pollen's latest GitHub release. Needs admin. |
 
@@ -395,7 +395,7 @@ Work days left: Thu 11-05, Sun 11-08, Mon 11-09, Tue 11-10, Wed 11-11 (last day;
 | 11-05 | Data folder split (2.1). Keys: test, detect, best key, no paid start (3). Reachy slim deploy (2.2). | Hub runs from a copied folder with data elsewhere; a bad key shows a sentence |
 | 11-08 | Portable runtime, `build_release.ps1`, `install.ps1`, app window, single instance, no console windows (2.2-2.4). First release on GitHub. | The paste-one-line install works on a second laptop |
 | 11-09 | New main page: top bar, keys popup, warning bar, cards with battery, More robots, logs drawer, Advanced gate, friendly errors (6, 7b). Hotspot count on the network chip (7c). | A non-technical person installs and talks to a Reachy without help |
-| 11-10 | **In the lab:** requirement model and the kit setup (4.1, 4.3); Pepper firewall; Furhat password; "in use" marker; Furhat skill rebuilt without a key. Test 2.8.7.4 on NAO and Pepper. | Each robot from a clean laptop, plus the failure table in 9 |
+| 11-10 | **In the lab:** requirement model and the kit setup (4.1, 4.3); Pepper outbound link and tablet page from the robot; Furhat password; "in use" marker; Furhat skill rebuilt without a key. Test 2.8.7.4 on NAO and Pepper. | Each robot from a clean laptop, plus the failure table in 9 |
 | 11-11 | Fixes, README install block, student guide with pictures, lab-manager guide for capped keys, handover note. | The interim lab owner installs it from the README |
 
 **Moves to the next developer if time runs out,** in this order:
@@ -436,14 +436,14 @@ Work days left: Thu 11-05, Sun 11-08, Mon 11-09, Tue 11-10, Wed 11-11 (last day;
 - **Shared robots, mixed versions.** Every robot-mode Launch pushes the laptop's reachy_chat to the robot by size and date (`hub/adapters/reachy_wireless.py:503-508`). Students on different app versions would overwrite each other. Version-stamp the robot copy and refuse to downgrade.
 - **Factory SSH passwords on an open WiFi.** These are Reachy's Pollen default and NAO/Pepper's `nao`. Changing them later touches three code paths; make them one setting first.
 - **MAX_PATH.** Deep SDK paths under a long user folder break Windows' "Extract All". The app's own extraction to `C:\LabaLab\` avoids this.
-- **Admin rights.** The Pepper firewall rule, the Pollen MSI and the Python 2.7 fallback MSI need UAC. A student who says No gets "Ask the lab to allow this once" and a Check again.
+- **Admin rights.** Students are not admin (answer 2026-11-05). Nothing in the app needs it: per-user install, no firewall rule (Pepper inverted), the kit ships its own Python 2.7. Only the Pollen desktop app (Reachy Mini Lite) may need an admin install; the setup card says to ask the lab.
 - **The first Reachy launch on a factory robot** pip-installs on the robot, which needs internet there.
 
 ## 11. Open questions
 
 1. **Furhat Studio password:** the lab hands it out with the key, or Furhat is set to a known lab password at the skill-rebuild visit?
 2. **May the lab WiFi name ship in the public default config?** It's an ISP network name, not a secret, but the code keeps it out on purpose today.
-3. **Are student laptops admin-capable?** If not, the Pepper firewall and the MSIs need a lab-staff step.
+3. ~~Are student laptops admin-capable?~~ **Answered 2026-11-05: no.** See BUILD-PLAN "No admin, no firewall".
 4. **NAO kit version:** after testing 2.8.7.4, is it good enough, or does the lab need 2.8.6.23 (not publicly available)?
 5. **The Wizard of Oz Say box:** which voice? The robot's normal voice needs live TTS with the student's key; pre-recorded cues need a rebuild step.
 6. **Reachy battery:** does daemon 1.13 report it? If not, is "on for N minutes" from uptime useful, and what run time should trigger the warning?

@@ -1,9 +1,12 @@
 """What Pepper's chest screen shows, and the presentations it can show.
 
-The tablet loads `/screen` from this laptop (ALTabletService.showWebview) and
-polls `/screen/state`; every poll is also its heartbeat, which is how the
-dashboard knows the screen is really connected. Taps come back as
-`/screen/tap`. The dashboard draws the same state with the same renderer
+The tablet loads `/screen` from the agent on Pepper (ALTabletService.showWebview,
+http://198.18.0.1:8791/screen) and polls `/screen/state` there; the agent
+serves the state this laptop pushed over the link, and passes every poll on
+as the tablet's heartbeat, which is how the dashboard knows the screen is
+really connected. Taps and requests for slide files come back over the link
+too. The simulator's tablet uses the same routes on this laptop (server.py).
+The dashboard draws the same state with the same renderer
 (static/screen-render.js), so its preview is what people see.
 
 Screen items:

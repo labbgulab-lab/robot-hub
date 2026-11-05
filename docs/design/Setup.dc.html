@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>One-time setup for Pepper and NAO</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}a:hover{color:#7A3900}
+.app{--page:#FAF8F5;--card:#FFFFFF;--sunken:#F4F1EC;--border:#E8E3DC;--ink:#1C1917;--muted:#6B635A;--brand:#FD9903;--brand-hover:#F08A00;--brand-text:#A84E00;--brand-tint:#FFF4E0;--run:#15803D;--run-tint:#ECFDF3;--ease:cubic-bezier(0.23,1,0.32,1)}
+.app{position:relative;min-height:800px;background:var(--page);color:var(--ink);font-family:Inter,system-ui,"Segoe UI",sans-serif;font-size:15px;line-height:22px;display:flex;flex-direction:column;overflow:hidden}
+.top{height:64px;box-sizing:border-box;padding:0 24px;display:flex;align-items:center;gap:8px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{height:30px;width:auto;display:block}
+.spacer{flex:1 1 auto}
+.scrim{position:absolute;inset:0;background:rgba(28,25,23,.38);display:flex;justify-content:flex-end}
+.sheet{width:100%;max-width:480px;background:var(--card);box-shadow:0 24px 64px -16px rgba(28,25,23,.28);box-sizing:border-box;padding:28px;display:flex;flex-direction:column;gap:24px;animation:slide 260ms cubic-bezier(0.32,0.72,0,1) both}
+@keyframes slide{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}}
+.h2{font-size:24px;line-height:30px;font-weight:700;margin:0;letter-spacing:-.02em}
+.muted{color:var(--muted)}
+.small{font-size:14px;line-height:20px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:transform 120ms var(--ease),background-color 150ms ease}
+.btn:active{transform:scale(0.97)}
+.btn:focus-visible{outline:2px solid #A84E00;outline-offset:2px}
+.btn-primary{background:var(--brand);color:var(--ink)}
+.btn-primary:hover{background:var(--brand-hover)}
+.btn-ghost{background:transparent;color:var(--ink)}
+.btn-ghost:hover{background:var(--sunken)}
+.btn-quiet{background:var(--sunken);color:var(--ink)}
+.btn-icon{padding:0;width:44px}
+.icon{width:20px;height:20px;flex-shrink:0}
+.robots{display:flex;gap:10px}
+.robots img{width:48px;height:48px;border-radius:12px}
+.step{border:1px solid var(--border);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.step.done{border-color:#BFE6CC;background:#FBFDFB}
+.stephead{display:flex;gap:12px;align-items:center}
+.title{font-weight:600;margin:0}
+.found{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--run)}
+.bar{height:8px;border-radius:999px;background:var(--sunken);overflow:hidden}
+.bar span{display:block;height:100%;background:var(--brand);border-radius:999px;transition:width 240ms var(--ease)}
+.prog{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div class="app">
+  <header class="top"><img class="logo" src="img/labalab-logo.png" alt="LabaLab"><span class="spacer"></span></header>
+  <div style="flex: 1 1 auto;"></div>
+
+  <div class="scrim">
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="s-title">
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div class="robots" aria-hidden="true"><img src="img/robot-pepper.png" alt=""><img src="img/robot-naoqi.png" alt=""></div>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-icon" type="button" aria-label="Close"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <h2 id="s-title" class="h2">Set up Pepper and NAO</h2>
+        <p class="muted" style="margin: 0;">One free download. Once.</p>
+      </div>
+
+      <div class="step {{stepClass}}">
+        <div class="stephead">
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <p class="title">Pepper and NAO kit</p>
+            <p class="muted small" style="margin: 2px 0 0;">360 MB, from the robots' maker</p>
+          </div>
+          <sc-if value="{{done}}" hint-placeholder-val="{{false}}"><span class="found"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>Installed</span></sc-if>
+        </div>
+
+        <sc-if value="{{idle}}" hint-placeholder-val="{{true}}">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" type="button" onClick="{{start}}"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Get it</button>
+            <button class="btn btn-ghost" type="button" onClick="{{start}}">I have the zip</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{busy}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; flex-direction: column; gap: 8px;" role="status">
+            <div class="bar"><span style="width: {{pct}}%;"></span></div>
+            <div class="prog"><span>{{phaseLabel}}</span><span>{{pct}}%</span></div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="display: flex; gap: 8px; align-items: center; margin-top: auto;">
+        <a href="#guide" class="small" style="font-weight: 500;">Stuck?</a>
+        <span class="spacer"></span>
+        <sc-if value="{{done}}" hint-placeholder-val="{{false}}"><button class="btn btn-primary" type="button">Done</button></sc-if>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { phase: 'idle', pct: 0 }; }
+  componentWillUnmount() { clearInterval(this.timer); }
+  renderVals() {
+    var self = this, s = this.state;
+    return {
+      idle: s.phase === 'idle',
+      busy: s.phase === 'download' || s.phase === 'unpack',
+      done: s.phase === 'done',
+      stepClass: s.phase === 'done' ? 'done' : '',
+      pct: s.pct,
+      phaseLabel: s.phase === 'unpack' ? 'Unpacking' : 'Downloading',
+      start: function () {
+        self.setState({ phase: 'download', pct: 0 });
+        clearInterval(self.timer);
+        self.timer = setInterval(function () {
+          var p = self.state.pct + 7;
+          if (self.state.phase === 'download' && p >= 100) { self.setState({ phase: 'unpack', pct: 0 }); return; }
+          if (self.state.phase === 'unpack' && p >= 100) { clearInterval(self.timer); self.setState({ phase: 'done', pct: 100 }); return; }
+          self.setState({ pct: p });
+        }, 120);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

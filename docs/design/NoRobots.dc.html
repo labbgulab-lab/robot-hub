@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>No robots found</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}a:hover{color:#7A3900}
+.app{--page:#FAF8F5;--card:#FFFFFF;--sunken:#F4F1EC;--border:#E8E3DC;--ink:#1C1917;--muted:#6B635A;--brand:#FD9903;--brand-hover:#F08A00;--brand-text:#A84E00;--brand-tint:#FFF4E0;--warn:#8A3B00;--warn-tint:#FFF1D6;--ease:cubic-bezier(0.23,1,0.32,1)}
+.app{position:relative;min-height:800px;background:var(--page);color:var(--ink);font-family:Inter,system-ui,"Segoe UI",sans-serif;font-size:15px;line-height:22px;display:flex;flex-direction:column}
+.top{height:64px;box-sizing:border-box;padding:0 24px;display:flex;align-items:center;gap:8px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{height:30px;width:auto;display:block}
+.spacer{flex:1 1 auto}
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap}
+.chip-warn{background:var(--warn-tint);color:var(--warn)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:transform 120ms var(--ease),background-color 150ms ease}
+.btn:active{transform:scale(0.97)}
+.btn:focus-visible{outline:2px solid #A84E00;outline-offset:2px}
+.btn-primary{background:var(--brand);color:var(--ink)}
+.btn-primary:hover{background:var(--brand-hover)}
+.btn-ghost{background:transparent;color:var(--ink)}
+.btn-quiet{background:var(--sunken);color:var(--ink)}
+.btn-icon{padding:0;width:44px}
+.icon{width:20px;height:20px;flex-shrink:0}
+.main{flex:1 1 auto;display:flex;align-items:center;justify-content:center;padding:32px}
+.empty{width:100%;max-width:560px;display:flex;flex-direction:column;gap:20px;align-items:flex-start}
+.ghosts{display:flex;gap:10px}
+.ghosts img{width:52px;height:52px;border-radius:12px;opacity:.5}
+.h1{font-size:28px;line-height:34px;font-weight:700;letter-spacing:-.02em;margin:0}
+.muted{color:var(--muted)}
+.net{display:flex;gap:16px;width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;flex-wrap:wrap}
+.net div{flex:1 1 200px}
+.netlabel{margin:0;font-size:13px;color:var(--muted)}
+.netname{margin:2px 0 0;font-weight:600}
+.steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px;width:100%}
+.steps li{display:flex;gap:12px;align-items:flex-start}
+.num{width:26px;height:26px;border-radius:999px;background:var(--brand-tint);color:var(--brand-text);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.small{font-size:14px;line-height:20px}
+.searching{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid #D6CFC5;border-top-color:#6B635A;animation:spin 700ms linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2s}}
+/* topbar v2 */
+.top{gap:6px;padding:0 20px 0 24px}
+.chip{color:#1C1917;text-decoration:none;font-variant-numeric:tabular-nums}
+.chip .cdot{width:7px;height:7px;border-radius:50%;background:#15803D}
+.chip-warn{background:#FFF1D6;color:#8A3B00}.chip-warn .cdot{background:#8A3B00}
+.tgl{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;padding:0 8px;white-space:nowrap}
+.switch{position:relative;width:40px;height:24px;border-radius:999px;border:0;background:#D6CFC5;cursor:pointer;flex-shrink:0;padding:0}
+.switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch.on{background:#1C1917}.switch.on span{transform:translateX(16px)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#6B635A;padding:0 8px}
+.ldot{width:8px;height:8px;border-radius:50%;background:#15803D}
+.btn-sm{min-height:36px;font-size:14px;padding:0 12px;border-radius:10px}
+.btn-sm.btn-icon{width:36px;padding:0}
+.logo{margin-right:8px}
+a.btn{text-decoration:none;color:#1C1917}
+.muted{color:#6B635A}
+</style>
+</helmet>
+<div class="app">
+  <header class="top">
+    <img class="logo" src="img/labalab-logo.png" alt="LabaLab">
+    <a class="chip chip-warn" href="Network.dc.html" title="Network: needs attention"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="20" r="1"></circle></svg>eduroam<span class="cdot"></span></a>
+    <span class="spacer"></span>
+    <span class="tgl" title="Connect each robot when it shows up"><button class="switch on" type="button" role="switch" aria-checked="true" aria-label="Auto-connect"><span></span></button>Auto-connect</span>
+    <button class="btn btn-ghost btn-sm" type="button" title="Look for robots now"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Scan</button>
+    <span class="live" title="Robot Hub is running"><span class="ldot" aria-hidden="true"></span>Live</span>
+    <a class="btn btn-ghost btn-sm" href="Logs.dc.html"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>Logs</a>
+    <a class="btn btn-ghost btn-sm btn-icon" href="Settings.dc.html" aria-label="Settings"><svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg></a>
+  </header>
+  <main class="main">
+    <section class="empty" aria-labelledby="e-title">
+      <div class="ghosts" aria-hidden="true"><img src="img/robot-reachy-wireless.png" alt=""><img src="img/robot-furhat.png" alt=""><img src="img/robot-pepper.png" alt=""></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <h1 id="e-title" class="h1">No robots nearby</h1>
+        <p class="muted" style="margin: 0;">Join the robots' WiFi.</p>
+      </div>
+      <div class="net">
+        <div><p class="netlabel">This laptop is on</p><p class="netname">eduroam</p></div>
+        <div><p class="netlabel">The lab robots are on</p><p class="netname">HOT-WiFi</p></div>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <a class="btn btn-primary" href="Network.dc.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="20" r="1"></circle></svg>Open WiFi settings</a>
+        <span class="searching"><span class="spin" aria-hidden="true"></span>Still looking</span>
+      </div>
+      <p class="muted small" style="margin: 0;">At a demo? One phone hotspot for both. <a href="Hotspot.dc.html">How</a></p>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

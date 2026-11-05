@@ -40,6 +40,7 @@ from typing import Any, Callable, Optional
 from ..adapters.base import Found
 from ..config import Config
 from ..events import EventBus
+from ..winproc import no_window
 
 log = logging.getLogger("hub.discovery.netscan")
 
@@ -89,6 +90,24 @@ class NetscanDetector:
         self._nameless: set[str] = set()     # addresses already complained about
         self._robots: dict[str, Found] = {}  # Reachy / NAO / Pepper the sweep found, by address
         self._wake = asyncio.Event()
+        # For the network state (hub/network.py): full sweeps finished, and
+        # how many live hosts the last one saw (0 on a network that isolates
+        # its devices), plus the blocks it covered.
+        self.sweeps = 0
+        self.alive = 0
+        self.ranges: list[str] = []
+
+    def stats(self) -> dict[str, Any]:
+        return {"sweeps": self.sweeps, "alive": self.alive, "ranges": list(self.ranges)}
+
+    def forget_naoqi_misses(self) -> None:
+        """The NAO/Pepper kit was just installed (or removed): ask every
+        NAOqi robot again at once instead of after the miss cache runs out."""
+        self._naoqi_ids = {}
+        self._naoqi_unavailable_said = False
+        for ip in [ip for ip, f in self._robots.items() if f.meta.get("needs_setup")]:
+            self._robots.pop(ip, None)
+        self._wake.set()
 
     async def rescan(self) -> None:
         """Sweep now instead of waiting out the cadence."""
@@ -137,6 +156,7 @@ class NetscanDetector:
     # ---------------------------------------------------------------- sweep
     def _targets(self) -> list[str]:
         targets: list[str] = []
+        ranges: list[str] = []
         limit = self.config.discovery.netscan_max_hosts
         for network, own in local_networks():
             hosts = max(network.num_addresses - 2, 1)
@@ -147,9 +167,12 @@ class NetscanDetector:
                     continue
                 self._refuse(network, hosts, near)
                 for block in near:
+                    ranges.append(str(block))
                     targets += [str(h) for h in block.hosts() if str(h) != own]
                 continue
+            ranges.append(str(network))
             targets += [str(h) for h in network.hosts() if str(h) != own]
+        self.ranges = ranges
         # A robot found before is asked again even if it now sits outside
         # what is swept (it can only have come from a sweep, so it is local).
         swept = set(targets)
@@ -159,6 +182,8 @@ class NetscanDetector:
     async def _sweep(self, client: Any) -> None:
         targets = self._targets()
         if not targets:
+            self.sweeps += 1
+            self.alive = 0
             return
 
         # An address that has already served a real Studio page skips the ping
@@ -172,6 +197,8 @@ class NetscanDetector:
             else _true()
             for ip in targets))
         alive = [ip for ip, ok in zip(targets, pinged) if ok]
+        self.sweeps += 1
+        self.alive = len(alive)
         if not alive:
             return
 
@@ -242,6 +269,15 @@ class NetscanDetector:
         open_ = await asyncio.gather(*(self._port_open(ip, NAOQI_PORT) for ip in rest))
         for ip in [ip for ip, ok in zip(rest, open_) if ok]:
             ident = await self._naoqi_identity(ip)
+            if ident and ident.get("needs_setup"):
+                # NAO or Pepper is here, but without the NAO/Pepper kit this
+                # laptop cannot even tell which: one card says "set up first"
+                # (STUDENT-APP-PLAN 4.3). Once the kit is in,
+                # forget_naoqi_misses() drops it and the sweep names it.
+                self._emit_robot(Found(type_id="naoqi", address=ip, port=NAOQI_PORT,
+                                       meta={"needs_setup": ident["needs_setup"],
+                                             "source": "netscan"}))
+                continue
             if not ident or not ident.get("robot_name"):
                 continue
             name = str(ident["robot_name"]).strip()
@@ -339,11 +375,12 @@ class NetscanDetector:
                 self._naoqi_unavailable_said = True
                 self.bus.emit_log("warn", "A NAOqi robot answers at {}, but this laptop "
                                           "cannot talk to it: {}".format(ip, exc))
-            ident = None
+            requirement = getattr(exc, "requirement", None)
+            ident = {"needs_setup": requirement} if requirement else None
         except Exception as exc:  # noqa: BLE001
             log.debug("no NAOqi identity from %s: %s", ip, exc)
             ident = None
-        ttl = NAOQI_ID_TTL_S if ident else NAOQI_MISS_TTL_S
+        ttl = NAOQI_ID_TTL_S if ident and not ident.get("needs_setup") else NAOQI_MISS_TTL_S
         self._naoqi_ids = {**self._naoqi_ids, ip: (loop.time() + ttl, ident)}
         return ident
 
@@ -388,7 +425,7 @@ class NetscanDetector:
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *args, stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL)
+                    stderr=asyncio.subprocess.DEVNULL, **no_window())
             except (OSError, NotImplementedError) as exc:
                 log.debug("cannot run ping: %s", exc)
                 return False
@@ -421,8 +458,10 @@ def local_networks() -> list[tuple[Any, str]]:
 
     Down interfaces, loopback and APIPA are skipped: none of them can carry a
     Furhat, and sweeping 169.254.0.0/16 is exactly the kind of silent waste
-    the max-hosts guard exists to stop.
+    the max-hosts guard exists to stop. So are VPN, Tailscale and virtual
+    adapters (Hyper-V, WSL, VirtualBox): no robot sits behind them.
     """
+    from .selfnet import is_virtual_adapter, is_vpn_adapter
     try:
         import psutil
     except Exception as exc:  # noqa: BLE001
@@ -437,6 +476,8 @@ def local_networks() -> list[tuple[Any, str]]:
     for name, addrs in psutil.net_if_addrs().items():
         stat = stats.get(name)
         if stat is not None and not stat.isup:
+            continue
+        if is_vpn_adapter(name) or is_virtual_adapter(name):
             continue
         for addr in addrs:
             if addr.family != socket.AF_INET or not addr.address or not addr.netmask:
@@ -462,7 +503,7 @@ async def arp_table() -> dict[str, str]:
     try:
         proc = await asyncio.create_subprocess_exec(
             "arp", "-a", stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL)
+            stderr=asyncio.subprocess.DEVNULL, **no_window())
         out, _ = await asyncio.wait_for(proc.communicate(), 5.0)
     except Exception as exc:  # noqa: BLE001
         log.debug("could not read the ARP table: %s", exc)

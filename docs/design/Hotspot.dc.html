@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Demo on a phone hotspot</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A84E00}a:hover{color:#7A3900}
+.app{--page:#FAF8F5;--card:#FFFFFF;--sunken:#F4F1EC;--border:#E8E3DC;--ctrl:#8C8378;--ink:#1C1917;--muted:#6B635A;--brand:#FD9903;--brand-hover:#F08A00;--brand-text:#A84E00;--brand-tint:#FFF4E0;--run:#15803D;--run-tint:#ECFDF3;--danger:#B91C1C;--danger-tint:#FEF2F2;--ease:cubic-bezier(0.23,1,0.32,1)}
+.app{min-height:800px;background:var(--page);color:var(--ink);font-family:Inter,system-ui,"Segoe UI",sans-serif;font-size:15px;line-height:22px;display:flex;flex-direction:column}
+.top{height:64px;box-sizing:border-box;padding:0 24px;display:flex;align-items:center;gap:8px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.spacer{flex:1 1 auto}
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--sunken);color:var(--muted);font-size:13px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:0;font:inherit;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:transform 120ms var(--ease),background-color 150ms ease}
+.btn:active{transform:scale(0.97)}
+.btn:focus-visible,.pick:focus-visible{outline:2px solid #A84E00;outline-offset:2px}
+.btn-ghost{background:transparent;color:var(--ink)}
+.icon{width:20px;height:20px;flex-shrink:0}
+.main{width:100%;max-width:760px;margin:0 auto;box-sizing:border-box;padding:28px 32px 40px;display:flex;flex-direction:column;gap:24px}
+.h1{font-size:28px;line-height:34px;font-weight:700;letter-spacing:-.02em;margin:0}
+.muted{color:var(--muted)}
+.label{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.picks{display:flex;flex-wrap:wrap;gap:8px}
+.pick{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 14px 0 6px;border-radius:999px;border:1px solid var(--border);background:var(--card);font:inherit;font-size:14px;font-weight:500;color:var(--ink);cursor:pointer;transition:transform 120ms var(--ease)}
+.pick:active{transform:scale(0.97)}
+.pick img{width:32px;height:32px;border-radius:8px}
+.pick.on{background:#1C1917;color:#FFFFFF;border-color:#1C1917}
+.pick small{font-size:12px;opacity:.75}
+.slots{display:flex;gap:8px}
+.slot{flex:1 1 0;min-width:0;height:64px;border-radius:12px;border:1.5px dashed #D6CFC5;display:flex;align-items:center;justify-content:center;padding:0 6px;font-size:13px;font-weight:500;color:var(--muted);text-align:center;box-sizing:border-box;line-height:16px}
+.slot.used{border:0;background:#1C1917;color:#FFFFFF}
+.slot.lap{background:var(--sunken);color:var(--ink);border:0}
+.count{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.over{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:12px;background:var(--danger-tint);color:var(--danger);font-size:14px;line-height:20px}
+.okmsg{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:12px;background:var(--run-tint);color:var(--run);font-size:14px;line-height:20px}
+.list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.list li{display:flex;gap:10px;align-items:flex-start;font-size:15px}
+.box{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--ctrl);flex-shrink:0;margin-top:1px}
+</style>
+</helmet>
+<div class="app">
+  <header class="top">
+    <a class="btn btn-ghost" href="Hub.dc.html" style="padding: 0 12px;"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>Robots</a>
+    <span class="spacer"></span>
+    <span class="chip"><svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="11" y1="18" x2="13" y2="18"></line></svg>Phone hotspot {{used}}/5</span>
+  </header>
+  <main class="main">
+    <div><h1 class="h1">Demo on a phone hotspot</h1><p class="muted" style="margin: 6px 0 0;">A phone hotspot takes 5 devices. This laptop is one.</p></div>
+
+    <section aria-labelledby="bring">
+      <h2 id="bring" class="label">Bringing</h2>
+      <div class="picks">
+        <sc-for list="{{robots}}" as="r" hint-placeholder-count="5">
+          <button class="pick {{r.cls}}" type="button" aria-pressed="{{r.on}}" onClick="{{r.toggle}}"><img src="{{r.img}}" alt="">{{r.name}}<sc-if value="{{r.two}}" hint-placeholder-val="{{false}}"><small>2 spots</small></sc-if></button>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-labelledby="spots">
+      <div style="display: flex; align-items: baseline; gap: 8px;"><h2 id="spots" class="label" style="margin: 0;">Spots</h2><span class="spacer"></span><span class="count">{{used}} of 5</span></div>
+      <div class="slots" style="margin-top: 10px;">
+        <sc-for list="{{slots}}" as="s" hint-placeholder-count="5"><div class="slot {{s.cls}}">{{s.label}}</div></sc-for>
+      </div>
+    </section>
+
+    <sc-if value="{{tooMany}}" hint-placeholder-val="{{false}}">
+      <div class="over" role="alert"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span><b>{{over}} too many.</b> Leave a robot, or bring a second phone.</span></div>
+    </sc-if>
+    <sc-if value="{{fits}}" hint-placeholder-val="{{true}}">
+      <div class="okmsg" role="status"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Fits.</span></div>
+    </sc-if>
+
+    <section aria-labelledby="before">
+      <h2 id="before" class="label">Before you go</h2>
+      <ul class="list">
+        <li><span class="box" aria-hidden="true"></span><span>Hotspot: <b>Maximize Compatibility</b> on</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>Every robot knows this hotspot (set up in the lab)</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>Pepper's tablet knows it too</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>Hotspot on <b>before</b> Furhat starts</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>Phone on a charger</span></li>
+      </ul>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { on: ['reachy1', 'reachy3', 'Pepper'] }; }
+  renderVals() {
+    var self = this, s = this.state;
+    var all = [
+      { name: 'reachy1', img: 'img/robot-reachy-wireless.png', n: 1 },
+      { name: 'reachy3', img: 'img/robot-reachy-wireless.png', n: 1 },
+      { name: 'reachy6', img: 'img/robot-reachy-wireless.png', n: 1 },
+      { name: 'Pepper', img: 'img/robot-pepper.png', n: 2 },
+      { name: 'NAO', img: 'img/robot-naoqi.png', n: 1 },
+      { name: 'Furhat', img: 'img/robot-furhat.png', n: 1 }
+    ];
+    var labels = ['Laptop'];
+    all.forEach(function (r) {
+      if (s.on.indexOf(r.name) < 0) return;
+      labels.push(r.name);
+      if (r.n === 2) labels.push(r.name + ' tablet');
+    });
+    var used = labels.length;
+    var slots = [];
+    for (var i = 0; i < 5; i++) {
+      slots.push({ label: labels[i] || 'Free', cls: i === 0 ? 'lap' : (labels[i] ? 'used' : '') });
+    }
+    return {
+      robots: all.map(function (r) {
+        var on = s.on.indexOf(r.name) >= 0;
+        return { name: r.name, img: r.img, two: r.n === 2, on: on, cls: on ? 'on' : '', toggle: function () {
+          var list = self.state.on.slice(); var i = list.indexOf(r.name);
+          if (i >= 0) list.splice(i, 1); else list.push(r.name);
+          self.setState({ on: list });
+        } };
+      }),
+      slots: slots,
+      used: used,
+      over: used - 5,
+      tooMany: used > 5,
+      fits: used <= 5
+    };
+  }
+}
+</script>
+</body>
+</html>
