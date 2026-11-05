@@ -1,6 +1,9 @@
 # One Reachy app: merging reachy_chat into the group conversation
 
 Status: plan, 2026-11-03. Nothing here is built yet except what "Done" says.
+The student-facing screens for this merge (Conversation, Talk live, Group live,
+robot settings, Wizard of Oz) are in `docs/STUDENT-APP-PLAN.md` section 6b and on
+the "Robot Hub student app" design canvas, row 4.
 
 ## Why
 
