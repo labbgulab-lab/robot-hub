@@ -37,16 +37,16 @@
 
 ## Next steps, in order
 
-1. **Phase 3, verification: DONE 2026-11-05, staged, not committed.** The parity sweep and the demo-screenshot check found 57 issues. All are fixed and checked by a separate verifier, and the tests are **531 passing**. Commit when Tomer says. One leftover: three small state hints from the PepperStates board are not built (the key line under the badges, the "wait for the robot" sub-line, the amber walking-while-charging note).
-2. **Release build and install test: DONE on this laptop 2026-11-05, from commit 7175116.** The zip is 113.6 MB, sha256 e3809578…6e42e. These all passed: install in 5 s, the `--check` self-test (ready in 11.7 s), a tray start where the only listener is 127.0.0.1:8099, Quit leaving no processes, reinstall keeping app.old and the data, and uninstall with and without `-RemoveData`. **Still open: a clean laptop or VM as a standard user.** The original steps:
+1. **Phase 3, verification: DONE 2026-11-05 (commit 7175116).** The parity sweep and the demo-screenshot check found 57 issues. All are fixed and checked by a separate verifier, and the tests are **531 passing**. The three Pepper state hints came later, in 9db7123 (532 tests).
+2. **Release build and install test: DONE on this laptop 2026-11-05, rebuilt from commit 9db7123.** The zip is 113.6 MB, sha256 f04918bf…a23637, and `dist\` holds it. These all passed: install in 5 s, the `--check` self-test (ready in 11.7 s), a tray start where the only listener is 127.0.0.1:8099, Quit leaving no processes, reinstall keeping app.old and the data, and uninstall with and without `-RemoveData`. **Still open: a clean laptop or VM as a standard user.** The original steps:
    - Build: `powershell -ExecutionPolicy Bypass -File tools\build_release.ps1 -FromWorkingTree`.
    - Install from the local zip into a temp root with `tools\install.ps1 -Zip ... -Root ...`, then run the app, quit it and uninstall.
    - Ideally also on a clean laptop or VM as a **standard (non-admin) user**.
-3. **Push and release.** Ask Tomer first, every time.
+3. **Push and release.** Ask Tomer first, every time. **2026-11-05: both branches are pushed. Tomer runs the v1.0.0 release himself (the permission check blocks `gh release create` for Claude). Merging into master waits for his call: lab laptops `git pull` master on every start.**
    - Push `student-app` and reachy_chat `multi-provider` (use `GH_TOKEN=$(gh auth token --user labbgulab-lab)`).
    - Publish release `v1.0.0` with `RobotHub-1.0.0.zip` and `install.ps1`, marked latest. Until then, the README's one-line install returns 404.
    - Merge `student-app` into master when Tomer agrees.
-4. **Guides:** a student guide (install, add a key, talk to a Reachy) and a lab-staff guide (capped keys, staff tools, updating). README install block exists.
+4. **Guides: DONE**, see `docs/guides/STUDENT.md` and `LAB-STAFF.md`, linked from the README. The plan was a student guide (install, add a key, talk to a Reachy) and a lab-staff guide (capped keys, staff tools, updating). README install block exists.
 5. **Lab day, robots needed:**
    - Pepper: the outbound link on 8790, the tablet page from the robot on 8791, and the chip must never say "fallback".
    - Reachy: Talk through the proxy, Wizard of Oz Say (prepare/say), live captions.
