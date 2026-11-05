@@ -38,7 +38,7 @@
 ## Next steps, in order
 
 1. **Phase 3, verification: DONE 2026-11-05, staged, not committed.** The parity sweep and the demo-screenshot check found 57 issues. All are fixed and checked by a separate verifier, and the tests are **531 passing**. Commit when Tomer says. One leftover: three small state hints from the PepperStates board are not built (the key line under the badges, the "wait for the robot" sub-line, the amber walking-while-charging note).
-2. **Release build and install test.**
+2. **Release build and install test: DONE on this laptop 2026-11-05, from commit 7175116.** The zip is 113.6 MB, sha256 e3809578…6e42e. These all passed: install in 5 s, the `--check` self-test (ready in 11.7 s), a tray start where the only listener is 127.0.0.1:8099, Quit leaving no processes, reinstall keeping app.old and the data, and uninstall with and without `-RemoveData`. **Still open: a clean laptop or VM as a standard user.** The original steps:
    - Build: `powershell -ExecutionPolicy Bypass -File tools\build_release.ps1 -FromWorkingTree`.
    - Install from the local zip into a temp root with `tools\install.ps1 -Zip ... -Root ...`, then run the app, quit it and uninstall.
    - Ideally also on a clean laptop or VM as a **standard (non-admin) user**.
