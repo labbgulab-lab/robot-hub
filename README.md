@@ -116,7 +116,7 @@ opens by itself the first time and whenever something is wrong.
   name and password share every robot's memory.
 - Turn the hotspot on **before** powering a robot.
 - **Reachy Mini, in the lab:** every lab Reachy also knows the **lab WiFi**
-  (no internet) as its fallback. Connect your laptop to the lab WiFi, power the
+  as its fallback. Connect your laptop to the lab WiFi, power the
   robot on, turn your hotspot on, and press **Add WiFi…** on its card. It moves
   to your hotspot now and prefers it from then on. Without the hub:
   `python tools/reachy_add_wifi.py --ssid "Your Hotspot"`. Put the lab WiFi's

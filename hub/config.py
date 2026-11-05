@@ -110,7 +110,7 @@ class ServerCfg(BaseModel):
 
 
 class NetworkCfg(BaseModel):
-    # The lab's own WiFi (no internet): every Reachy's fallback, and where a
+    # The lab's own WiFi: every Reachy's fallback, and where a
     # lab member hands a robot their hotspot (hub/reachy_wifi.py). Its name
     # lives here, in the git-ignored config.toml, not in the public repo.
     lab_wifi: str = ""

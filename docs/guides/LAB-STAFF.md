@@ -41,7 +41,7 @@ Reading and downloading need no sign-in while the repo is public. Uploading and 
 
 ## Add WiFi and the lab network
 
-The lab WiFi is HOT-WiFi. It is open (no password) and has no internet. The hub finds robots by scanning addresses, because this WiFi drops the robots' name announcements. **Settings**, **Lab WiFi** shows the name. **Change** edits it (**Open, no password** is a tick box), and **Network help** opens the setup steps.
+The lab WiFi is HOT-WiFi. It is open (no password) and has internet. The hub finds robots by scanning addresses, because this WiFi drops the robots' name announcements. **Settings**, **Lab WiFi** shows the name. **Change** edits it (**Open, no password** is a tick box), and **Network help** opens the setup steps.
 
 **Add WiFi** (a robot's **...** details, staff tools on) works for Reachy, Pepper and NAO:
 

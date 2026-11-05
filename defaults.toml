@@ -27,7 +27,7 @@ netscan_nearby_24s = 4
 expected_subnet = ""
 
 [network]
-# The lab WiFi: open, no internet; every Reachy's fallback network.
+# The lab WiFi: open, with internet; every Reachy's fallback network.
 lab_wifi = "HOT-WiFi"
 lab_wifi_open = true
 hotspot = ""

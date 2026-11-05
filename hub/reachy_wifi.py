@@ -1,7 +1,7 @@
 """Teach a Reachy Mini a WiFi over SSH -- the card's "Add WiFi..." and
 tools/reachy_add_wifi.py.
 
-The lab WiFi is every robot's baseline: it has no internet, but a lab member's
+The lab WiFi is every robot's baseline: a lab member's
 laptop on it can reach any robot there and hand it their own hotspot. So
 nobody needs a robot that already knows them, and no Pollen desktop app.
 

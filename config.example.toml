@@ -21,7 +21,7 @@ netscan_nearby_24s = 4
 expected_subnet = ""
 
 [network]
-# The lab WiFi's name (ask in the lab). It has no internet; the robots keep it
+# The lab WiFi's name (ask in the lab). The robots keep it
 # as their fallback, and on it you can hand any robot your own hotspot.
 lab_wifi = ""
 # The phone hotspot new Reachys are set up on (tools/reachy_bringup.py, the
