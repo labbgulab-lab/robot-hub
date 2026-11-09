@@ -113,6 +113,9 @@ at the end to delete your keys and settings too.
 **More help:** the [student guide](docs/guides/STUDENT.md) explains every
 screen: keys, Talk, group conversation, Choir, Wizard of Oz, Pepper and NAO.
 
+**Robot guides:** step-by-step slides for every robot (Reachy Mini, Furhat,
+Pepper, NAO) are in [robots-guides](robots-guides/README.md).
+
 ---
 
 # For lab staff and developers
