@@ -1,40 +1,62 @@
 # Next session: start here
 
-**Updated 2026-11-09, end of the last lab day.** Windows students are on **v1.0.5** (latest). The **Mac version is built but on hold** as the **v1.0.6 draft**. The next job is finishing the Mac release.
+**Updated 2026-11-09, evening.** **v1.0.8 is the published latest**, for Windows and for both kinds of Mac (Apple Silicon and Intel). Nothing is on hold. Each fix that is ready ships as its own patch version (1.0.7, 1.0.8, ...); several fixes are not held back for one release.
 
 ## Where things are
 
 | Repo | Branch | Last commit | State |
 |---|---|---|---|
-| robot-hub (this repo) | `master` | `97d9cb8` Mac build: no exact pins on Intel | Pushed. `fix/v1.0.1` = `master` |
-| reachy_chat (`../reachy-mini/reachy_chat`) | `main` = `multi-provider` | `8a60d92` Deploy: pin google-genai, seed the show folder | Pushed |
+| robot-hub (this repo) | `master` | `92b87e4` Robot Hub 1.0.8: one Quit closes the whole app | Pushed, tag `v1.0.8` |
+| reachy_chat (`../reachy-mini/reachy_chat`) | `main` = `multi-provider` | `8a60d92` Deploy: pin google-genai, seed the show folder | Pushed; bundled in 1.0.7 and 1.0.8 |
 | robot-lab (`job`) | `main` | `01431d2` reachy10 | Pushed |
 
 - **Releases:**
-  - **v1.0.5** is the published latest. Its Windows zip was built from `51df373`.
-  - **v1.0.6** is a **DRAFT**, tagged `v1.0.6` -> `7f33b91`. It holds the Windows zip, `install.ps1`, `install-mac.sh` and `RobotHub-mac-arm64-1.0.6.tar.gz`. **No Intel tarball yet.**
-- **Tests:** 700 pass on Windows (`.venv\Scripts\python.exe -m pytest tests -q -p no:cacheprovider`).
-- **Worktrees:**
-  - `job/rh-release` is a worktree on branch `mac-integration`, the same commit as `master`. Delete it when done.
-  - In the main checkout `job/robot-hub`, someone else's **uncommitted** change to `hub/discovery/netscan.py`, `tests/test_discovery.py` and `tools/reachy_bringup.py` makes the sweep also try `.0`/`.255` addresses (a Furhat got one ending in .255). It is not ours: ask before committing it. That checkout's local `fix/v1.0.1` is behind `origin`.
+  - **v1.0.8**, latest: one Quit closes the whole app. Built from `92b87e4`.
+  - **v1.0.7**: robots on `.0` and `.255` addresses get their card (Furhat had `172.19.94.255` on HOT-WiFi), plus the first Intel Mac build. Built from `d155c50`.
+  - Both carry all 8 assets: `RobotHub-<v>.zip`, `install.ps1`, `install-mac.sh`, `RobotHub-mac-arm64-<v>.tar.gz`, `RobotHub-mac-x86_64-<v>.tar.gz`, and the `.sha256` file of each archive.
+  - **v1.0.6** stays an unpublished **draft**. It was the Apple Silicon-only Mac release, and 1.0.7 holds everything in it. It can be deleted.
+- **Tests:** 714 pass on Windows (`.venv\Scripts\python.exe -m pytest tests -q -p no:cacheprovider`).
+- **Worktrees:** none left; all were removed on 2026-11-09 evening.
+- **Main checkout `job/robot-hub`:** still on the old local `fix/v1.0.1` branch. It has the uncommitted `.0`/`.255` change, now redundant because it is on master, and a 4-line note in this file. Its `git pull --ff-only` fails because of them, so `Start Robot Hub.cmd` there runs old code. Move it to `master` and drop those changes. This laptop also has the **installed** app now, under `%LOCALAPPDATA%\LabaLab\RobotHub`. When both are started, the installed app holds port 8099.
 
-## Finish the Mac release (do this first)
+## What was done on 2026-11-09 (evening)
 
-1. **Intel build.** The Mac Action (`.github/workflows/mac-release.yml`, run with `gh workflow run mac-release.yml -f tag=<tag> -f upload=true`) passes on Apple Silicon: build, install, and `launch_mac.py --check` on a real Mac. On Intel (`macos-15-intel`) it fails because PyPI has no Intel Mac wheels for current zeroconf, cryptography or onnxruntime.
-   - zeroconf is fixed: it is built as plain Python.
-   - The fix for the rest (`97d9cb8`: no exact pins on Intel, so pip takes the newest version that still has an Intel wheel) is pushed but **has not run yet**.
-2. **The tag.** Moving `v1.0.6` to the fix needs a force-push, which the permission check blocked on 2026-11-09. Pick one:
-   - (a) The user approves `git push -f origin v1.0.6`. Then rerun the Action and publish v1.0.6 with Intel.
-   - (b) Publish v1.0.6 as it is (Windows + Apple Silicon), then do Intel as **v1.0.7** under a new tag, which needs no force. For v1.0.7: bump `VERSION`, run `tools\build_release.ps1 -ReachyChat <reachy_chat>`, push the tag, create the release as a draft with the Windows assets, run the Action, then publish as latest.
-   - The user chose to wait. Ask them first.
-3. **Before publishing,** check that the draft has `RobotHub-mac-<arch>-<v>.tar.gz` (+ `.sha256`) for each arch, plus `install-mac.sh`. Publish with `gh release edit <tag> --draft=false --latest`.
-4. **The link for Mac users** works only once a published latest release carries the Mac files: `curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh | bash`. It is already in the README and the release notes.
-5. **Mac facts:**
-   - Apple Silicon (M1 to M5) needs **macOS 14 or newer**.
-   - NAO and Pepper stay Windows-only.
-   - The hub runs with `-c "from hub.main import main; main()"`.
-   - The data folder is `~/Library/Application Support/LabaLab/RobotHub/data`.
-   - The app is installed as `~/Applications/LabaLab Robot Hub.app`.
+1. **Intel Mac build fixed** (`b9adf75`): `tools/build_release_mac.sh` no longer stops when the Intel constraints file has no zeroconf pin.
+2. **Mac release Action test builds** (`332392a`): with **Upload** off, the tag input may be a branch or a commit (for example `master`). Nothing goes to any release, and VERSION need not match. Use this to test the Mac build without making a tag.
+3. **Network search** (`24bc983`, in 1.0.7): in a /24 block cut out of a bigger network (the /16 HOT-WiFi), `.0` and `.255` are ordinary hosts. Only the whole network's own first and last address are left out. `tools/reachy_bringup.py` shares the fix (`_block_hosts`).
+4. **One-press Quit** (`bc906c4`, then review fixes `7642484`, in 1.0.8):
+   - Settings > Quit used to need a second press ("Press again to quit"). Now one press quits.
+   - The hub publishes `quitting`. Both the main window (`web/app.js`) and the Reachy window (`web/reachy-core.js`) close themselves when the hub is gone. The launcher closes only windows titled Robot Hub.
+   - **Hard exit:** 60 s after Quit, longer than the shutdown's own limits, so a Reachy off the WiFi does not stop the others being put to sleep. Then 5 s more after the robots.
+   - The tray's tree kill spares the Update installer (`install.ps1`).
+   - The no-tray launcher (`wait_and_close`) waits for its hub. If another hub holds the port, it leaves that hub's window open.
+   - `launch_mac.py --quit` waits until the hub is gone.
+   - **Checked for real** on an installed 1.0.8, with the main window and a Reachy window open. 7 s after one Quit, both windows were gone, port 8099 was free and the launcher had exited with code 0.
+
+## Open items
+
+- **One press quits:** there's no confirm step any more (requested). A mis-click in Settings stops every robot.
+- **Intel Mac** builds with no exact pins: pip takes the newest version that still has an Intel wheel (onnxruntime 1.19.2, for example). Only `launch_mac.py --check` and the installer tests cover it in CI. It has never run on a real Intel Mac.
+- **On macOS,** 15 of the hub's tests (written on Windows, mostly `tests/test_hub_features.py`) fail. They are for information only and don't gate the Action.
+- **On a Mac,** the page is a normal browser tab. A browser may refuse `window.close()` after Quit. The hub still ends, and the tab shows "Robot Hub stopped".
+- **Not yet seen on a real screen:** the self-update popup (1.0.3+). Any installed 1.0.3 to 1.0.7 that opens with no robot connected should show it now.
+- **Mac facts:**
+  - Apple Silicon (M1 to M5) needs **macOS 14 or newer**; Intel needs **macOS 11 or newer**.
+  - NAO and Pepper stay Windows-only.
+  - Data lives in `~/Library/Application Support/LabaLab/RobotHub/data`.
+  - The app is `~/Applications/LabaLab Robot Hub.app`.
+  - Mac install line: `curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh | bash`.
+
+## How to release (as done for 1.0.7 and 1.0.8)
+
+1. Bump `VERSION` and commit it.
+2. `tools\build_release.ps1 -ReachyChat ..\reachy-mini\reachy_chat`. The `-ReachyChat` path is needed when building from a worktree.
+3. Test the build in a temp root with `tools\install.ps1 -Zip ... -Root ... -NoLaunch`, then `app\runtime\python.exe app\launch.pyw --check`.
+4. Push `master`, then push the tag `v<version>`.
+5. `gh release create v<version> --draft --verify-tag` with the zip, its `.sha256`, `install.ps1` and `install-mac.sh`.
+6. Run `gh workflow run mac-release.yml -f tag=v<version> -f upload=true -f reachy_chat_ref=<the commit the Windows build printed>`.
+7. When all three jobs are green and the draft has 8 assets: `gh release edit v<version> --draft=false --latest`.
+8. The permission check has blocked Claude from creating a release or publishing it before. When it does, the user runs that step, or tells Claude to run it.
 
 ## What was done on 2026-11-09 (lab day)
 
@@ -47,8 +69,9 @@
   - **New Reachys had no Wizard of Oz cues.** The deploy now seeds `show/`.
   - **Group-tab Wizard of Oz for the whole table** (`hub/group/woz.py`, `web/reachy-group-woz.js`): Choir is one unit, otherwise a random or chosen target; it works offline. The review's 42 findings are all fixed.
   - **Self-update on start (1.0.3+):** the installed app only, in its first 3 minutes, with no robot connected; a 5 s countdown and **Not now**.
+  - **Check for updates** now forces a check, at most once a minute.
   - **README:** a 3-step student install at the top.
-- **Not yet seen on a real screen:** the self-update popup. Opening a 1.0.3 or 1.0.4 install should show it.
+- **Mac version** (1.0.6 draft, shipped in 1.0.7): `launch/launch_mac.py`, `tools/install-mac.sh`, `tools/build_release_mac.sh`, `.github/workflows/mac-release.yml`.
 
 ## Known gaps (from the builders)
 
@@ -60,7 +83,6 @@
 - Group live captions type each line at about 15 characters a second, because the hub sends lines whole.
 - reachy_chat's own log is not copied into the transcripts folder after a Talk.
 - Typed Wizard of Oz lines need a Gemini key on the robot (Gemini text-to-speech), otherwise the code is `NO_KEY`.
-- **Check for updates** doesn't force a new check: right after a release, a running app shows "Up to date" for up to 6 hours, or until it restarts.
 
 ## Read these for background
 
