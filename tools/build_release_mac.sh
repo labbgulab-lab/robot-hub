@@ -21,6 +21,7 @@
 #   robot-hub/    git archive of --ref, without tests, docs, dev scripts
 #   reachy_chat/  the same for reachy_chat (deployed onto the robots by the hub)
 #   launch_mac.py, install-mac.sh, VERSION, MACOS_MIN, robothub.icns
+#   reachy_chat/COMMIT  the reachy_chat commit inside (Windows writes it too)
 #
 # Never in the bundle: keys.local.json, .env, config.toml, group.local.json,
 # logs/, cache/, data/, key files. The build removes any it finds and then
@@ -62,7 +63,7 @@ tools/release-constraints-mac.txt"
 CHAT_DROP="docs tests .gitignore .gitattributes show/audio show/backups"
 
 # Oldest macOS the wheels are picked for, tried in this order.
-MAC_MINS="11.0 12.0 13.0 14.0"
+MAC_MINS="11.0 12.0 13.0 14.0 15.0"
 
 ARCH=""
 VERSION=""
@@ -239,6 +240,13 @@ remove_secrets "$APP/robot-hub"
 
 step "reachy_chat"
 export_repo "$REACHY_CHAT" "$REACHY_CHAT_REF" "$APP/reachy_chat"
+# Which reachy_chat this bundle deploys onto the robots: Windows and Mac
+# builds of one version must hold the same commit.
+if [ "$FROM_WORKING_TREE" = 1 ]; then
+    CHAT_COMMIT="$(git -C "$REACHY_CHAT" rev-parse HEAD)+working-tree"
+else
+    CHAT_COMMIT=$(git -C "$REACHY_CHAT" rev-parse "$REACHY_CHAT_REF^{commit}")
+fi
 remove_listed "$APP/reachy_chat" "$CHAT_DROP"
 remove_secrets "$APP/reachy_chat"
 
@@ -317,32 +325,47 @@ pip_for_macos() {   # pip_for_macos <min macOS> <requirements file>: wheels for 
     return 0
 }
 
+missing_wheel() {   # missing_wheel <pip log>: the package pip found no wheel for
+    sed -n -e 's/.*No matching distribution found for \([A-Za-z0-9_.-]*\).*/\1/p' \
+           -e 's/.*Could not find a version that satisfies the requirement \([A-Za-z0-9_.-]*\).*/\1/p' \
+        "$1" 2>/dev/null | head -n 1
+}
+
 MACOS_MIN=""
+LAST_LOG=""
 try_mins() {   # try_mins <requirements file>
     local m
     for m in $MAC_MINS; do
         echo "    wheels for macOS $m or newer ..."
         if pip_for_macos "$m" "$1"; then MACOS_MIN="$m"; return 0; fi
         tail -n 3 "$STAGING/pip-$m.log" | sed 's/^/      /'
+        LAST_LOG="$STAGING/pip-$m.log"
     done
     return 1
 }
 
 if ! try_mins "$REQ_ALL"; then
-    if [ "$ARCH" = "x86_64" ]; then
+    # The newest macOS tried is the widest wheel choice: what fails there is the blocker.
+    BLOCKER=$(missing_wheel "$LAST_LOG")
+    echo "    no wheel for: ${BLOCKER:-(see $LAST_LOG)}"
+    if [ "$ARCH" = "x86_64" ] && printf '%s' "$BLOCKER" | grep -qi '^onnxruntime$'; then
         # Without onnxruntime the hub runs; only the group talk's voice
         # detection (hub/group/vad.py) is missing.
         warn "no onnxruntime wheel fits an Intel Mac: building without it (group talk voice detection is off)"
         grep -iv '^[[:space:]]*onnxruntime' "$REQ_ALL" > "$REQ_ALL.noort" || true
-        try_mins "$REQ_ALL.noort" || true
+        try_mins "$REQ_ALL.noort" || BLOCKER=$(missing_wheel "$LAST_LOG")
     fi
 fi
 if [ -z "$MACOS_MIN" ]; then
-    # Last resort: this Mac's own wheels. Then the app needs this macOS or newer.
+    # Last resort: this Mac's own wheels. Then the app needs this macOS or
+    # newer. Wheels only: a package built here with the runner's compilers
+    # may not load on a student's Mac.
     MACOS_MIN=$(sw_vers -productVersion | awk -F. '{print $1 ".0"}')
-    warn "no wheel set fits an older macOS; using this runner's (macOS $MACOS_MIN or newer)"
-    "$PY" -m pip install --no-warn-script-location --prefer-binary \
-        -r "$REQ_ALL" -c "$CONSTRAINTS" || die "pip install failed"
+    warn "no wheel set fits an older macOS (no wheel for: ${BLOCKER:-see the pip logs}); using this runner's (macOS $MACOS_MIN or newer)"
+    REQ_LAST="$REQ_ALL"
+    [ -f "$REQ_ALL.noort" ] && REQ_LAST="$REQ_ALL.noort"
+    "$PY" -m pip install --no-warn-script-location --only-binary=:all: \
+        -r "$REQ_LAST" -c "$CONSTRAINTS" || die "pip install failed: no Mac wheel for ${BLOCKER:-a package (see the log above)}"
 fi
 printf '%s' "$MACOS_MIN" > "$APP/MACOS_MIN"
 echo "    the app needs macOS $MACOS_MIN or newer"
@@ -411,6 +434,7 @@ fi
 
 printf '%s' "$VERSION" > "$APP/VERSION"
 printf '%s' "$VERSION" > "$APP/robot-hub/VERSION"
+printf '%s\n' "$CHAT_COMMIT" > "$APP/reachy_chat/COMMIT"
 
 assert_clean "$APP/robot-hub"
 assert_clean "$APP/reachy_chat"
@@ -418,8 +442,10 @@ assert_clean "$APP/reachy_chat"
 # ---------------------------------------------------------------- (f) tar
 step "packing"
 rm -f "$TARBALL" "$TARBALL.sha256"
-# COPYFILE_DISABLE: no ._ AppleDouble files in the tarball.
-COPYFILE_DISABLE=1 tar -c -z -f "$TARBALL" -C "$STAGING" app
+# COPYFILE_DISABLE: no ._ AppleDouble files. --no-xattrs --no-mac-metadata:
+# no extended attributes of the runner's files (com.apple.provenance and the
+# like) as pax headers, to be restored on every student's Mac.
+COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -c -z -f "$TARBALL" -C "$STAGING" app
 TAR_SHA=$(sha256_of "$TARBALL")
 printf '%s  %s\n' "$TAR_SHA" "$NAME.tar.gz" > "$TARBALL.sha256"
 cp "$APP/install-mac.sh" "$OUT_DIR/install-mac.sh"
@@ -432,5 +458,6 @@ step "done"
 echo ""
 echo "  $TARBALL"
 echo "  tarball $TAR_MB MB, installed $APP_MB MB, macOS $MACOS_MIN or newer, sha256 $TAR_SHA"
+echo "  reachy_chat $CHAT_COMMIT"
 echo "  $OUT_DIR/install-mac.sh"
 echo "  Release: tag v$VERSION, assets $NAME.tar.gz (+ .sha256) and install-mac.sh."

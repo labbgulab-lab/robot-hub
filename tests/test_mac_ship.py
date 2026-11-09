@@ -3,10 +3,12 @@ and .github/workflows/mac-release.yml.
 
 Neither script can run for real off a Mac (the build needs the macOS runtime,
 the installer needs macOS). What runs here: bash -n, a check for syntax the
-bash 3.2 of macOS lacks, the installer's release picker and its .app maker
-and the build's secret scan (with Git Bash on Windows), and the names the
-contract fixes (asset names, install line, layout). The real build, install
-and launch_mac.py --check run in the GitHub Action on macOS runners.
+bash 3.2 of macOS lacks, the installer's release picker, download, .app maker
+and failure paths (main() on a pretend Mac: uname, open and the alert are
+faked) and the build's secret scan (with Git Bash on Windows), and the names
+the contract fixes (asset names, install line, layout). The real build,
+install and launch_mac.py --check run in the GitHub Action on macOS runners,
+and this file runs there too with the Mac's own bash 3.2 and awk.
 """
 
 from __future__ import annotations
@@ -60,6 +62,15 @@ def run_bash(script: str, *args: str, cwd: Path | None = None) -> subprocess.Com
 
 def posix(path: Path) -> str:
     return path.as_posix()
+
+
+def sh_path(path: Path) -> str:
+    """A path as bash sees it: /c/Users/... in Git Bash (GNU tar reads C:
+    as a host name, and the installer takes only absolute /... paths)."""
+    text = Path(path).resolve().as_posix()
+    if sys.platform == "win32" and re.match(r"^[A-Za-z]:/", text):
+        return "/" + text[0].lower() + text[2:]
+    return text
 
 
 # ------------------------------------------------------------------ syntax
@@ -121,7 +132,7 @@ def test_asset_names_match_the_contract():
     assert '"$TARBALL.sha256"' in build
     assert 'cp "$APP/install-mac.sh" "$OUT_DIR/install-mac.sh"' in build
     # The tarball's single top folder is app/.
-    assert 'tar -c -z -f "$TARBALL" -C "$STAGING" app' in build
+    assert ' -c -z -f "$TARBALL" -C "$STAGING" app' in build
     assert 'prefix = "RobotHub-mac-" arch "-"' in install
     assert "RobotHub-mac-$arch-${tag#v}.tar.gz" in install
     assert "dist/RobotHub-mac-$ARCH-$VERSION.tar.gz" in flow
@@ -235,16 +246,93 @@ def test_workflow_builds_installs_checks_and_uploads():
     assert 'app.get("version") != want' in runs
     check = next(s for s in steps if "--check" in str(s.get("run", "")))
     assert "continue-on-error" not in check
-    # The hub's tests run on macOS too, and a failure is not hidden.
+    # The installer's own tests run with the Mac's bash 3.2 and awk, and gate the job.
+    ship = next(s for s in steps if "tests/test_mac_ship.py" in str(s.get("run", "")))
+    assert "continue-on-error" not in ship
+    # The rest of the hub's tests (written on Windows) are information only:
+    # a warning in the summary, never a red job.
     pytest_step = next(s for s in steps if s.get("id") == "pytest")
-    assert "-m pytest tests" in pytest_step["run"]
-    assert any("steps.pytest.outcome == 'failure'" in str(s.get("if", "")) and "exit 1" in s["run"]
-               for s in steps)
+    assert "-m pytest tests " in pytest_step["run"]
+    assert pytest_step["continue-on-error"] is True
+    assert not any("steps.pytest.outcome" in str(s.get("if", "")) for s in steps)
+    assert not any("steps.pytest.outcome" in str(s.get("run", "")) and "exit 1" in str(s.get("run", ""))
+                   for s in steps)
     upload = next(s for s in steps if "gh release upload" in str(s.get("run", "")))
     assert upload["if"] == "${{ inputs.upload }}"
     assert "--clobber" in upload["run"]
-    assert "install-mac.sh" in upload["run"] and ".sha256" in upload["run"]
+    assert ".sha256" in upload["run"]
+    assert steps.index(ship) < steps.index(upload)
     assert any(str(s.get("uses", "")).startswith("actions/upload-artifact@") for s in steps)
+
+
+def test_workflow_uploads_install_mac_sh_even_when_a_mac_job_fails():
+    """Every release must carry install-mac.sh: the install line and the Mac
+    Update fetch it from the latest release. One job after both Macs, whatever
+    they did (not one per Mac: two --clobber uploads of one name race)."""
+    flow = load_workflow()
+    mac_upload = next(s for s in flow["jobs"]["mac"]["steps"] if "gh release upload" in str(s.get("run", "")))
+    assert "install-mac.sh" not in mac_upload["run"]
+    job = flow["jobs"]["install-script"]
+    assert job["needs"] == "mac" or job["needs"] == ["mac"]
+    assert "always()" in job["if"] and "inputs.upload" in job["if"]
+    run = "\n".join(str(s.get("run", "")) for s in job["steps"])
+    assert 'gh release upload "$TAG" tools/install-mac.sh --clobber' in run
+    checkout = next(s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
+    assert checkout["with"]["ref"] == "${{ inputs.tag }}"
+
+
+def test_windows_build_ships_install_mac_sh_and_the_same_reachy_chat():
+    ps1 = (REPO / "tools" / "build_release.ps1").read_text(encoding="utf-8")
+    assert '$macInstaller = Join-Path $PSScriptRoot "install-mac.sh"' in ps1
+    assert '(Join-Path $OutDir "install-mac.sh")' in ps1
+    # One reachy_chat for both: the same default ref, and the commit recorded in the bundle.
+    win_ref = re.search(r'\[string\]\$ReachyChatRef = "([^"]+)"', ps1).group(1)
+    flow = load_workflow()
+    assert flow["on"]["workflow_dispatch"]["inputs"]["reachy_chat_ref"]["default"] == win_ref == "main"
+    assert 'Join-Path $app "reachy_chat\\COMMIT"' in ps1
+    build = BUILD.read_text(encoding="utf-8")
+    assert 'printf \'%s\\n\' "$CHAT_COMMIT" > "$APP/reachy_chat/COMMIT"' in build
+    for path in (README, LAB_STAFF):
+        text = path.read_text(encoding="utf-8")
+        assert "multi-provider" not in text, path.name
+        assert "install-mac.sh" in text
+    staff = LAB_STAFF.read_text(encoding="utf-8")
+    assert "`dist\\install-mac.sh`" in staff
+    assert "must be on `master`" in staff
+    assert "macos-13" not in staff and "macos-13" not in WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_build_wheel_fallbacks_and_clean_tar():
+    build = BUILD.read_text(encoding="utf-8")
+    assert re.search(r'MAC_MINS="[^"]*\b15\.0\b', build)
+    # The last resort takes wheels only; no package is built on the runner.
+    assert "--prefer-binary" not in build
+    last = build[build.index('if [ -z "$MACOS_MIN" ]; then'):build.index('printf \'%s\' "$MACOS_MIN"')]
+    assert "--only-binary=:all:" in last
+    # The onnxruntime retry runs only when onnxruntime is what failed.
+    assert "grep -qi '^onnxruntime$'" in build
+    # No runner xattrs (com.apple.provenance) in the tarball.
+    assert 'COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -c -z -f "$TARBALL" -C "$STAGING" app' in build
+
+
+@needs_bash
+def test_build_names_the_package_with_no_wheel(tmp_path):
+    text = BUILD.read_text(encoding="utf-8")
+    start = text.index("missing_wheel() {")
+    func = text[start:text.index("\n}\n", start) + 3]
+    lib = tmp_path / "missing.sh"
+    lib.write_text(func, encoding="utf-8", newline="\n")
+    log = tmp_path / "pip.log"
+    log.write_text("Collecting fastapi\n"
+                   "ERROR: Could not find a version that satisfies the requirement numpy==2.5.4 "
+                   "(from versions: 1.26.4)\n"
+                   "ERROR: No matching distribution found for numpy==2.5.4\n", encoding="utf-8")
+    res = run_bash('. "$1"; missing_wheel "$2"', sh_path(lib), sh_path(log))
+    assert res.stdout.strip() == "numpy"
+    log.write_text("ERROR: No matching distribution found for onnxruntime==1.31.0\n", encoding="utf-8")
+    assert run_bash('. "$1"; missing_wheel "$2"', sh_path(lib), sh_path(log)).stdout.strip() == "onnxruntime"
+    log.write_text("all fine\n", encoding="utf-8")
+    assert run_bash('. "$1"; missing_wheel "$2"', sh_path(lib), sh_path(log)).stdout.strip() == ""
 
 
 # ------------------------------------------------------------------ docs
@@ -408,6 +496,264 @@ def test_installer_refuses_another_os_and_odd_options(tmp_path):
     assert not (tmp_path / "r").exists()
     res = subprocess.run([BASH, posix(INSTALL), "--bogus"], capture_output=True, text=True, timeout=60)
     assert res.returncode != 0 and "Unknown option" in res.stderr
+
+
+@needs_bash
+def test_picker_reads_the_json_once_and_fast(tmp_path):
+    """The macOS awk measures the whole string in every substr(): the picker
+    splits the JSON once into characters instead. 30 releases with long notes
+    and many assets (about half a MB) must stay quick."""
+    text = INSTALL.read_text(encoding="utf-8")
+    picker = text[text.index("pick_release() {"):text.index("download_release() {")]
+    assert 'n = split(s, ch, "")' in picker
+    assert "substr(s, i" not in picker and "substr(s," not in picker
+    releases = []
+    for n in range(30, 0, -1):
+        assets = [{"name": "RobotHub-mac-{}-1.{}.0.tar.gz".format(a, n),
+                   "browser_download_url": "https://x/{}/{}".format(a, n), "size": n,
+                   "uploader": {"login": "lab", "id": n, "site_admin": False, "urls": ["u"] * 20}}
+                  for a in ("arm64", "x86_64")]
+        assets += [{"name": "extra-{}-{}.bin".format(n, k), "browser_download_url": "https://x/e",
+                    "size": k, "uploader": {"login": "lab", "urls": ["u"] * 20}} for k in range(6)]
+        releases.append({"tag_name": "v1.{}.0".format(n), "draft": False, "prerelease": False,
+                         "body": "Notes, \"quoted\" and [long]. " * 400, "assets": assets})
+    import time
+    t0 = time.monotonic()
+    res = pick(tmp_path, releases, "x86_64", indent=2)
+    took = time.monotonic() - t0
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip().split("|")[:2] == ["v1.30.0", "https://x/x86_64/30"]
+    assert (tmp_path / "releases.json").stat().st_size > 400_000
+    assert took < 30, "the picker took {:.1f} s".format(took)
+
+
+# ------------------------------------------------------------------ download and failure paths
+# A fake curl for download_release and main: answers by URL, from env vars.
+#   API_JSON  file the releases API returns (empty: the API call fails)
+#   LATEST    tag the /releases/latest redirect names (empty: no network)
+#   DL        "ok": the tarball downloads (as the bytes "tarball"); else HTTP 404
+#   SHA       what the .sha256 asset says
+FAKE_CURL = r'''
+curl() {
+    local out="" url=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -o) out="$2"; shift ;;
+            http*) url="$1" ;;
+        esac
+        shift
+    done
+    echo "CURL $url" >> "$LOG"
+    case "$url" in
+        https://api.github.com/*)
+            [ -n "$API_JSON" ] || return 22
+            cat "$API_JSON" > "$out" ;;
+        */releases/latest)
+            [ -n "$LATEST" ] || return 6
+            printf 'HTTP/2 302\r\nLocation: https://github.com/o/r/releases/tag/%s\r\n\r\n' "$LATEST" ;;
+        *.sha256)
+            printf '%s  x.tar.gz\n' "$SHA" ;;
+        *)
+            [ "$DL" = ok ] || return 22
+            printf 'tarball' > "$out" ;;
+    esac
+}
+'''
+TARBALL_SHA = __import__("hashlib").sha256(b"tarball").hexdigest()
+
+
+def run_download(tmp_path: Path, **env) -> tuple[int, str]:
+    lib = installer_functions(tmp_path)
+    log = tmp_path / "calls.log"
+    log.write_text("", encoding="utf-8")
+    full = dict(os.environ, LOG=sh_path(log), API_JSON="", LATEST="", DL="", SHA="")
+    full.update(env)
+    script = '. "$1"' + FAKE_CURL + 'download_release o/r arm64 "$2"; echo "rc=$?"'
+    res = subprocess.run([BASH, "-c", script, "bash", sh_path(lib), sh_path(tmp_path / "dl.tar.gz")],
+                         capture_output=True, text=True, timeout=60, env=full)
+    rc = int(re.search(r"rc=(\d+)", res.stdout).group(1))
+    return rc, log.read_text(encoding="utf-8")
+
+
+def api_json(tmp_path: Path, releases) -> str:
+    path = tmp_path / "api.json"
+    path.write_text(json.dumps(releases), encoding="utf-8")
+    return sh_path(path)
+
+
+@needs_bash
+def test_download_uses_the_redirect_only_when_the_api_call_failed(tmp_path):
+    # The API answered, but no release has this Mac's tarball: no guessing.
+    windows_only = [{"tag_name": "v2.0.0", "draft": False, "prerelease": False,
+                     "assets": [{"name": "RobotHub-2.0.0.zip", "browser_download_url": "w", "size": 1}]}]
+    rc, calls = run_download(tmp_path, API_JSON=api_json(tmp_path, windows_only), LATEST="v2.0.0", DL="ok")
+    assert rc == 2
+    assert "releases/latest" not in calls and "RobotHub-mac" not in calls
+    # No network at all.
+    rc, calls = run_download(tmp_path)
+    assert rc == 1 and "releases/latest" in calls
+    # The API failed (its hourly limit); the latest release is not an app release.
+    assert run_download(tmp_path, LATEST="robot-files")[0] == 2
+    # The latest release is Windows-only: the guessed tarball is a 404.
+    rc, calls = run_download(tmp_path, LATEST="v1.2.3")
+    assert rc == 2
+    assert "https://github.com/o/r/releases/download/v1.2.3/RobotHub-mac-arm64-1.2.3.tar.gz" in calls
+    # The guess works, checked against its .sha256 asset.
+    assert run_download(tmp_path, LATEST="v1.2.3", DL="ok", SHA=TARBALL_SHA)[0] == 0
+    assert run_download(tmp_path, LATEST="v1.2.3", DL="ok", SHA="0" * 64)[0] == 3
+
+
+@needs_bash
+def test_download_checks_the_api_digest(tmp_path):
+    def releases(digest):
+        return [{"tag_name": "v1.0.6", "draft": False, "prerelease": False,
+                 "assets": [{"name": "RobotHub-mac-arm64-1.0.6.tar.gz", "browser_download_url": "https://x/a",
+                             "size": 7, "digest": digest}]}]
+    rc, calls = run_download(tmp_path, API_JSON=api_json(tmp_path, releases("sha256:" + TARBALL_SHA.upper())),
+                             DL="ok")
+    assert rc == 0 and "CURL https://x/a" in calls and "releases/latest" not in calls
+    assert run_download(tmp_path, API_JSON=api_json(tmp_path, releases("sha256:" + "1" * 64)), DL="ok")[0] == 3
+    assert run_download(tmp_path, API_JSON=api_json(tmp_path, releases(None)), DL="")[0] == 1
+
+
+# main() on a pretend Mac: uname says Darwin, and open, the alert and
+# stop_hub only write to the log. stdout is a file, as under the hub's Update.
+FAKE_MAC = r'''
+uname() { echo Darwin; }
+open() { echo "OPEN $*" >> "$LOG"; return 0; }
+show_alert() { echo "ALERT $1 | $2" >> "$LOG"; }
+stop_hub() { echo "STOP" >> "$LOG"; }
+sw_vers() { echo "${FAKE_MACOS:-14.5}"; }
+xattr() { :; }
+'''
+
+
+def make_tarball(path: Path, version="9.9.9", macos_min="12.0") -> Path:
+    import io
+    import tarfile
+    files = {"app/runtime/bin/python3": b"#!/bin/sh\n", "app/robot-hub/hub/main.py": b"",
+             "app/launch_mac.py": b"", "app/VERSION": version.encode(), "app/MACOS_MIN": macos_min.encode()}
+    with tarfile.open(path, "w:gz") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = 0o755
+            tar.addfile(info, io.BytesIO(data))
+    return path
+
+
+class FakeMac:
+    """An installed app (app/ with OLD_MARKER) and its icon, under tmp_path."""
+
+    def __init__(self, tmp_path: Path):
+        self.tmp = tmp_path
+        self.root = tmp_path / "Application Support" / "RobotHub"
+        self.apps = tmp_path / "Applications"
+        self.bundle = self.apps / "LabaLab Robot Hub.app"
+        (self.root / "app").mkdir(parents=True)
+        (self.root / "app" / "OLD_MARKER").write_text("old", encoding="utf-8")
+        (self.bundle / "Contents").mkdir(parents=True)
+        self.log = tmp_path / "calls.log"
+        self.lib = installer_functions(tmp_path)
+
+    def run(self, *args: str, extra: str = "", **env) -> tuple[int, str, str]:
+        self.log.write_text("", encoding="utf-8")
+        out = self.tmp / "main.out"
+        full = dict(os.environ, LOG=sh_path(self.log), API_JSON="", LATEST="", DL="", SHA="")
+        full.update(env)
+        script = ('. "$1"' + FAKE_CURL + FAKE_MAC + extra
+                  + '\nshift; main "$@" > "$OUT" 2>&1; echo "rc=$?"')
+        full["OUT"] = sh_path(out)
+        res = subprocess.run([BASH, "-c", script, "bash", sh_path(self.lib),
+                              "--root", sh_path(self.root), "--apps-dir", sh_path(self.apps),
+                              "--arch", "arm64", *args],
+                             capture_output=True, text=True, timeout=120, env=full)
+        rc = int(re.search(r"rc=(\d+)", res.stdout).group(1))
+        return rc, self.log.read_text(encoding="utf-8"), out.read_text(encoding="utf-8")
+
+    def old_app_intact(self) -> bool:
+        return (self.root / "app" / "OLD_MARKER").is_file() and not (self.root / "app.new").exists()
+
+
+@needs_bash
+def test_a_failed_update_opens_the_old_app_and_says_so(tmp_path):
+    mac = FakeMac(tmp_path)
+    rc, calls, out = mac.run()          # no network
+    assert rc == 1
+    assert "The download failed" in out
+    assert mac.old_app_intact()
+    lines = calls.splitlines()
+    # It waits for the quitting hub, then opens the old version, then the alert.
+    assert lines.index("STOP") < lines.index("OPEN " + sh_path(mac.bundle))
+    alert = [l for l in lines if l.startswith("ALERT ")]
+    assert len(alert) == 1 and "Robot Hub could not update" in alert[0]
+    assert "The download failed" in alert[0] and "The old version is open again." in alert[0]
+    assert alert[0].endswith("data/logs/update.log")
+
+
+@needs_bash
+def test_a_mac_too_old_for_the_update_keeps_the_old_app(tmp_path):
+    mac = FakeMac(tmp_path)
+    tar = make_tarball(tmp_path / "new.tar.gz", macos_min="99.0")
+    rc, calls, out = mac.run("--tar", sh_path(tar), FAKE_MACOS="13.6")
+    assert rc == 1
+    assert "Robot Hub needs macOS 99.0 or newer" in out
+    assert mac.old_app_intact()
+    assert "OPEN " + sh_path(mac.bundle) in calls
+    assert "needs macOS 99.0" in calls
+    # --no-launch (the CI run) never opens anything or shows an alert.
+    rc, calls, out = mac.run("--tar", sh_path(tar), "--no-launch", FAKE_MACOS="13.6")
+    assert rc == 1 and "OPEN" not in calls and "ALERT" not in calls
+    # The API answered with no release for this Mac: says so, not "check the internet".
+    windows_only = [{"tag_name": "v2.0.0", "draft": False, "prerelease": False,
+                     "assets": [{"name": "RobotHub-2.0.0.zip", "browser_download_url": "w", "size": 1}]}]
+    rc, calls, out = mac.run(API_JSON=api_json(tmp_path, windows_only))
+    assert rc == 1 and "no Robot Hub release for this Mac (arm64)" in out
+    assert "internet" not in out
+
+
+@needs_bash
+@pytest.mark.parametrize("which", ["app-to-old", "new-to-app"])
+def test_a_failed_swap_puts_the_old_app_back(tmp_path, which):
+    mac = FakeMac(tmp_path)
+    tar = make_tarball(tmp_path / "new.tar.gz")
+    pattern = {"app-to-old": '*"/app|"*"/app.old"', "new-to-app": '*"/app.new|"*"/app"'}[which]
+    fake_mv = ('\nmv() { case "$1|$2" in ' + pattern + ') echo "MVFAIL" >> "$LOG"; return 1 ;; esac; '
+               'command mv "$@"; }\n')
+    rc, calls, out = mac.run("--tar", sh_path(tar), extra=fake_mv)
+    assert rc == 1, out
+    assert "MVFAIL" in calls
+    assert mac.old_app_intact()
+    assert not (mac.root / "app" / "VERSION").exists()
+    assert "OPEN " + sh_path(mac.bundle) in calls and "ALERT " in calls
+
+
+@needs_bash
+def test_an_update_swaps_the_app_and_opens_the_new_one(tmp_path):
+    mac = FakeMac(tmp_path)
+    tar = make_tarball(tmp_path / "new.tar.gz")
+    rc, calls, out = mac.run("--tar", sh_path(tar))
+    assert rc == 0, out
+    assert (mac.root / "app" / "VERSION").read_text(encoding="utf-8") == "9.9.9"
+    assert (mac.root / "app.old" / "OLD_MARKER").is_file()
+    assert (mac.root / "data").is_dir()
+    info = plistlib.loads((mac.bundle / "Contents" / "Info.plist").read_bytes())
+    assert info["CFBundleShortVersionString"] == "9.9.9"
+    assert calls.count("OPEN ") == 1 and "ALERT" not in calls
+    assert "Unpacking (version 9.9.9)" in out
+
+
+def test_every_failure_after_the_options_goes_through_on_fail():
+    text = INSTALL.read_text(encoding="utf-8")
+    main = text[text.index("main() {"):text.index("\n}\n", text.index("main() {"))]
+    after_options = main[main.index("done\n"):]
+    # Only the option parser itself uses plain fail.
+    assert re.findall(r"(?<!on_)\bfail \"", after_options) == []
+    assert after_options.count("on_fail ") >= 10
+    on_fail = text[text.index("on_fail() {"):text.index("show_alert() {")]
+    assert "[ -t 1 ] && return 0" in on_fail
+    assert '[ "$NO_LAUNCH" = 1 ] && return 0' in on_fail
+    assert 'open "$BUNDLE"' in on_fail and "stop_hub" in on_fail
 
 
 # ------------------------------------------------------------------ the build's secret scan

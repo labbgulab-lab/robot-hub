@@ -33,7 +33,7 @@ Robot Hub finds the lab's robots on the WiFi, connects them and starts their app
 On a Mac:
 
 - Open the app from Launchpad, or from Finder, your home folder, **Applications**. Drag it to the Dock to keep it there.
-- If macOS asks to let Robot Hub find devices on local networks, press **Allow**. Without it, no robots show up. If it asks about the microphone, press **Allow** for group conversation with this laptop's microphone.
+- If macOS asks to let Robot Hub find devices on local networks, press **Allow**. Without it, no robots show up. If it asks whether "python3" may accept incoming network connections, press **Allow** too. If it asks about the microphone, press **Allow** for group conversation with this laptop's microphone.
 - The app opens as a tab in your web browser, not in its own window. Closing the tab does not stop the robots. To stop everything, use **Settings**, then **About**, then **Quit** and **Press again to quit**.
 - **Pepper and NAO need a Windows laptop.** Their kit is Windows only, and on a Mac their cards say so. Reachy (Talk, group conversation, Wizard of Oz) and Furhat work.
 - Your keys, settings and logs are in `~/Library/Application Support/LabaLab/RobotHub/data`.
@@ -110,7 +110,7 @@ A conversation is saved as a transcript on this laptop while the **Saving transc
 When you open the app and a new version is out, it updates itself: the logo spins, it says **Please wait**, and the app opens again in about two minutes. Press **Not now** to skip it once. If you skipped it:
 
 1. When a new version is out, **New version** and an **Update** button appear at the top. Or open **Settings**, then **About**, and press **Check for updates**.
-2. Press **Update**. A PowerShell window opens, the app closes, and the new version opens. Robots stop for about a minute. On a Mac there is no window: the update runs in the background and the app opens again by itself.
+2. Press **Update**. A PowerShell window opens, the app closes, and the new version opens. Robots stop for about a minute. On a Mac there is no window: the update runs in the background and the app opens again by itself. If it says "Robot Hub could not update", the old version opens again; try later.
 
 Your keys and settings stay. You can also run the install line again.
 

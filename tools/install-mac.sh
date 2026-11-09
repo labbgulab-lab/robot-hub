@@ -32,6 +32,8 @@ main() {
     local BUNDLE_ID="il.ac.bgu.labalab.robothub"
     local TAR="" ROOT="" APPS_DIR="" ARCH="" PICK_FROM=""
     local UNINSTALL=0 REMOVE_DATA=0 NO_LAUNCH=0
+    # Set below; on_fail reads them (the functions main calls see its locals).
+    local APP="" APP_NEW="" APP_OLD="" DATA="" BUNDLE="" DOWNLOAD=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -54,7 +56,7 @@ main() {
     case "$ARCH" in
         arm64|aarch64) ARCH="arm64" ;;
         x86_64|i386) ARCH="x86_64" ;;
-        *) fail "This Mac's processor ($ARCH) is not supported."; return 1 ;;
+        *) on_fail "This Mac's processor ($ARCH) is not supported."; return 1 ;;
     esac
 
     if [ -n "$PICK_FROM" ]; then
@@ -66,9 +68,9 @@ main() {
     [ -n "$APPS_DIR" ] || APPS_DIR="$HOME/Applications"
     ROOT=$(abs_path "$ROOT")
     APPS_DIR=$(abs_path "$APPS_DIR")
-    local APP="$ROOT/app" APP_NEW="$ROOT/app.new" APP_OLD="$ROOT/app.old" DATA="$ROOT/data"
-    local BUNDLE="$APPS_DIR/$NAME.app"
-    local DOWNLOAD="$ROOT/download"
+    APP="$ROOT/app"; APP_NEW="$ROOT/app.new"; APP_OLD="$ROOT/app.old"; DATA="$ROOT/data"
+    BUNDLE="$APPS_DIR/$NAME.app"
+    DOWNLOAD="$ROOT/download"
 
     echo ""
     say_title "LabaLab Robot Hub installer"
@@ -76,7 +78,7 @@ main() {
     echo ""
 
     if [ "$(uname -s)" != "Darwin" ]; then
-        fail "This installer is for macOS. On Windows, use the PowerShell line from the README."
+        on_fail "This installer is for macOS. On Windows, use the PowerShell line from the README."
         return 1
     fi
 
@@ -85,7 +87,7 @@ main() {
         stop_hub "$ROOT" "$DATA"
         rm -rf "$APP_NEW" "$APP" "$APP_OLD" "$DOWNLOAD" "$BUNDLE"
         if [ -e "$APP" ] || [ -e "$BUNDLE" ]; then
-            fail "Could not remove the app. Quit Robot Hub and run the line again."
+            on_fail "Could not remove the app. Quit Robot Hub and run the line again."
             return 1
         fi
         done_line "Removed the app and its icon"
@@ -101,21 +103,27 @@ main() {
         return 0
     fi
 
-    mkdir -p "$ROOT" || { fail "Could not make the folder $ROOT"; return 1; }
+    mkdir -p "$ROOT" || { on_fail "Could not make the folder $ROOT"; return 1; }
 
     # ------------------------------------------------------------ get the bundle
     if [ -n "$TAR" ]; then
         TAR=$(abs_path "$TAR")
-        if [ ! -f "$TAR" ]; then fail "No such file: $TAR"; return 1; fi
+        if [ ! -f "$TAR" ]; then on_fail "No such file: $TAR"; return 1; fi
         done_line "Using $(basename "$TAR")"
     else
         rm -rf "$DOWNLOAD"
         mkdir -p "$DOWNLOAD"
         TAR="$DOWNLOAD/RobotHub.tar.gz"
-        if ! download_release "$REPO" "$ARCH" "$TAR"; then
+        local rc=0
+        download_release "$REPO" "$ARCH" "$TAR" || rc=$?
+        if [ $rc -ne 0 ]; then
             rm -rf "$DOWNLOAD"
             rmdir "$ROOT" 2>/dev/null
-            fail "The download failed. Check the internet connection and run the line again."
+            case $rc in
+                2) on_fail "There is no Robot Hub release for this Mac ($ARCH) yet. Ask the lab." ;;
+                3) on_fail "The download is damaged. Run the line again." ;;
+                *) on_fail "The download failed. Check the internet connection and run the line again." ;;
+            esac
             return 1
         fi
     fi
@@ -126,7 +134,7 @@ main() {
     mkdir -p "$ROOT/unpack"
     if ! tar -x -z -f "$TAR" -C "$ROOT/unpack" 2>/dev/null || [ ! -d "$ROOT/unpack/app" ]; then
         rm -rf "$ROOT/unpack"
-        fail "Unpacking failed. Download it again (run the line again)."
+        on_fail "Unpacking failed. Download it again (run the line again)."
         return 1
     fi
     mv "$ROOT/unpack/app" "$APP_NEW"
@@ -135,7 +143,7 @@ main() {
     for f in runtime/bin/python3 robot-hub/hub/main.py launch_mac.py; do
         if [ ! -e "$APP_NEW/$f" ]; then
             rm -rf "$APP_NEW"
-            fail "The bundle is incomplete ($f is missing)."
+            on_fail "The bundle is incomplete ($f is missing)."
             return 1
         fi
     done
@@ -147,7 +155,7 @@ main() {
         have=$(sw_vers -productVersion 2>/dev/null)
         if [ -n "$have" ] && ! version_ge "$have" "$need"; then
             rm -rf "$APP_NEW"
-            fail "This Mac runs macOS $have. Robot Hub needs macOS $need or newer."
+            on_fail "This Mac runs macOS $have. Robot Hub needs macOS $need or newer."
             return 1
         fi
     fi
@@ -159,11 +167,18 @@ main() {
     rm -rf "$APP_OLD"
     if [ -d "$APP" ]; then
         if ! mv "$APP" "$APP_OLD"; then
-            fail "Robot Hub is still running. Quit it and run the line again."
+            rm -rf "$APP_NEW"
+            on_fail "Robot Hub is still running. Quit it and run the line again."
             return 1
         fi
     fi
-    mv "$APP_NEW" "$APP" || { fail "Could not put the new version in place."; return 1; }
+    if ! mv "$APP_NEW" "$APP"; then
+        # Put the old version back, so the icon still opens something.
+        [ ! -e "$APP" ] && [ -d "$APP_OLD" ] && mv "$APP_OLD" "$APP"
+        rm -rf "$APP_NEW"
+        on_fail "Could not put the new version in place."
+        return 1
+    fi
     mkdir -p "$DATA"
     rm -rf "$DOWNLOAD"
 
@@ -201,6 +216,32 @@ say_title() { printf '  %s%s%s\n' "$C_TITLE" "$*" "$C_END"; }
 say_ok() { printf '  %s%s%s\n' "$C_OK" "$*" "$C_END"; }
 done_line() { printf '  %sdone%s  %s\n' "$C_OK" "$C_END" "$*"; }
 fail() { printf '\n  %s%s%s\n\n' "$C_BAD" "$*" "$C_END" >&2; }
+
+on_fail() {   # on_fail <why>: every failure after the options are read
+    # In a Terminal the line above is enough. Started by the hub's Update
+    # button (no terminal: the output goes to data/logs/update.log), the hub
+    # has quit itself, so bring the old version back and say what happened.
+    fail "$*"
+    [ -t 1 ] && return 0
+    [ "$NO_LAUNCH" = 1 ] && return 0
+    [ "$(uname -s)" = "Darwin" ] || return 0
+    local log="${DATA:-$HOME/Library/Application Support/LabaLab/RobotHub/data}/logs/update.log" back=""
+    if [ "$UNINSTALL" != 1 ] && [ -n "$APP" ] && [ -d "$APP" ] && [ -n "$BUNDLE" ] && [ -d "$BUNDLE" ]; then
+        # The old hub may still be closing: wait for it, or the new start
+        # finds it on the port and only opens the browser.
+        stop_hub "$ROOT" "$DATA"
+        if open "$BUNDLE" </dev/null >/dev/null 2>&1; then back=" The old version is open again."; fi
+    fi
+    show_alert "Robot Hub could not update" "$*$back Details: $(display_dir "$log")"
+    return 0
+}
+
+show_alert() {   # show_alert <title> <message>: a macOS alert, not waited for
+    [ -x /usr/bin/osascript ] || return 0
+    /usr/bin/osascript -e 'on run argv' -e 'display alert (item 1 of argv) message (item 2 of argv)' \
+        -e 'end run' "$1" "$2" </dev/null >/dev/null 2>&1 &
+    return 0
+}
 
 # ---------------------------------------------------------------- helpers
 abs_path() {
@@ -354,9 +395,11 @@ pick_release() {   # pick_release <arch> < releases.json
     BEGIN { prefix = "RobotHub-mac-" arch "-"; d = 0; best = ""; out = ""; s = "" }
     { s = s $0 "\n" }
     END {
-        n = length(s); i = 1
+        # One split, then ch[i]: the macOS awk measures the whole string in
+        # every substr(), so a substr() per character is O(n^2).
+        n = split(s, ch, ""); i = 1
         while (i <= n) {
-            c = substr(s, i, 1)
+            c = ch[i]
             if (c == "{" || c == "[") { open_(c); i++ }
             else if (c == "}" || c == "]") { close_(c); i++ }
             else if (c == ",") { if (t[d] == "{") expect = 1; i++ }
@@ -364,8 +407,8 @@ pick_release() {   # pick_release <arch> < releases.json
             else if (c == "\"") {
                 str = ""; i++
                 while (i <= n) {
-                    c = substr(s, i, 1)
-                    if (c == "\\") { str = str substr(s, i + 1, 1); i += 2; continue }
+                    c = ch[i]
+                    if (c == "\\") { str = str ch[i + 1]; i += 2; continue }
                     if (c == "\"") break
                     str = str c; i++
                 }
@@ -374,7 +417,7 @@ pick_release() {   # pick_release <arch> < releases.json
             }
             else if (c ~ /[-0-9a-z]/) {
                 tok = ""
-                while (i <= n && substr(s, i, 1) ~ /[-+.0-9a-zA-Z]/) { tok = tok substr(s, i, 1); i++ }
+                while (i <= n && ch[i] ~ /[-+.0-9a-zA-Z]/) { tok = tok ch[i]; i++ }
                 value(tok == "null" ? "" : tok)
             }
             else i++
@@ -385,11 +428,15 @@ pick_release() {   # pick_release <arch> < releases.json
 }
 
 download_release() {   # download_release <repo> <arch> <dest>
+    # Returns 0, 1 (no network, or the download broke), 2 (no published
+    # release has this Mac's tarball), 3 (the download is damaged).
     local repo="$1" arch="$2" dest="$3" ua="LabaLab-RobotHub-installer"
     local json="$dest.releases.json" line tag url size digest shaurl want got
+    local api_ok=0 guessed=0 rc=0 headers
     line=""
     if curl -fsSL --max-time 30 -H "Accept: application/vnd.github+json" -H "User-Agent: $ua" \
             -o "$json" "https://api.github.com/repos/$repo/releases?per_page=30" 2>/dev/null; then
+        api_ok=1
         line=$(pick_release "$arch" < "$json")
     fi
     rm -f "$json"
@@ -397,17 +444,22 @@ download_release() {   # download_release <repo> <arch> <dest>
         IFS="|" read -r tag url size digest shaurl <<EOF
 $line
 EOF
+    elif [ "$api_ok" = 1 ]; then
+        # GitHub answered: no published release carries this Mac's tarball.
+        return 2
     else
-        # The API allows 60 calls an hour per address; the release page's
-        # redirect names the latest tag (v<version>) without it.
-        tag=$(curl -fsSI --max-time 30 -H "User-Agent: $ua" "https://github.com/$repo/releases/latest" 2>/dev/null \
-              | tr -d '\r' | sed -n 's/^[Ll]ocation:.*\/tag\/\(.*\)$/\1/p' | head -n 1)
+        # The API call failed. It allows 60 calls an hour per address (a lab
+        # shares one); the release page's redirect names the latest tag
+        # (v<version>) without it.
+        headers=$(curl -fsSI --max-time 30 -H "User-Agent: $ua" "https://github.com/$repo/releases/latest" 2>/dev/null) \
+            || return 1
+        tag=$(printf '%s\n' "$headers" | tr -d '\r' | sed -n 's/^[Ll]ocation:.*\/tag\/\(.*\)$/\1/p' | head -n 1)
         case "$tag" in
             v[0-9]*) ;;
-            *) say "No Robot Hub release for Macs was found."; return 1 ;;
+            *) return 2 ;;
         esac
         url="https://github.com/$repo/releases/download/$tag/RobotHub-mac-$arch-${tag#v}.tar.gz"
-        size=""; digest=""; shaurl="$url.sha256"
+        size=""; digest=""; shaurl="$url.sha256"; guessed=1
     fi
     local mb=""
     case "$size" in
@@ -415,7 +467,11 @@ EOF
         *) mb=" ($(( (size + 524288) / 1048576 )) MB)" ;;
     esac
     say "Downloading$mb ..."
-    if ! curl -fL --retry 2 --progress-bar -H "User-Agent: $ua" -o "$dest" "$url" </dev/null; then
+    curl -fL --retry 2 --progress-bar -H "User-Agent: $ua" -o "$dest" "$url" </dev/null || rc=$?
+    if [ $rc -ne 0 ]; then
+        # 22 is an HTTP error: a guessed tarball that is not there means the
+        # latest release has no app for this Mac.
+        [ "$guessed" = 1 ] && [ $rc -eq 22 ] && return 2
         return 1
     fi
     want=""
@@ -428,10 +484,7 @@ EOF
     if [ -n "$want" ]; then
         got=$(sha256_of "$dest")
         want=$(printf '%s' "$want" | tr 'A-F' 'a-f')
-        if [ "$got" != "$want" ]; then
-            say "The download is damaged. Run the line again."
-            return 1
-        fi
+        [ "$got" = "$want" ] || return 3
     fi
     done_line "Downloading$mb"
     return 0

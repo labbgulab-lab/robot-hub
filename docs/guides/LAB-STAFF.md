@@ -60,7 +60,7 @@ Each robot also needs the lab WiFi once. The network chip at the top opens the s
 Do this on a Windows lab laptop with robot-hub and reachy_chat side by side.
 
 1. Change `VERSION` (for example `1.0.1`) and commit it. The build uses committed files only.
-2. Make sure the reachy_chat `multi-provider` branch has the commit you want.
+2. Make sure the reachy_chat `main` branch has the commit you want. The Mac build takes `main` too. The build writes the commit into the app as `reachy_chat/COMMIT` and prints it on the `done` line.
 3. Run, from the robot-hub folder:
 
    ```powershell
@@ -71,6 +71,7 @@ Do this on a Windows lab laptop with robot-hub and reachy_chat side by side.
 4. Wait for the `done` line. It writes to `dist\`:
    - `RobotHub-<version>.zip` (about 114 MB) and its `.sha256` file
    - `install.ps1`
+   - `install-mac.sh` (the Mac installer: every release carries it)
 5. Quit Robot Hub first, and any hub running from a checkout: a second start only opens the hub that is already running. Then test it in a temp folder, so the real install and shortcuts stay untouched:
 
    ```powershell
@@ -87,11 +88,14 @@ Do this on a Windows lab laptop with robot-hub and reachy_chat side by side.
 
 The Mac app is built on GitHub's own Macs, by the **Mac release** GitHub Action (`.github/workflows/mac-release.yml`). You do not need a Mac. For each Mac type (Apple Silicon `arm64` and Intel `x86_64`) it:
 
-1. builds `RobotHub-mac-<arch>-<version>.tar.gz` with `tools/build_release_mac.sh`, from the tag's robot-hub and reachy_chat's `main` branch (the same Python 3.12 as Windows; Windows-only packages are left out);
+1. builds `RobotHub-mac-<arch>-<version>.tar.gz` with `tools/build_release_mac.sh`, from the tag's robot-hub and reachy_chat's `main` branch (the same Python 3.12 as Windows; Windows-only packages are left out). If the Windows build used another reachy_chat commit, type that commit in **reachy_chat_ref**. The run's summary shows which commit went in;
 2. installs it into a temp folder with `install-mac.sh --tar ... --no-launch`;
 3. runs the installed app's self-test (`launch_mac.py --check`). The run fails unless the hub starts and reports the tag's version;
-4. runs the hub's tests on macOS. A failure there is shown in the run's summary and marks the run red at the end, but the assets are still uploaded: read it and decide;
-5. uploads `RobotHub-mac-arm64-<version>.tar.gz`, `RobotHub-mac-x86_64-<version>.tar.gz`, their `.sha256` files and `install-mac.sh` to the release. They are also kept for 14 days as the run's artifact.
+4. runs the installer's own tests (`tests/test_mac_ship.py`) with the Mac's bash and awk. The run fails if they fail;
+5. runs the rest of the hub's tests on macOS, for information only. They were written on Windows, so some may fail on a Mac. That shows as a warning in the run's summary, never as a red run;
+6. uploads `RobotHub-mac-arm64-<version>.tar.gz`, `RobotHub-mac-x86_64-<version>.tar.gz` and their `.sha256` files to the release. They are also kept for 14 days as the run's artifact. A last job uploads `install-mac.sh`, even when a Mac job failed.
+
+**The gate is steps 1 to 4: a green run means the Mac assets are good.** A red Mac job means that Mac's tarball was not uploaded; Macs of that kind stay on the version they have.
 
 On a Mac with both repos side by side you can build by hand: `bash tools/build_release_mac.sh arm64` (or `x86_64`), then test with `bash dist/install-mac.sh --tar dist/RobotHub-mac-arm64-<version>.tar.gz --root /tmp/rh --apps-dir /tmp/apps --no-launch` and `/tmp/rh/app/runtime/bin/python3 /tmp/rh/app/launch_mac.py --check`.
 
@@ -99,11 +103,13 @@ The build picks packages for the oldest macOS it can (11 first). The result is i
 
 ## Publish a release
 
-Windows and Mac assets go into the same release. Students on a Mac only get a release that has the Mac tarball for their Mac, so a release published without them is never offered to Macs. But the Mac install line downloads the **latest** release's `install-mac.sh`, so always add the Mac assets before you publish.
+Windows and Mac assets go into the same release. Students on a Mac only get a release that has the Mac tarball for their Mac, so a release published without them is never offered to Macs. But the Mac install line and the Mac **Update** download the **latest** release's `install-mac.sh`, so every release must carry it: upload it with the Windows files (step 2), and add the Mac assets before you publish.
+
+Before the first Mac release: `.github/workflows/mac-release.yml` must be on `master`, or **Mac release** does not show under **Actions**. The tag must hold `tools/build_release_mac.sh` and `launch/launch_mac.py`, so 1.0.5 and older cannot be built for Macs.
 
 1. Push the tag: `git tag v<version>` then `git push origin v<version>` (for example `v1.0.6`). The tag must be on the commit that has the new `VERSION`.
-2. On GitHub, open the repo's releases and make a new release on that tag. Upload `dist\RobotHub-<version>.zip` and `dist\install.ps1`. Press **Save draft**, not **Publish**.
-3. Open **Actions**, **Mac release**, **Run workflow**. Type the tag (`v<version>`), leave **Upload** ticked and press **Run workflow**. It takes about 15 minutes. Both jobs (arm64 and x86_64) must be green. If the Intel job cannot start because GitHub has no `macos-15-intel` machine any more, change that label in the workflow (see the comment there).
+2. On GitHub, open the repo's releases and make a new release on that tag. Upload `dist\RobotHub-<version>.zip`, `dist\install.ps1` and `dist\install-mac.sh`. Press **Save draft**, not **Publish**.
+3. Open **Actions**, **Mac release**, **Run workflow**. Type the tag (`v<version>`), leave **Upload** ticked and press **Run workflow**. It takes about 15 minutes. Both Mac jobs (arm64 and x86_64) and the `install-mac.sh` job should be green; see "Build the Mac app" above for what a red job means. If the Intel job cannot start because GitHub has no `macos-15-intel` machine any more, Intel Macs cannot get new versions: remove the `x86_64` row from the workflow's matrix.
 4. Open the draft again. It now also has `RobotHub-mac-arm64-<version>.tar.gz`, `RobotHub-mac-x86_64-<version>.tar.gz`, their `.sha256` files and `install-mac.sh`.
 5. Publish it and mark it as the latest release. The student install lines and the **Update** button use the latest release's `install.ps1` and `install-mac.sh`. The `robot-files` release must not be the latest.
 6. Test the install line on a second laptop, and on a Mac if you have one.
@@ -115,7 +121,7 @@ If you forgot the Mac step and already published, run **Mac release** for that t
 - The hub asks GitHub for the repo's releases at most every 6 hours (also when the app starts). **Check for updates** asks GitHub at once (at most once a minute), so right after you publish, press it and a running app offers **Update**. It picks the highest version among the published releases whose tag starts with `v` and which has the app for this computer: a `RobotHub-*.zip` on Windows, a `RobotHub-mac-arm64-*.tar.gz` or `RobotHub-mac-x86_64-*.tar.gz` on a Mac. Drafts, pre-releases and `robot-files` are skipped.
 - If that version is newer than the installed one, students see **New version** and **Update** at the top, and **Update** in **Settings**, **About**.
 - **Updates itself on start (1.0.3 and later):** when the installed app finds a newer release in its first 3 minutes and no robot is connected, it shows the spinning logo, "Robot Hub <version> is out", and counts down 5 s (**Update now**, **Not now**). Then it installs the update and opens again. A lab checkout never does this. Apps older than 1.0.3 need one manual **Update** to get this.
-- **Update** opens PowerShell, runs the install line, stops the hub, swaps the app folder and opens the app again. On a Mac it runs the Mac install line in the background instead (no window; its output goes to `data/logs/update.log`). If the network is down, the check fails quietly and tries again later.
+- **Update** opens PowerShell, runs the install line, stops the hub, swaps the app folder and opens the app again. On a Mac it runs the Mac install line in the background instead (no window; its output goes to `data/logs/update.log`). If a Mac update fails (no network, a damaged download, a Mac too old for the new version), the installer opens the old version again and shows "Robot Hub could not update". If the network is down, the check fails quietly and tries again later.
 - The previous app stays as `app.old` until the next install.
 
 ## Where student data lives

@@ -67,9 +67,11 @@ this window", close Terminal.
 | Problem on a Mac | What to do |
 |---|---|
 | macOS asks to let Robot Hub find devices on local networks | Press **Allow**. Without it, no robot cards appear. To change it later: **System Settings**, **Privacy & Security**, **Local Network**. |
+| macOS asks whether "python3" may accept incoming network connections | Press **Allow**. With **Deny**, no robots are found. To change it later: **System Settings**, **Network**, **Firewall**, **Options**. |
 | macOS asks about the microphone | Press **Allow** if you use group conversation with this laptop's microphone. |
 | "Robot Hub needs macOS ... or newer" | This Mac is too old for the app. Use a lab laptop. |
 | The download failed | Check the internet connection and paste the line again. |
+| "Robot Hub could not update" | The old version opens again. Try **Update** later, or paste the line again in Terminal: it shows what went wrong. |
 | The app does not open | Paste the line again. If it still fails, send the lab the file `update.log` or `hub-stdout.log` from `~/Library/Application Support/LabaLab/RobotHub/data/logs`. |
 
 ## First time in the app
@@ -120,11 +122,11 @@ network.
 
 **Making a release:** bump `VERSION`, commit, then on Windows run
 `powershell -ExecutionPolicy Bypass -File tools\build_release.ps1` (it builds
-from the committed HEAD of robot-hub and of reachy_chat's `multi-provider`
-branch). Push the tag `v<version>`, make a **draft** GitHub release on it
-and upload `dist\RobotHub-<version>.zip` and `dist\install.ps1`. Then run
-the **Mac release** GitHub Action for that tag: it builds, tests and uploads
-the Mac assets (`RobotHub-mac-arm64-<version>.tar.gz`,
+from the committed HEAD of robot-hub and of reachy_chat's `main` branch).
+Push the tag `v<version>`, make a **draft** GitHub release on it and upload
+`dist\RobotHub-<version>.zip`, `dist\install.ps1` and `dist\install-mac.sh`.
+Then run the **Mac release** GitHub Action for that tag: it builds, tests and
+uploads the Mac assets (`RobotHub-mac-arm64-<version>.tar.gz`,
 `RobotHub-mac-x86_64-<version>.tar.gz`, `install-mac.sh`) to the draft.
 Then publish it as the latest release. Details:
 [lab staff guide](docs/guides/LAB-STAFF.md#publish-a-release).
@@ -239,7 +241,7 @@ The hub launches each robot's own program. Clone the ones you need **next to
 - **Reachy Mini**: needs `reachy_chat`:
 
   ```bash
-  git clone -b multi-provider https://github.com/labbgulab-lab/reachy-mini-conversation-app-bgu-lab.git reachy_chat
+  git clone -b main https://github.com/labbgulab-lab/reachy-mini-conversation-app-bgu-lab.git reachy_chat
   cd reachy_chat
   python -m venv .venv
   # Windows: .venv\Scripts\python -m pip install -r requirements.txt
