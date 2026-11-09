@@ -31,7 +31,7 @@ import statistics
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import httpx
 
@@ -120,6 +120,8 @@ STALL_S = 10.0          # a voice that stops sending for this long is over
 AUDIO_WAIT_S = 45.0     # the speaker waits this long at most for a line's voice to start
 AUDIO_GAP_S = 20.0      # ... and this long for the next piece of it
 HANG_S = 60.0           # a conversation with no sign of life this long is stuck
+FLOOR_WAIT_S = 120.0    # a line waits at most this long for a Wizard of Oz cue (which
+                        # itself never holds the floor past its length + a margin)
 HEDGE_TTS_S = 1.8       # no voice audio yet: race a second request
 # Playback never outruns the download (Audio.can_start): at least this much
 # buffered; 1 s when the arrival rate is not known yet (first 0.25 s); start
@@ -1048,20 +1050,26 @@ class Audio:
         return have + head_s >= need
 
     async def playable(self, expected_s: float, head_s: float = 0.0,
-                       limit_s: float = AUDIO_WAIT_S) -> None:
+                       limit_s: float = AUDIO_WAIT_S,
+                       stop: Optional[Callable[[], bool]] = None) -> None:
         """Wait until can_start (head_s counts down while it plays). Never
         longer than `limit_s`: a voice that never comes ends the line
-        (2026-10-26 a conversation hung 22 min with no log line)."""
+        (2026-10-26 a conversation hung 22 min with no log line). Returns
+        early once `stop()` is true (the line was cut while it waited)."""
         t0 = time.monotonic()
         while not self.can_start(expected_s, max(0.0, head_s - (time.monotonic() - t0))):
+            if stop is not None and stop():
+                return
             if time.monotonic() - t0 >= limit_s:
                 log.warning("voice: nothing playable after %.0f s; the line is given up", limit_s)
                 self.finish("no audio after {:.0f} s".format(limit_s))
                 return
             await asyncio.sleep(0.02)
 
-    async def stream(self, gap_s: float = AUDIO_GAP_S):
-        """The chunks as they come; a gap over `gap_s` ends the line."""
+    async def stream(self, gap_s: float = AUDIO_GAP_S,
+                     stop: Optional[Callable[[], bool]] = None):
+        """The chunks as they come; a gap over `gap_s` ends the line. Ends
+        early once `stop()` is true (checked while it waits for a chunk)."""
         i = 0
         while True:
             while i < len(self.chunks):
@@ -1070,12 +1078,21 @@ class Audio:
             if self.done:
                 return
             self._event.clear()
-            try:
-                await asyncio.wait_for(self._event.wait(), gap_s)
-            except asyncio.TimeoutError:
-                if not self.done:
-                    log.warning("voice: no audio for %.0f s mid-line; the line ends", gap_s)
-                    self.finish("stalled for {:.0f} s".format(gap_s))
+            t0 = time.monotonic()
+            while not self._event.is_set():
+                if stop is not None and stop():
+                    return
+                left = gap_s - (time.monotonic() - t0)
+                if left <= 0:
+                    if not self.done:
+                        log.warning("voice: no audio for %.0f s mid-line; the line ends", gap_s)
+                        self.finish("stalled for {:.0f} s".format(gap_s))
+                    break
+                try:
+                    await asyncio.wait_for(self._event.wait(),
+                                           left if stop is None else min(left, 0.05))
+                except asyncio.TimeoutError:
+                    pass
 
 
 
@@ -1319,12 +1336,21 @@ class Session:
         await self.measure_clocks()
         self._clocks = asyncio.create_task(self.keep_clocks())
 
-    async def wait_floor(self) -> None:
-        """A line waits while the Wizard of Oz is playing a cue (never long)."""
+    def floor_taken(self) -> bool:
+        """The Wizard of Oz holds the floor: a cue with a voice is being
+        started or played (TableWoz.active, which bounds it by the cue's own
+        length), and no conversation audio may go out."""
         woz = getattr(self.m, "woz", None)
+        return woz is not None and woz.active()
+
+    async def wait_floor(self, convo: Optional["Conversation"] = None) -> None:
+        """A line waits while the Wizard of Oz has the floor (never long).
+        The waiting conversation is alive: its hang watchdog is fed."""
         t0 = time.monotonic()
-        while woz is not None and woz.active() and time.monotonic() - t0 < 60.0:
-            await asyncio.sleep(0.1)
+        while self.floor_taken() and time.monotonic() - t0 < FLOOR_WAIT_S:
+            if convo is not None:
+                convo.beat()
+            await asyncio.sleep(0.05)
 
     async def open_people_mic(self, choice: str = "auto") -> Optional[dict]:
         """Open the people's own mic (laptop_mic.MIC_WATCH knows what is
@@ -1566,7 +1592,12 @@ class Session:
         # outlive the robots' connection (GroupManager.shared_services).
 
     async def quiet(self) -> None:
-        """Between conversations: every robot silent, heads to the middle."""
+        """Between conversations: every robot silent, heads to the middle (a
+        Wizard of Oz cue too: stop_audio alone would not stop its task, which
+        would go on sending the rest of the cue)."""
+        woz = getattr(self.m, "woz", None)
+        if woz is not None and getattr(self.m, "session", None) is self and woz.busy():
+            woz.halt()
         self.cancel_background()
         sends = []
         for key, link in self.links.items():
@@ -2161,6 +2192,7 @@ class Conversation:
                 lines.append("{}: {}{}".format(
                     seat["character"] if seat else t["character"], said,
                     " [cut off by a noise; nobody spoke]" if t.get("cut_noise")
+                    else " [cut off]" if t.get("cut_woz")       # by a Wizard of Oz cue
                     else " [cut off by the people]" if t.get("cut") else ""))
             elif t["kind"] == "human":
                 where = " (heard closest to {})".format(self.character_of(t["heard_by"])) \
@@ -2344,11 +2376,19 @@ class Conversation:
         from .robots import GROUP_START_LEAD_S
 
         s = self.s
-        await s.wait_floor()
+        try:
+            await s.wait_floor(self)
+        except asyncio.CancelledError:
+            # Stopped while it waited for a cue: it was never said.
+            entry["unspoken"] = True
+            self.m.add_turn(entry)
+            raise
         link = s.speaker_link(line.seat)
         if link is None:
             return True
         key = line.seat["key"]
+        # Read in the same step wait_floor found the floor free: a cue fired
+        # from here on bumps cut_seq, so this line sees it before any send.
         cut_seq = s.cut_seq
         # A talking group: every member plays the line (its echo counts on
         # each one's mic); a synced group starts GROUP_START_LEAD_S from now.
@@ -2360,7 +2400,6 @@ class Conversation:
         own_fillers: dict[str, list[str]] = {k: [] for k in own_moves}
         self.status("speaking", speaker=line.seat)
         s.speaking_key = key
-        await s.look(line.seat)
         ears = self.ears
         play_end = time.monotonic()
         played = 0.0
@@ -2372,9 +2411,14 @@ class Conversation:
         fillers: list[str] = []
         calm = self.calm(line.seat)
 
+        def by_woz() -> bool:
+            # The Wizard of Oz fired a cue (or Stop) over this line, or holds
+            # the floor: nothing more of it may go out.
+            return s.cut_seq != cut_seq or s.floor_taken()
+
         def cut_now() -> bool:
-            if s.cut_seq != cut_seq:
-                return True         # the Wizard of Oz fired a cue over this line
+            if by_woz():
+                return True
             return (cut_by_people and ears.capturing and ears.during_robot
                     and time.monotonic() - ears.started_at >= BARGE_HOLD_S
                     and ears.silence() < 0.25)
@@ -2448,12 +2492,14 @@ class Conversation:
                 head = len(line.pre_pcm) / 32000.0
                 yield line.pre_pcm
             # Not before the rest can keep up (Audio.can_start).
+            # A cue fired meanwhile ends the wait at once (by_woz): the line
+            # lets go of the floor instead of playing after the cue started.
             waited = time.monotonic()
-            await line.audio.playable(len(line.text) / SPEECH_CHARS_PER_S, head)
+            await line.audio.playable(len(line.text) / SPEECH_CHARS_PER_S, head, stop=by_woz)
             waited = time.monotonic() - waited
             if waited > 0.05:
                 entry["buffer_ms"] = int(waited * 1000)
-            async for c in line.audio.stream():
+            async for c in line.audio.stream(stop=by_woz):
                 yield c
 
         def pieces(chunk: bytes):
@@ -2463,6 +2509,8 @@ class Conversation:
         was_cut = False
         cancelled = False
         try:
+            # Inside the try: a Stop here still lets go of speaking_key.
+            await s.look(line.seat)
             async for chunk in chunks():
                 for piece in pieces(chunk):
                     # Paced: the robot gets its audio AUDIO_LEAD_S ahead of the
@@ -2476,6 +2524,11 @@ class Conversation:
                             break
                         await asyncio.sleep(0.02)
                     if was_cut:
+                        break
+                    # Before every send, the first one too: a cut that came
+                    # while it waited for its voice sends nothing at all.
+                    if cut_now():
+                        was_cut = True
                         break
                     if first:
                         first = False
@@ -2495,6 +2548,8 @@ class Conversation:
                         break
                 if was_cut:
                     break
+            if not was_cut and by_woz():
+                was_cut = True      # cut while it waited for its voice
             if not was_cut:
                 if line.audio.error and line.audio.error != "cancelled":
                     self.note("{}'s voice failed: {}".format(line.seat["name"], line.audio.error))
@@ -2513,21 +2568,40 @@ class Conversation:
                 # when the speech is really over, not when the last audio left.
                 await link.end_line()
             if was_cut:
-                played = max(0.0, time.monotonic() - start_t - PLAY_LATENCY_S)
-                await link.stop_audio()
-                for k in voices:
-                    ears.drop_reference(k, time.monotonic() + 0.3)
+                woz = by_woz()
                 if line.tts is not None:
                     line.tts.cancel()
+                if woz:
+                    # A cue, not the people: nobody is to be answered (GroupTalk.run).
+                    entry["cut_woz"] = True
+                if first:
+                    # Not a sound of it went out: nothing to clear (that would
+                    # flush the cue and its echo references); not said.
+                    entry["unspoken"] = True
+                    self.m.add_turn(entry)
+                    log.info("%s's line was dropped before it started (%s)", line.seat["name"],
+                             "a cue" if woz else "the people")
+                    return False
+                played = max(0.0, time.monotonic() - start_t - PLAY_LATENCY_S)
+                woz_on = getattr(getattr(self.m, "woz", None), "sending", lambda: False)()
+                if not (woz and woz_on):
+                    # (A cue already sending has cleared the robots itself.)
+                    await link.stop_audio()
+                    for k in voices:
+                        ears.drop_reference(k, time.monotonic() + 0.3)
                 words = line.text.split()
                 share = min(1.0, played / max(0.5, total))
                 entry["cut"] = True
                 entry["spoken"] = " ".join(words[:max(1, int(len(words) * share))]) + "..."
                 self.m.add_turn(entry)
-                log.info("%s cut off by the people after %.1f s", line.seat["name"], played)
+                log.info("%s cut off by %s after %.1f s", line.seat["name"],
+                         "a cue" if woz else "the people", played)
                 return False
         except asyncio.CancelledError:
             cancelled = True        # whoever cancelled it (a cut-in) logs it
+            if first:
+                entry["unspoken"] = True    # stopped before a sound of it went out
+                self.m.add_turn(entry)
             raise
         except Exception as exc:  # noqa: BLE001
             self.note("{} could not speak: {}".format(line.seat["name"], exc))
@@ -2962,8 +3036,11 @@ class GroupTalk(Conversation):
                     # The next line was written for the whole line: write it again.
                     self.discard(pending)
                     pending = None
-                    self.cut_entry = entry
-                    continue                    # the people have the floor
+                    # A Wizard of Oz cue is not the people: nothing to resume
+                    # or answer later (a stale cut_entry made the wrong robot
+                    # "pick its point up again" at the next noise).
+                    self.cut_entry = None if entry.get("cut_woz") else entry
+                    continue                    # the people (or a cue) have the floor
                 if self.closing or self.time_up():
                     continue                    # the closing round, at the top
 
@@ -3750,10 +3827,14 @@ class InterruptTalk(Conversation):
             self.s.start_voice(mine)
         self.s.phrases.used(text)
         # Let the interrupter get a few words out first.
+        cut_seq = self.s.cut_seq
         await asyncio.sleep(random.uniform(1.2, 2.2))
         current = self.current
+        # Not over a Wizard of Oz cue, and not a line that has not started
+        # (it may be waiting for the cue): stop_audio would cut the cue.
         if current is None or current[0] is not line or self.speaking is None \
-                or self.speaking.done():
+                or self.speaking.done() or not line.playing or self.s.floor_taken() \
+                or self.s.cut_seq != cut_seq:
             self.discard(self.ready(mine))
             return
         victim, entry = current
@@ -3770,7 +3851,10 @@ class InterruptTalk(Conversation):
         await self.say(mine, wait=False)
 
     async def pile_on(self, seat: dict, stance: str, delay: float) -> None:
+        cut_seq = self.s.cut_seq
         await asyncio.sleep(delay)
+        if self.s.floor_taken() or self.s.cut_seq != cut_seq:
+            return          # a Wizard of Oz cue came meanwhile: not over it
         phrase = self.s.phrases.get(self.s.voice_key(seat), self.lang, stance, seat["character"])
         link = self.s.speaker_link(seat)
         if phrase is None or link is None:
@@ -4061,7 +4145,8 @@ class GroupManager:
             if self.mode == "interrupt":
                 barge = barge or 12.0
             self.session.ears.barge_db = barge
-        if self.session.links:
+        if self.session.links and not self.session.lite:
+            # (A Wizard of Oz connection voices nothing: no keys, no paid calls.)
             self.session.rewarm()
         self.session.services.compressed = live.get("slow_network", True) is not False
         # The table's writer (races, the hearing call): the first robot's.
@@ -4335,7 +4420,10 @@ class GroupManager:
         running), for the Wizard of Oz. None, or why it could not."""
         self.error = None
         live = {"simulate": self.cfg["settings"].get("simulate"), "people_mic": "robots"}
-        session = Session(self, seats, live, self.shared_services(), lite=True)
+        services = self.shared_services()
+        session = Session(self, seats, live, services, lite=True)
+        if not services.eleven_key:
+            session.eleven_down = True      # as _ensure_session: never ElevenLabs first
         self.session = session
         self._connecting = asyncio.create_task(session.open_lite())
         self.publish_state()
@@ -4608,6 +4696,12 @@ class GroupManager:
             self.note("{} started".format(MODE_LABEL[mode]))
             self.publish_state()
             await self._watch(convo)
+            # It ended on its own: a Wizard of Oz cue fired at the very end
+            # plays out before the robots are quieted (quiet() stops cues).
+            try:
+                await session.wait_floor()
+            except asyncio.CancelledError:
+                pass
         except asyncio.CancelledError:
             pass
         except Exception as exc:  # noqa: BLE001
@@ -4676,6 +4770,9 @@ class GroupManager:
         conv = self.convo
         if isinstance(conv, InterruptTalk) and conv.speaking is not None:
             conv.speaking.cancel()
+        # A Wizard of Oz cue playing over it stops with it (the callers
+        # quiet the robots or release them).
+        self.woz.halt()
         self.flush_log()
 
     def flush_log(self) -> None:
@@ -4703,13 +4800,17 @@ class GroupManager:
         if convo is None or not self.running or convo.closing:
             return await self.stop()
         convo.closing = True
+        # A Wizard of Oz cue stops now; the robot talking finishes its line.
+        await self.woz.stop(cut_line=False)
         self.publish_state()
         return {"ok": True, "closing": True}
 
     async def stop(self) -> dict:
-        """Stop talking; the robots stay connected for the next Start."""
+        """Stop talking (a Wizard of Oz cue too); the robots stay connected
+        for the next Start."""
         async with self._lock:
             await self._stop_conversation()
+            self.woz.halt()
             if self.session is not None:
                 await self.session.quiet()
                 self.set_status({"phase": "ready",

@@ -21,7 +21,11 @@ CUES = {"voice": VOICE, "tts_model": "m1", "style": STYLE, "sections": [
         {"id": "other", "hotkey": "2", "label": "Other", "text": "second line",
          "motion": {"type": "dance", "name": "yeah_nod"}}]},
     {"id": "s2", "title": "Two", "cues": [
-        {"id": "nod", "hotkey": "3", "label": "Nod", "motion": {"type": "head", "direction": "front"}}]}]}
+        {"id": "nod", "hotkey": "3", "label": "Nod", "motion": {"type": "head", "direction": "front"}},
+        {"id": "sway", "hotkey": "4", "label": "Sway",
+         "motion": {"type": "dance", "name": "side_to_side_sway"}},
+        {"id": "think", "hotkey": "5", "label": "Think",
+         "motion": {"type": "emotion", "name": "thoughtful1"}}]}]}
 
 
 class Link(BaseLink):
@@ -48,7 +52,7 @@ def write_audio(path, seconds=0.3, rate=24000):
         w.writeframes(b"\x10\x00" * int(rate * seconds))
 
 
-def make_show(tmp_path, with_audio=("greet", "other"), stale=()):
+def make_show(tmp_path, with_audio=("greet", "other"), stale=(), seconds=0.3):
     show = tmp_path / "show"
     show.mkdir()
     (show / "cues.json").write_text(json.dumps(CUES), encoding="utf-8")
@@ -56,7 +60,7 @@ def make_show(tmp_path, with_audio=("greet", "other"), stale=()):
     for s in CUES["sections"]:
         for cue in s["cues"]:
             if cue["id"] in with_audio:
-                write_audio(show / "audio" / (cue["id"] + ".wav"))
+                write_audio(show / "audio" / (cue["id"] + ".wav"), seconds)
                 h = text_hash(cue["text"], VOICE, STYLE)
                 manifest["cues"][cue["id"]] = {
                     "hash": "0" * 16 if cue["id"] in stale else h, "duration_s": 0.3,
@@ -66,7 +70,7 @@ def make_show(tmp_path, with_audio=("greet", "other"), stale=()):
 
 
 def setup(tmp_path, monkeypatch, n=3, groups=None, with_audio=("greet", "other"), stale=(),
-          dead=()):
+          dead=(), seconds=0.3):
     gm = manager(tmp_path, monkeypatch, n=n)
     gm.cfg["settings"]["groups"] = groups or []
     seats = [s for s in gm.seats() if s.get("included")]
@@ -76,7 +80,7 @@ def setup(tmp_path, monkeypatch, n=3, groups=None, with_audio=("greet", "other")
         session.links[k].connected = False
     session.clock_offsets = {k: 0.0 for k in session.links}
     gm.session = session
-    show = make_show(tmp_path, with_audio, stale)
+    show = make_show(tmp_path, with_audio, stale, seconds)
     gm.woz = TableWoz(gm, show_dir=show, cache_dir=tmp_path / "cache")
     return gm, session
 
@@ -89,6 +93,8 @@ async def settle(gm):
     task = gm.woz._task
     if task is not None:
         await task
+    for t in list(gm.woz._moves):
+        await t
 
 
 CHOIR = [{"id": "choir", "name": "Choir", "members": [], "whole_table": True, "talk": True,
@@ -431,3 +437,396 @@ def test_connect_opens_only_the_links(tmp_path, monkeypatch):
     gm._disconnect = no_close
     r = run(gm.woz.connect())
     assert len(opened) == 2 and r["connected"] == ["k1", "k2", "k3"]
+
+
+# ------------------------------------------------- the 2026-11-09 review
+class Running:
+    def done(self):
+        return False
+
+    def cancel(self):
+        pass
+
+
+class Ears:
+    capturing = False
+    during_robot = False
+
+    def __init__(self):
+        self.refs, self.dropped = [], []
+
+    def add_reference(self, key, *a):
+        self.refs.append(key)
+
+    def drop_reference(self, key, *a):
+        self.dropped.append(key)
+
+
+def talking(tmp_path, monkeypatch, **kw):
+    """A manager with a GroupTalk running on the fake links (speak() is real)."""
+    gm, session = setup(tmp_path, monkeypatch, **kw)
+    session.ears = Ears()
+    convo = c.GroupTalk.__new__(c.GroupTalk)
+    c.Conversation.__init__(convo, gm, session)
+    gm._task, gm.convo = Running(), convo
+    return gm, session, convo
+
+
+def a_line(convo, key, text="a line from the conversation"):
+    seat = next(s for s in convo.seats if s["key"] == key)
+    line = c.Line(seat=seat, move="", text=text, final=False, nudge="", director_s=0.0)
+    entry = convo.turn(kind="robot", who=seat["name"], character=seat["character"], text=text)
+    return line, entry
+
+
+def test_a_line_still_waiting_for_its_voice_lets_go_at_once_and_sends_nothing(
+        tmp_path, monkeypatch):
+    gm, session, convo = talking(tmp_path, monkeypatch)
+
+    async def go():
+        line, entry = a_line(convo, "k1")
+        sp = asyncio.ensure_future(convo.speak(line, entry, cut_by_people=False))
+        await asyncio.sleep(0.2)                    # waiting for its voice
+        assert session.speaking_key == "k1"
+        loop = asyncio.get_running_loop()
+        t0 = loop.time()
+        await gm.woz.fire("greet", "k2")
+        took = loop.time() - t0
+        line.audio.add(b"\x01\x00" * 16000)        # the voice comes late
+        line.audio.finish()
+        finished = await sp
+        await settle(gm)
+        return finished, entry, took
+
+    finished, entry, took = run(go())
+    k1 = session.links["k1"]
+    assert finished is False and took < 1.0, "the cue did not wait out a safety limit"
+    assert not k1.played, "not a piece of the line went out"
+    assert k1.stops == 1, "only the cue's own clear: the line did not flush the cue"
+    assert not session.ears.dropped, "the cue's echo references are kept"
+    assert entry["unspoken"] and entry["cut_woz"] and not entry.get("cut")
+    assert session.links["k2"].played
+
+
+def test_the_floor_is_held_from_the_moment_a_cue_is_fired(tmp_path, monkeypatch):
+    """Back to back cues: a waiting line must not slip in while the second
+    one cuts the first (the floor used to be free during the cut)."""
+    gm, session, convo = talking(tmp_path, monkeypatch, seconds=1.0)
+    seen = []
+    times = {"line": [], "cue_done": None}
+    k3 = session.links["k3"]
+    plain_play = k3.play
+
+    async def timed_play(pcm):
+        times["line"].append(asyncio.get_running_loop().time())
+        await plain_play(pcm)
+    k3.play = timed_play
+    for link in session.links.values():
+        async def slow_stop(plain_stop=link.stop_audio):
+            seen.append(gm.woz.active())
+            await asyncio.sleep(0.2)
+            await plain_stop()
+        link.stop_audio = slow_stop
+
+    async def go():
+        await gm.woz.fire("greet", "k1")
+        line, entry = a_line(convo, "k3")
+        line.audio.add(b"\x01\x00" * 3200)
+        line.audio.finish()
+        sp = asyncio.ensure_future(convo.speak(line, entry, cut_by_people=False))
+        await asyncio.sleep(0.15)
+        await gm.woz.fire("other", "k1")
+        await gm.woz._task
+        times["cue_done"] = asyncio.get_running_loop().time()
+        await sp
+
+    run(go())
+    assert seen and all(seen), "the floor was held all through the cut"
+    assert times["line"] and min(times["line"]) >= times["cue_done"] - 0.05, \
+        "the line played only after the cue"
+
+
+def test_group_stop_stops_a_playing_cue(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch, seconds=3.0)
+
+    async def go():
+        await gm.woz.fire("greet", "k1")
+        await asyncio.sleep(0.1)
+        await gm.stop()
+        sent = len(session.links["k1"].played)
+        await asyncio.sleep(0.4)
+        return sent
+
+    sent = run(go())
+    assert len(session.links["k1"].played) == sent, "nothing more of the cue went out"
+    assert gm.woz._task is None and not gm.woz.active() and gm.woz.state()["playing"] is None
+
+
+def test_finish_stops_the_cue_but_not_the_line(tmp_path, monkeypatch):
+    gm, session, convo = talking(tmp_path, monkeypatch, seconds=3.0)
+
+    async def go():
+        await gm.woz.fire("greet", "k1")
+        seq = session.cut_seq
+        r = await gm.finish()
+        return r, seq
+
+    r, seq = run(go())
+    assert r["closing"] and convo.closing
+    assert session.cut_seq == seq, "the robot talking finishes its line"
+    assert gm.woz._task is None and not gm.woz.active()
+
+
+def test_a_motion_only_cue_after_a_cue_cuts_nothing_and_writes_nothing(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    gm._task, gm.convo = Running(), Convo(gm)
+
+    async def go():
+        await gm.woz.fire("greet", "k1")
+        await settle(gm)
+        assert gm.woz._task is None, "a finished cue is not left behind"
+        before = (session.cut_seq, [l.stops for l in session.links.values()], len(gm.transcript))
+        await gm.woz.fire("think", "k2")
+        await settle(gm)
+        return before
+
+    seq, stops, lines = run(go())
+    assert session.cut_seq == seq and [l.stops for l in session.links.values()] == stops
+    assert len(gm.transcript) == lines, "no empty line in the transcript"
+    assert session.links["k2"].motions[-1] == {"type": "emotion", "name": "thoughtful1"}
+    left = session.busy_until["k2"] - c.time.monotonic()
+    assert left > 4.0, "the head is left alone for the whole emotion (5.9 s)"
+
+
+def test_a_gesture_outlasting_its_line_keeps_the_head(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    run(gm.woz.fire("greet", "k1"))
+    assert session.busy_until["k1"] - c.time.monotonic() > 2.0, "welcoming1 is 3.5 s"
+
+
+def test_stop_drops_a_typed_line_still_being_voiced(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    gm._task, gm.convo = Running(), Convo(gm)
+
+    def slow(line):
+        async def fill():
+            await asyncio.sleep(0.5)
+            line.audio.add(b"\x07\x00" * 4800)
+            line.audio.finish()
+        line.tts = asyncio.ensure_future(fill())
+        return line.tts
+    session.start_voice = slow
+
+    async def go():
+        say = asyncio.ensure_future(gm.woz.say("hold on", "k3"))
+        await asyncio.sleep(0.1)
+        await gm.woz.stop()
+        r = await say
+        await asyncio.sleep(0.6)
+        return r
+
+    r = run(go())
+    assert r == {"ok": True, "stopped": True}
+    assert not session.links["k3"].played and not gm.transcript
+
+
+def test_stop_during_the_cut_drops_the_cue(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    gm._task, gm.convo = Running(), Convo(gm)
+    session.speaking_key = "k1"                     # a line that is slow to let go
+
+    async def go():
+        fire = asyncio.ensure_future(gm.woz.fire("greet", "k2"))
+        await asyncio.sleep(0.1)
+        await gm.woz.stop()
+        r = await fire
+        await settle(gm)
+        return r
+
+    r = run(go())
+    assert r == {"ok": True, "stopped": True}
+    assert not session.links["k2"].played and not gm.transcript
+    assert not gm.woz.active() and gm.woz.state()["playing"] is None
+
+
+def test_woz_stop_also_cuts_the_conversation_line(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    gm._task = Running()
+    seq = session.cut_seq
+    run(gm.woz.stop())
+    assert session.cut_seq == seq + 1 and all(l.stops for l in session.links.values())
+
+
+def test_pile_on_and_defend_keep_off_a_cue(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    gm, session = setup(tmp_path, monkeypatch, seconds=2.0)
+    session.ears = Ears()
+    monkeypatch.setattr(c.random, "uniform", lambda a, b: 0.0)
+
+    async def go():
+        await gm.woz.fire("greet", "k1")
+        seat = session.seats[1]
+        talk = SimpleNamespace(s=session, lang="en")
+        await c.InterruptTalk.pile_on(talk, seat, "approve", 0.0)
+        line = c.Line(seat=session.seats[2], move="", text="you are wrong", final=False,
+                      nudge="", director_s=0.0)
+        line.playing = True
+        speaking = asyncio.ensure_future(asyncio.sleep(5))
+        talk = SimpleNamespace(s=session, lang="en", current=(line, {"text": line.text}),
+                               speaking=speaking, discard=c.Conversation.discard,
+                               ready=c.Conversation.ready, ears=session.ears)
+        await c.InterruptTalk.defend(talk, line, seat)
+        cancelled = speaking.cancelled()
+        speaking.cancel()
+        await gm.woz.stop()
+        return cancelled
+
+    stops = session.links["k3"].stops
+    cancelled = run(go())
+    assert not session.links["k2"].played, "no pile-on over the cue"
+    assert not cancelled and not session.ears.dropped, "no defending over the cue"
+    assert session.links["k3"].stops == stops + 2, "only the cue's clear and the Stop"
+
+
+def test_a_woz_cut_is_not_the_people_in_the_writers_history(tmp_path, monkeypatch):
+    gm, session, convo = talking(tmp_path, monkeypatch)
+    _, entry = a_line(convo, "k1", "we were saying")
+    entry.update(cut=True, cut_woz=True, spoken="we were...")
+    assert convo.history()[-1].endswith("we were... [cut off]")
+
+
+def test_stop_while_waiting_for_the_floor_is_not_logged_as_said(tmp_path, monkeypatch):
+    gm, session, convo = talking(tmp_path, monkeypatch, seconds=2.0)
+
+    async def go():
+        await gm.woz.fire("greet", "k1")
+        line, entry = a_line(convo, "k2")
+        line.audio.add(b"\x01\x00" * 3200)
+        line.audio.finish()
+        sp = asyncio.ensure_future(convo.speak(line, entry, cut_by_people=False))
+        await asyncio.sleep(0.1)
+        sp.cancel()
+        await asyncio.wait({sp})
+        await gm.woz.stop()
+        return entry
+
+    entry = run(go())
+    assert entry["unspoken"] and not session.links["k2"].played
+
+
+def test_waiting_for_the_floor_feeds_the_hang_watchdog(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch, seconds=0.5)
+    beats = []
+
+    class Alive:
+        def beat(self):
+            beats.append(1)
+
+    async def go():
+        await gm.woz.fire("greet", "k1")
+        await session.wait_floor(Alive())
+
+    run(go())
+    assert beats
+
+
+def test_random_never_picks_a_robot_that_is_off(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch, dead=("k2",))
+
+    async def go():
+        got = []
+        for _ in range(20):
+            got.append((await gm.woz.fire("greet", "random"))["target_id"])
+            await gm.woz.stop()
+        return got
+
+    assert "k2" not in run(go())
+
+
+def test_a_rebuilt_show_plays_the_new_recording(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    cue = gm.woz.load_script()["cues"]["greet"]
+    first = run(gm.woz.pcm_of(cue))
+    write_audio(gm.woz.show_dir() / "audio" / "greet.wav", 0.6)
+    again = run(gm.woz.pcm_of(cue))
+    assert len(again) == 2 * len(first)
+    assert gm.woz.duration_of(cue, gm.woz.load_script()) == pytest.approx(0.6)
+
+
+def test_manifest_matches_build_show_exactly(tmp_path, monkeypatch):
+    """No "voice" in the script (build_show uses Aoede) and a line with a
+    trailing space (build_show hashes it as written)."""
+    gm, session = setup(tmp_path, monkeypatch)
+    show = gm.woz.show_dir()
+    data = json.loads((show / "cues.json").read_text(encoding="utf-8"))
+    data.pop("voice")
+    data["sections"][0]["cues"][0]["text"] = "hello there "
+    (show / "cues.json").write_text(json.dumps(data), encoding="utf-8")
+    manifest = json.loads((show / "manifest.json").read_text(encoding="utf-8"))
+    manifest["cues"]["greet"].update(hash=text_hash("hello there ", "Aoede", STYLE),
+                                     text="hello there ")
+    (show / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    gm.woz._script = None
+    cue = gm.woz.load_script()["cues"]["greet"]
+    assert cue["text"] == "hello there" and gm.woz.audio_file(cue) is not None
+
+
+def test_dances_are_left_out_and_said_so(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    cues = {c_["id"]: c_ for s in gm.woz.state()["script"]["sections"] for c_ in s["cues"]}
+    assert cues["other"]["note"] and cues["sway"]["note"] and "note" not in cues["greet"]
+
+    async def go():
+        r = await gm.woz.fire("other", "k1")
+        await settle(gm)
+        with pytest.raises(WozError) as e:
+            await gm.woz.fire("sway", "k1")
+        return r, e.value.code
+
+    r, code = run(go())
+    assert r["note"] and session.links["k1"].played and not session.links["k1"].motions
+    assert code == "NO_MOTION"
+
+
+def test_connect_keeps_a_get_ready_connection_and_names_the_missing(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch, dead=("k2",))
+    session.lite = False                            # opened by Get ready
+    closed = []
+
+    async def no_close():
+        closed.append(1)
+    gm._disconnect = no_close
+    monkeypatch.setattr(gm.woz, "prepare_soon", lambda: None)
+    r = run(gm.woz.connect())
+    assert not closed and gm.session is session
+    assert r["connected"] == ["k1", "k3"] and r["missing"] == ["reachy2"]
+
+
+def test_connect_brings_back_a_robot_that_did_not_join(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    del session.links["k3"]                         # it did not join the last time
+    session.seats = [s for s in session.seats if s["key"] != "k3"]
+    opened = []
+
+    async def open_lite(seats):
+        opened.append([s["key"] for s in seats])
+        s = c.Session(gm, seats, {"simulate": False}, gm.shared_services(), lite=True)
+        s.links = {x["key"]: Link(x["key"]) for x in seats if x["key"] != "k3"}
+        gm.session = s
+        return None
+
+    async def no_close():
+        gm.session = None
+    gm.open_lite, gm._disconnect = open_lite, no_close
+    monkeypatch.setattr(gm.woz, "prepare_soon", lambda: None)
+    r = run(gm.woz.connect())
+    assert opened == [["k1", "k2", "k3"]], "tried again"
+    assert r["missing"] == ["reachy3"], "and still says who is missing"
+
+
+def test_settings_on_a_woz_connection_start_no_paid_warm_up(tmp_path, monkeypatch):
+    gm, session = setup(tmp_path, monkeypatch)
+    warmed = []
+    session.rewarm = lambda: warmed.append(1)
+    gm.apply_live()
+    assert not warmed

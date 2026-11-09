@@ -16,7 +16,11 @@ the lab's script through the same robot links the conversation uses:
     target ("all"), otherwise each talking group is one and each robot in no
     talking group is its own; a group plays as one voice (GroupLink);
   * with a conversation running, a cue cuts the line being said, is written
-    in the transcript as said by that speaker, and the conversation goes on.
+    in the transcript as said by that speaker, and the conversation goes on;
+  * one floor (2026-11-09 review): a cue with a voice holds it from the moment
+    it is fired (before anything is cut) until it has played or is stopped,
+    and no conversation line sends audio while it is held (Session.wait_floor,
+    Conversation.speak); Stop also cancels a cue that is still being started.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .. import config as hub_config
+from . import moves
 from .conductor import (DEFAULT_LOUDNESS, PLAY_LATENCY_S, REACHY, SEND_PIECE_BYTES,
                         AUDIO_LEAD_S, Line, clean_groups, loud, plan_groups, whole_table)
 from .ears import rms_blocks
@@ -43,8 +48,17 @@ log = logging.getLogger("hub.group.woz")
 SAY_MAX_CHARS = 600
 VOICE_WAIT_S = 30.0          # a typed line's voice must arrive within this
 SYNTH_WAIT_S = 90.0          # one cue's voice (Gemini)
-CUT_WAIT_S = 1.0             # a conversation line gets this long to stop
+CUT_WAIT_S = 5.0             # a conversation line gets this long to let go (it
+                             # lets go at once; this is only the safety limit)
+START_HOLD_S = 15.0          # the floor while a cue is being started (_cut's limits)
+FLOOR_SPARE_S = 5.0          # the floor outlasts a cue's own length by this, no more
+DEFAULT_VOICE = "Aoede"      # reachy_chat conversation.GEMINI_VOICE (build_show.py)
 DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview"
+NO_DANCE = "no dances on the robots"
+
+
+class _Stopped(Exception):
+    """Stop was pressed while a cue was being started."""
 
 
 class WozError(Exception):
@@ -107,10 +121,17 @@ class TableWoz:
         self._cache_dir = cache_dir
         self._script: Optional[dict] = None
         self._script_sig: Any = None
-        self._pcm: dict[str, tuple[Path, bytes]] = {}    # cue id -> (file, 16 kHz audio)
+        # cue id -> (file, (mtime, size), 16 kHz audio): a rebuilt WAV is read again
+        self._pcm: dict[str, tuple[Path, Optional[tuple], bytes]] = {}
         self._prep: Optional[asyncio.Task] = None
         self._task: Optional[asyncio.Task] = None        # the cue being played
+        self._moves: set = set()                          # motion-only cues being sent
         self._playing: Optional[dict] = None
+        # Who holds the floor -> until when (monotonic): a cue with a voice,
+        # from the moment it is fired until it has played (never longer than
+        # its own length + FLOOR_SPARE_S, so a stuck robot cannot keep it).
+        self._floor: dict[object, float] = {}
+        self._gen = 0                                     # bumped by Stop
         self._last_target: Optional[str] = None
         self._lock = asyncio.Lock()
         self.last_error = ""                              # why audio could not be made
@@ -161,8 +182,10 @@ class TableWoz:
                             or {})
             except (OSError, ValueError, AttributeError):
                 log.warning("woz: manifest unreadable; durations and audio come from the cache")
-        voice = str(data.get("voice") or "")
-        style = str(data.get("style") or "")
+        # Hashed exactly as reachy_chat tools/build_show.py does (its default
+        # voice, the text as written), or the lab's WAVs would never match.
+        voice = data.get("voice", DEFAULT_VOICE)
+        style = data.get("style", "")
         sections, cues = [], {}
         for section in data.get("sections") or []:
             if not isinstance(section, dict):
@@ -173,15 +196,17 @@ class TableWoz:
                     continue
                 cid = str(cue["id"])
                 motion = cue.get("motion") if isinstance(cue.get("motion"), dict) else None
-                text = str(cue.get("text") or "").strip()
+                raw = cue.get("text") or ""
+                text = str(raw).strip()
                 item = {"id": cid, "hotkey": cue.get("hotkey"),
-                        "label": str(cue.get("label") or cid), "text": text, "motion": motion,
-                        "hash": text_hash(text, voice, style) if text else ""}
+                        "label": str(cue.get("label") or cid), "text": text, "raw": raw,
+                        "motion": motion, "hash": text_hash(raw, voice, style) if text else ""}
                 cues[cid] = item
                 entries.append(item)
             sections.append({"id": str(section.get("id") or ""),
                              "title": str(section.get("title") or ""), "cues": entries})
-        script = {"voice": voice, "style": style, "sections": sections, "cues": cues,
+        script = {"voice": str(voice or ""), "style": str(style or ""), "sections": sections,
+                  "cues": cues,
                   "model": str(data.get("tts_model") or DEFAULT_TTS_MODEL),
                   "manifest": manifest, "error": ""}
         self._script, self._script_sig = script, (show, sig)
@@ -194,7 +219,7 @@ class TableWoz:
         show = self.show_dir()
         entry = script["manifest"].get(cue["id"])
         if show is not None and isinstance(entry, dict) and entry.get("hash") == cue["hash"] \
-                and entry.get("text") == cue["text"]:
+                and entry.get("text") == cue["raw"]:
             path = show / str(entry.get("file") or "audio/{}.wav".format(cue["id"]))
             try:
                 path.resolve().relative_to(show.resolve())
@@ -208,13 +233,29 @@ class TableWoz:
     def is_ready(self, cue: dict, script: dict) -> bool:
         return not cue["text"] or self.audio_file(cue, script) is not None
 
+    @staticmethod
+    def _file_sig(path: Optional[Path]) -> Optional[tuple]:
+        try:
+            st = path.stat() if path is not None else None
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size) if st is not None else None
+
+    def _cached(self, cue: dict, path: Optional[Path]) -> Optional[bytes]:
+        """The audio read before, if it is still the same file (a rebuilt show
+        writes show/audio/<id>.wav again at the same path)."""
+        got = self._pcm.get(cue["id"])
+        if got is None or path is None or got[0] != path or got[1] != self._file_sig(path):
+            return None
+        return got[2]
+
     def duration_of(self, cue: dict, script: dict) -> Optional[float]:
         if not cue["text"]:
             return 0.0
-        got = self._pcm.get(cue["id"])
         entry = script["manifest"].get(cue["id"]) or {}
-        if got is not None and got[0] == self.audio_file(cue, script):
-            return round(len(got[1]) / (2.0 * SAMPLE_RATE), 2)
+        got = self._cached(cue, self.audio_file(cue, script))
+        if got is not None:
+            return round(len(got) / (2.0 * SAMPLE_RATE), 2)
         if entry.get("hash") == cue["hash"] and isinstance(entry.get("duration_s"), (int, float)):
             return float(entry["duration_s"])
         return None
@@ -225,11 +266,12 @@ class TableWoz:
         path = self.audio_file(cue, script)
         if path is None:
             return b""
-        got = self._pcm.get(cue["id"])
-        if got is not None and got[0] == path:
-            return got[1]
+        got = self._cached(cue, path)
+        if got is not None:
+            return got
+        sig = self._file_sig(path)
         pcm = await asyncio.to_thread(wav_to_16k, path)
-        self._pcm[cue["id"]] = (path, pcm)
+        self._pcm[cue["id"]] = (path, sig, pcm)
         return pcm
 
     # --------------------------------------------------------- preparing
@@ -363,7 +405,11 @@ class TableWoz:
             if plan["choir"] and targets:
                 pick = targets[0]
             elif targets:
-                pool = [t for t in targets if t["id"] != self._last_target] or targets
+                # Only targets that can play it now (a robot off the WiFi
+                # stays in the seats until the next connect).
+                alive = set(self.alive())
+                live = [t for t in targets if alive & set(t["members"])] or targets
+                pool = [t for t in live if t["id"] != self._last_target] or live
                 pick = random.choice(pool)
             else:
                 pick = None
@@ -375,16 +421,41 @@ class TableWoz:
 
     # ------------------------------------------------------------- state
     def active(self) -> bool:
-        return self._playing is not None
+        """A cue with a voice holds the floor: no conversation line may send
+        audio (Session.wait_floor, Conversation.speak)."""
+        now = time.monotonic()
+        return any(until > now for until in self._floor.values())
+
+    def sending(self) -> bool:
+        """A cue's audio is going to the robots now."""
+        return self._task is not None and not self._task.done()
+
+    @staticmethod
+    def motion_of(cue: dict) -> tuple[Optional[dict], str]:
+        """(the motion the robots can do, a note): the robots have no dance
+        library (moves.DANCES_ON_ROBOTS), and reachy_chat's own show player
+        sends dances to the same player, which ignores them; so a dance is
+        left out and said so rather than pretended."""
+        motion = cue.get("motion")
+        if motion and motion.get("type") == "dance" and not moves.DANCES_ON_ROBOTS:
+            return None, NO_DANCE
+        return motion, ""
 
     def state(self) -> dict:
         script = self.load_script()
         sections = []
         for section in script["sections"]:
-            sections.append({"id": section["id"], "title": section["title"], "cues": [
-                {"id": c["id"], "hotkey": c["hotkey"], "label": c["label"], "text": c["text"],
-                 "motion": c["motion"], "duration_s": self.duration_of(c, script),
-                 "ready": self.is_ready(c, script)} for c in section["cues"]]})
+            cues = []
+            for c in section["cues"]:
+                item = {"id": c["id"], "hotkey": c["hotkey"], "label": c["label"],
+                        "text": c["text"], "motion": c["motion"],
+                        "duration_s": self.duration_of(c, script),
+                        "ready": self.is_ready(c, script)}
+                note = self.motion_of(c)[1]
+                if note:
+                    item["note"] = note
+                cues.append(item)
+            sections.append({"id": section["id"], "title": section["title"], "cues": cues})
         try:
             plan = self.plan()
         except Exception:  # noqa: BLE001 - a half-built seat list must not break the page
@@ -412,21 +483,39 @@ class TableWoz:
         self.m.publish({"type": "group.woz",
                         "playing": dict(self._playing) if self._playing else None})
 
+    def halt(self) -> list:
+        """Everything the Wizard of Oz has going ends now, at once: the cue
+        playing, motion-only cues, and a fire or a typed line still being
+        started (it sees the generation change and gives up). The floor is
+        free. Returns the tasks that were cancelled (Stop waits for them)."""
+        self._gen += 1
+        tasks = [t for t in [self._task, *self._moves] if t is not None and not t.done()]
+        self._task = None
+        for task in tasks:
+            task.cancel()
+        self._floor.clear()
+        if self._playing is not None:
+            self._playing = None
+            self._publish_playing()
+        return tasks
+
+    def busy(self) -> bool:
+        """Something is playing or being started."""
+        return bool(self._floor) or self._playing is not None or self.sending() or any(
+            not t.done() for t in self._moves)
+
     def session_closed(self) -> None:
         """The robots were released: whatever was playing is over."""
-        task, self._task = self._task, None
-        if task is not None and not task.done():
-            task.cancel()
-        was = self._playing
-        self._playing = None
-        if was is not None:
-            self._publish_playing()
+        self.halt()
         self.publish_state()
 
     # ----------------------------------------------------------- connect
     async def connect(self) -> dict:
         """Connect the robots for the Wizard of Oz, without the AI: nothing but
-        their links. Runs again to bring back robots that dropped out."""
+        their links. Runs again to bring back robots that dropped out or did
+        not join (a Wizard of Oz connection only: a conversation's, or one
+        Get ready opened, is never torn down for one robot; those robots are
+        named in "missing" instead)."""
         m = self.m
         async with m._lock:
             session = m.session
@@ -434,9 +523,16 @@ class TableWoz:
                 pass            # the conversation has them
             else:
                 connecting = m._connecting is not None and not m._connecting.done()
-                dead = session is not None and not connecting and (
-                    not session.links or any(
-                        not getattr(l, "connected", True) for l in session.links.values()))
+                dead = []
+                if session is not None and not connecting:
+                    linked = {k for k, l in session.links.items()
+                              if getattr(l, "connected", True)}
+                    wanted = [s["key"] for s in m.seats() if s.get("included")]
+                    dead = [k for k in wanted if k not in linked]
+                    if not session.links or not linked:
+                        dead = dead or ["all"]          # nothing left to keep
+                    elif not getattr(session, "lite", False):
+                        dead = []       # Get ready's connection: keep it, name them
                 if dead:
                     await m._disconnect()       # lost the WiFi: open them again
                     session = None
@@ -452,8 +548,10 @@ class TableWoz:
             raise WozError("NO_ROBOTS", "no robot is connected")
         self.prepare_soon()
         self.publish_state()
-        names = self.plan()["names"]
-        missing = [names.get(s["key"], s["key"]) for s in self._seats() if s["key"] not in alive]
+        # Every included robot that has no live link: dropped out, or never
+        # joined (the session's own seats leave those out).
+        missing = [s.get("name") or s["key"] for s in m.seats()
+                   if s.get("included") and s["key"] not in alive]
         return {"ok": True, "connected": alive, "missing": missing}
 
     # ------------------------------------------------------------ firing
@@ -486,26 +584,36 @@ class TableWoz:
                     keys.append(other)
         return [session.links[k] for k in keys]
 
-    async def _cut(self, session: Any) -> None:
+    def _check(self, gen: int) -> None:
+        if gen != self._gen:
+            raise _Stopped()
+
+    async def _cut(self, session: Any, gen: int) -> None:
         """Silence whatever is playing: the last cue, and the conversation's
-        current line (its speaker is told to stop and the robots are cleared)."""
+        current line (cut_seq was bumped when the cue was fired; its speaker
+        stops before it sends anything more and lets go, then the robots are
+        cleared). Gives up at once when Stop is pressed meanwhile."""
         task, self._task = self._task, None
         if task is not None and not task.done():
             task.cancel()
             await asyncio.wait({task}, timeout=2.0)
-        if self.m.running:
-            session.cut_seq += 1
-            t0 = time.monotonic()
-            while session.speaking_key and time.monotonic() - t0 < CUT_WAIT_S:
-                await asyncio.sleep(0.02)
+        self._check(gen)
+        t0 = time.monotonic()
+        while session.speaking_key and time.monotonic() - t0 < CUT_WAIT_S:
+            await asyncio.sleep(0.02)
+            self._check(gen)
+        if session.speaking_key:
+            log.warning("woz: the conversation line did not let go in %.0f s", CUT_WAIT_S)
         sends = [asyncio.wait_for(l.stop_audio(), 3.0) for l in session.links.values()]
         await asyncio.gather(*sends, return_exceptions=True)
+        self._check(gen)
 
     def _record(self, session: Any, target: dict, text: str, cue_id: Optional[str]) -> None:
         """With a conversation running, the line is in its transcript as said
-        by the target's speaker, so the writer knows it was said."""
+        by the target's speaker, so the writer knows it was said (a cue with
+        no words is not a line)."""
         convo = self.m.convo
-        if not self.m.running or convo is None:
+        if not self.m.running or convo is None or not text:
             return
         seat = target["seat"]
         entry = convo.turn(kind="robot", who=seat.get("name"), character=seat.get("character"),
@@ -517,22 +625,30 @@ class TableWoz:
         cue = script["cues"].get(str(cue_id))
         if cue is None:
             raise WozError("NO_CUE", "no cue {!r} in the script".format(cue_id))
+        gen = self._gen
         session = self._session()
+        motion, note = self.motion_of(cue)
+        if not cue["text"] and motion is None:
+            raise WozError("NO_MOTION", "{!r}: {}".format(cue["id"], note or "nothing to do"))
         pcm = b""
         if cue["text"]:
             pcm = await self.pcm_of(cue)
             if not pcm:
                 raise WozError("NO_AUDIO", "{!r} has no audio yet{}".format(
                     cue["id"], " ({})".format(self.last_error) if self.last_error else ""))
-        return await self._start(session, wanted, text=cue["text"], pcm=pcm,
-                                 motion=cue["motion"], cue_id=cue["id"])
+        out = await self._start(session, gen, wanted, text=cue["text"], pcm=pcm, motion=motion,
+                                cue_id=cue["id"])
+        if note and out.get("ok") and not out.get("stopped"):
+            out["note"] = note
+        return out
 
     async def say(self, text: str, wanted: str = "auto") -> dict:
         """A typed line in the target speaker's conversation voice (needs the
-        internet and a voice key)."""
+        internet and a voice key). Stop while it is being voiced drops it."""
         text = " ".join(str(text or "").split())[:SAY_MAX_CHARS]
         if not text:
             raise WozError("NO_CUE", "nothing to say")
+        gen = self._gen
         session = self._session()
         plan = self.plan()
         target = self.choose(plan, wanted)
@@ -540,8 +656,21 @@ class TableWoz:
         line = Line(seat=target["seat"], move="", text=text, final=False, nudge="",
                     director_s=0.0)
         task = session.start_voice(line)
+        deadline = time.monotonic() + VOICE_WAIT_S
         try:
-            await asyncio.wait_for(asyncio.shield(task), VOICE_WAIT_S)
+            while not task.done():
+                if gen != self._gen:
+                    task.cancel()
+                    return {"ok": True, "stopped": True}
+                if time.monotonic() >= deadline:
+                    raise asyncio.TimeoutError()
+                await asyncio.wait({task}, timeout=0.1)
+            if task.cancelled():
+                raise RuntimeError("the voice was cancelled")
+            task.result()
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
         except Exception as exc:  # noqa: BLE001
             task.cancel()
             raise WozError("NO_VOICE", "the voice is not available: {}".format(
@@ -550,43 +679,96 @@ class TableWoz:
         if not pcm:
             raise WozError("NO_VOICE", "the voice sent no audio{}".format(
                 ": {}".format(line.audio.error[:120]) if line.audio.error else ""))
-        return await self._start(session, target["id"], text=text, pcm=pcm, motion=None,
-                                 cue_id=None, plan=plan)
+        return await self._start(session, gen, target["id"], text=text, pcm=pcm, motion=None,
+                                 cue_id=None)
 
-    async def _start(self, session: Any, wanted: str, *, text: str, pcm: bytes,
-                     motion: Optional[dict], cue_id: Optional[str],
-                     plan: Optional[dict] = None) -> dict:
-        async with self._lock:
-            plan = self.plan()
-            target = self.choose(plan, wanted)
-            live, missing = self._links_of(session, target, plan)
-            movers = self._movers(session, target, plan, live)
-            self._last_target = target["id"]
-            # A motion-only cue does not cut a line that is being spoken.
-            if pcm or self._task is not None:
-                await self._cut(session)
-            link: Any = live[0]
-            lead_s = 0.0
-            if len(live) > 1:
-                link = GroupLink(live, session.group_offset([l.key for l in live]))
-                lead_s = GROUP_START_LEAD_S if link.synced else 0.0
-            duration = len(pcm) / (2.0 * SAMPLE_RATE)
-            until = time.time() + lead_s + duration
-            now = time.monotonic()
-            for l in movers:
-                session.busy_until[l.key] = max(session.busy_until.get(l.key, 0.0),
-                                                now + lead_s + (duration or 2.0))
-            self._record(session, target, text, cue_id)
-            playing = {"cue_id": cue_id, "text": text, "target_id": target["id"],
-                       "target_name": target["name"], "until": round(until, 2)}
-            if pcm or motion:
+    async def _start(self, session: Any, gen: int, wanted: str, *, text: str, pcm: bytes,
+                     motion: Optional[dict], cue_id: Optional[str]) -> dict:
+        """Play a cue. One with a voice takes the floor before anything else
+        (so no conversation line can start meanwhile), cuts the line being
+        said and the last cue, then plays; a motion-only cue cuts nothing.
+        Stop pressed at any point before it plays drops it ({"stopped"})."""
+        if gen != self._gen:
+            return {"ok": True, "stopped": True}
+        plan = self.plan()
+        target = self.choose(plan, wanted)
+        live, missing = self._links_of(session, target, plan)
+        movers = self._movers(session, target, plan, live) if motion else []
+        self._last_target = target["id"]
+        if not pcm:
+            return self._move_only(session, target, movers, motion, missing)
+        token = object()
+        self._floor[token] = time.monotonic() + START_HOLD_S
+        # The line being said stops before it sends another piece (speak()
+        # compares cut_seq before every send, the first one too).
+        session.cut_seq += 1
+        handed = False
+        try:
+            async with self._lock:
+                self._check(gen)
+                await self._cut(session, gen)
+                link: Any = live[0]
+                lead_s = 0.0
+                if len(live) > 1:
+                    link = GroupLink(live, session.group_offset([l.key for l in live]))
+                    lead_s = GROUP_START_LEAD_S if link.synced else 0.0
+                duration = len(pcm) / (2.0 * SAMPLE_RATE)
+                until = time.time() + lead_s + duration
+                now = time.monotonic()
+                # The heads are left alone for the cue and for its gesture,
+                # whichever is longer (an emotion outlasts a short line).
+                hold = max(duration, self._motion_s(motion))
+                for key in {l.key for l in [*live, *movers]}:
+                    session.busy_until[key] = max(session.busy_until.get(key, 0.0),
+                                                  now + lead_s + hold)
+                self._record(session, target, text, cue_id)
+                playing = {"cue_id": cue_id, "text": text, "target_id": target["id"],
+                           "target_name": target["name"], "until": round(until, 2)}
                 self._playing = playing
                 self._publish_playing()
-                self._task = asyncio.ensure_future(self._play(
+                self._floor[token] = now + lead_s + duration + FLOOR_SPARE_S
+                task = asyncio.ensure_future(self._play(
                     session, playing, link, [l.key for l in live], movers, pcm, motion, lead_s,
                     target["seat"]))
+                self._task = task
+                handed = True
+                task.add_done_callback(lambda _t: self._floor.pop(token, None))
+                task.add_done_callback(self._ended)
+        except _Stopped:
+            return {"ok": True, "stopped": True}
+        finally:
+            if not handed:
+                self._floor.pop(token, None)
         return {"ok": True, "target_id": target["id"], "target_name": target["name"],
                 "duration_s": round(duration, 2), "missing": missing}
+
+    @staticmethod
+    def _motion_s(motion: Optional[dict]) -> float:
+        """How long a cue's motion keeps the head busy (moves.duration)."""
+        if not motion:
+            return 0.0
+        if motion.get("type") in ("emotion", "dance"):
+            return moves.duration(str(motion.get("name") or "")) or 3.0
+        return 2.0
+
+    def _ended(self, task: asyncio.Task) -> None:
+        if self._task is task:
+            self._task = None
+
+    def _move_only(self, session: Any, target: dict, movers: list, motion: Optional[dict],
+                   missing: list) -> dict:
+        """A cue with no words: its motion, now, on top of whatever plays (it
+        cuts nothing and is no line in the transcript)."""
+        now = time.monotonic()
+        hold = self._motion_s(motion)
+        for l in movers:
+            session.busy_until[l.key] = max(session.busy_until.get(l.key, 0.0), now + hold)
+        task = asyncio.ensure_future(asyncio.gather(
+            *(l.motion(motion) for l in movers), return_exceptions=True))
+        self._moves.add(task)
+        task.add_done_callback(self._moves.discard)
+        return {"ok": True, "target_id": target["id"], "target_name": target["name"],
+                "duration_s": 0.0, "missing": missing}
 
     async def _play(self, session: Any, playing: dict, link: Any, voices: list[str],
                     movers: list, pcm: bytes, motion: Optional[dict], lead_s: float,
@@ -636,22 +818,25 @@ class TableWoz:
                 self._playing = None
                 self._publish_playing()
 
-    async def stop(self) -> dict:
-        """The panic button: silence the cue now, heads back to breathing."""
+    async def stop(self, cut_line: bool = True) -> dict:
+        """The panic button: silences the robots at once. The cue playing,
+        a cue or typed line still being started, and (`cut_line`) the line
+        the conversation is saying; the conversation then goes on. Heads go
+        back to breathing when a cue was on. The Group tab's Finish passes
+        cut_line=False: the robot talking finishes its line."""
         session = self.m.session
-        task, self._task = self._task, None
-        was = self._playing
-        if task is not None and not task.done():
-            task.cancel()
-            await asyncio.wait({task}, timeout=2.0)
-        self._playing = None
-        if session is not None and (was is not None or not self.m.running):
+        voiced = bool(self._floor) or self.sending()
+        was = (voiced or self.busy()) if cut_line else voiced
+        tasks = self.halt()
+        if session is not None and cut_line:
+            session.cut_seq += 1
+        if session is not None and (was or cut_line):
             sends = []
             for link in session.links.values():
                 sends.append(asyncio.wait_for(link.stop_audio(), 3.0))
-                if was is not None:
+                if was:
                     sends.append(asyncio.wait_for(link.motion({"type": "stop"}), 3.0))
             await asyncio.gather(*sends, return_exceptions=True)
-        if was is not None:
-            self._publish_playing()
+        if tasks:
+            await asyncio.wait(tasks, timeout=2.0)
         return {"ok": True}
