@@ -134,6 +134,7 @@ def test_without_the_tray_a_quit_still_closes_the_window(monkeypatch):
     mod = load_launcher()
     closed = []
     monkeypatch.setattr(mod, "close_windows", lambda: closed.append(1))
+    monkeypatch.setattr(mod, "port_open", lambda: False)   # not this laptop's real hub
     hub = mod.HubProcess()
     mod.wait_and_close(hub)                     # nothing started: nothing to wait for
     hub.proc = subprocess.Popen([sys.executable, "-c", "pass"])
@@ -231,6 +232,27 @@ def test_install_update_uninstall(tmp_path):
     r = _install("-Uninstall", "-RemoveData", *common)
     assert r.returncode == 0, r.stdout + r.stderr
     assert not root.exists()
+
+
+@pytest.mark.skipif(not shutil.which("powershell.exe"), reason="needs Windows PowerShell")
+def test_an_update_started_from_inside_the_app_swaps_it(tmp_path):
+    """The app's Update starts the installer with the hub's folder
+    (app\\robot-hub) as its current directory, through `-Command`. Windows
+    will not rename a folder a process is in, so the swap used to fail every
+    time ("Robot Hub is still running"), leaving app.new behind."""
+    root = tmp_path / "root"
+    v1, v2 = _bundle(tmp_path, "1.0.0"), _bundle(tmp_path, "1.0.1")
+    r = _install("-Zip", str(v1), "-Root", str(root), "-NoLaunch", "-NoShortcuts")
+    assert r.returncode == 0, r.stdout + r.stderr
+    inside = root / "app" / "robot-hub"
+    env = dict(os.environ)
+    env.pop("PSModulePath", None)
+    command = f"& '{INSTALL}' -Zip '{v2}' -Root '{root}' -NoLaunch -NoShortcuts"
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                       cwd=str(inside), capture_output=True, text=True, timeout=180, env=env)
+    assert "still running" not in r.stdout, r.stdout + r.stderr
+    assert (root / "app" / "VERSION").read_text() == "1.0.1"
+    assert not (root / "app.new").exists()
 
 
 @pytest.mark.skipif(not shutil.which("powershell.exe"), reason="needs Windows PowerShell")

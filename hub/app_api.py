@@ -273,6 +273,12 @@ def start_installer(repo: str = RELEASE_REPO, *, tag: Optional[str] = None,
     if sys.platform == "win32":
         kwargs["creationflags"] = (subprocess.CREATE_NEW_PROCESS_GROUP
                                    | subprocess.CREATE_NEW_CONSOLE)
+        # Its own console shows the progress: with stdout sent to NUL the
+        # window stayed blank and closed with no word (1.0.8 and older).
+        del kwargs["stdout"], kwargs["stderr"]
+        # Not the hub's folder (app\robot-hub): the installer renames app\,
+        # and Windows refuses while a process is in it.
+        kwargs["cwd"] = str(Path.home())
         return popen(argv, **kwargs)
     kwargs["start_new_session"] = True
     out = None

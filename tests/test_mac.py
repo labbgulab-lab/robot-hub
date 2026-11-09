@@ -429,14 +429,17 @@ def test_the_page_knows_the_windows_only_sentences():
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the PowerShell installer is Windows")
-def test_the_windows_installer_is_unchanged(tmp_path):
+def test_the_windows_installer_runs_outside_the_app_and_shows_its_progress(tmp_path):
+    """The installer renames app\\: it must not start inside it (the hub's own
+    folder), and its console window shows the progress (not sent to NUL)."""
     popen = FakePopen()
     app_api.start_installer(REPO_NAME, popen=popen, log_dir=tmp_path)
     (argv, kwargs, _), = popen.calls
     assert argv[:5] == ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
     assert argv[5] == "irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.ps1 | iex"
     assert kwargs["creationflags"] & subprocess.CREATE_NEW_CONSOLE
-    assert kwargs["stdout"] is subprocess.DEVNULL
+    assert "stdout" not in kwargs and "stderr" not in kwargs
+    assert kwargs["cwd"] == str(Path.home())
     assert not (tmp_path / "update.log").exists()
 
 

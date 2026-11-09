@@ -55,9 +55,33 @@ function Install-RobotHub {
     $links = @((Join-Path $DesktopDir "$name.lnk"), (Join-Path $StartMenuDir "$name.lnk"))
     $tar = Join-Path $env:SystemRoot "System32\tar.exe"
 
+    # The app's Update button starts this installer with the hub's own folder
+    # (app\robot-hub) as its current directory, and Windows will not rename a
+    # folder a process is in: the swap below then failed every time, in every
+    # version up to 1.0.8. Step out of the install first, both PowerShell's
+    # location and the process's own directory. Apps of any version fetch the
+    # latest release's installer, so this fixes their Update too.
+    $rootSlash = $Root.TrimEnd('\') + '\'
+    $here = @([IO.Directory]::GetCurrentDirectory())
+    try { $here += (Get-Location).ProviderPath } catch { }
+    foreach ($p in $here) {
+        if ($p -and ($p.TrimEnd('\') + '\').StartsWith($rootSlash, [StringComparison]::OrdinalIgnoreCase)) {
+            $away = [Environment]::GetFolderPath("UserProfile")
+            Set-Location -LiteralPath $away
+            [IO.Directory]::SetCurrentDirectory($away)
+            break
+        }
+    }
+    # Started by the app (powershell -Command ...), the window closes the moment
+    # this script ends, so a failure would flash by unread: keep it up a while.
+    $fromApp = [Environment]::CommandLine -match '-Command'
+
     function Say($text) { Write-Host "  $text" }
     function Done($text) { Write-Host "  done  " -ForegroundColor Green -NoNewline; Write-Host $text }
-    function Fail($text) { Write-Host ""; Write-Host "  $text" -ForegroundColor Red; Write-Host "" }
+    function Fail($text) {
+        Write-Host ""; Write-Host "  $text" -ForegroundColor Red; Write-Host ""
+        if ($fromApp) { Write-Host "  This window closes in 60 s."; Start-Sleep -Seconds 60 }
+    }
 
     function Get-Sha256([string]$Path) {
         # .NET directly: Get-FileHash is missing when Windows PowerShell inherits PowerShell 7's module path.
@@ -290,4 +314,7 @@ try {
     Write-Host "  Robot Hub was not installed: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "  Run the line again. If it keeps failing, show this window to the lab." -ForegroundColor Red
     Write-Host ""
+    if ([Environment]::CommandLine -match '-Command') {   # started by the app: see Fail
+        Write-Host "  This window closes in 60 s."; Start-Sleep -Seconds 60
+    }
 }
