@@ -167,7 +167,7 @@
       <span class="sub" id="gwoz-prep" hidden>Recording cues...</span>
       <span class="gw-now" id="gwoz-now" role="status" aria-live="polite" dir="auto"></span><span class="gw-count" id="gwoz-count"></span>
       <span class="spacer"></span>
-      <button class="btn woz-stop btn-sm" type="button" id="gwoz-stop" title="Silences the robots at once. Safe any time."><i data-ic="stop" data-s="16"></i>STOP <span class="dk" style="border-color: rgba(255,255,255,.5); color: #FFFFFF;">Esc</span></button>
+      <button class="btn woz-stop btn-sm" type="button" id="gwoz-stop" title="Silences the robots at once: the cue and any line being said. Safe any time."><i data-ic="stop" data-s="16"></i>STOP <span class="dk" style="border-color: rgba(255,255,255,.5); color: #FFFFFF;">Esc</span></button>
     </div>
     <div id="gwoz-body" hidden style="flex-direction: column; gap: 10px;">
       <p class="sub" id="gwoz-error" hidden></p>
@@ -177,7 +177,8 @@
         <button class="btn btn-dark btn-sm" type="submit" title="Say it now (Enter works too).">Say</button>
       </form>
       <div class="gw-quick" id="gwoz-quick"></div>
-      <p class="sub"><span class="kbd">Space</span> fires the outlined cue · arrows move · <span class="kbd">Esc</span> stop · cue keys fire · <span class="kbd">S</span> <span class="kbd">D</span> <span class="kbd">F</span> quick lines</p>
+      <p class="sub"><span class="kbd">Space</span> fires the outlined cue · arrows move · <span class="kbd">Esc</span> stop · cue keys fire<span id="gwoz-qkeys" hidden></span></p>
+      <p class="sub" id="gwoz-digits" hidden></p>
     </div>
   </section>
 
@@ -447,8 +448,8 @@
 
 <noscript><p style="padding: 24px;">Enable JavaScript to see the Reachy app.</p></noscript>
 <script src="/reachy-core.js?v=2026-11-05a"></script>
-<script src="/reachy-group.js?v=2026-11-09a"></script>
-<script src="/reachy-group-woz.js?v=2026-11-09a"></script>
+<script src="/reachy-group.js?v=2026-11-09b"></script>
+<script src="/reachy-group-woz.js?v=2026-11-09b"></script>
 <script src="/reachy-talk.js?v=2026-11-05a"></script>
 <script src="/reachy-woz.js?v=2026-11-05a"></script>
 <script src="/reachy.js?v=2026-11-09a"></script>

@@ -1516,7 +1516,7 @@
     if (!/^[0-5]$/.test(event.key) || !draft.seats.length) return;
     // An open Wizard of Oz panel with a cue on this digit fires the cue instead
     // (the lab's script puts its main cues on 1, 2, 3...).
-    if (RA.GroupWoz && RA.GroupWoz.ownsKey && RA.GroupWoz.ownsKey(event.key)) return;
+    if (RA.GroupWoz && RA.GroupWoz.ownsKey && RA.GroupWoz.ownsKey(event)) return;
     const level = Number(event.key);
     draft.seats.forEach(s => { s.interrupt_level = level; });
     markDirty(QUICK_SAVE_MS);
@@ -1548,7 +1548,10 @@
   function handle(m) {
     m = obj(m);
     switch (m.type) {
-      case 'group.state': applyState(unwrapState(m)); break;
+      case 'group.state':
+        applyState(unwrapState(m));
+        if (RA.GroupWoz && RA.GroupWoz.refresh) RA.GroupWoz.refresh();   // who is connected may have changed
+        break;
       case 'group.turn': upsertTurn(m.turn); break;
       case 'group.status':
         S.status = { ...S.status, ...obj(m.status) };
@@ -1669,7 +1672,12 @@
     loadState();
     RA.socket('/ws/group', {
       message: handle,
-      open() { RA.hub.groupLive = true; RA.renderLive(); },
+      open() {
+        RA.hub.groupLive = true;
+        RA.renderLive();
+        // The hub may have restarted while we were away: its woz state too.
+        if (RA.GroupWoz && RA.GroupWoz.refresh) RA.GroupWoz.refresh();
+      },
       close() { RA.hub.groupLive = false; RA.renderLive(); },
     });
   }

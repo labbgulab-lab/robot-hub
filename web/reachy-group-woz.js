@@ -7,8 +7,12 @@
  * unit. Choir off: cues go to the target picked here (default Random).
  *
  * REST: /api/group/woz (state), /connect, /fire, /say, /stop. Live state comes
- * in on the /ws/group socket (reachy-group.js hands us `group.woz` events);
- * while the socket is down the panel polls every 5 s.
+ * in on the /ws/group socket (reachy-group.js hands us `group.woz` events and
+ * asks for a fresh state on every `group.state` and when the socket opens
+ * again); while the socket is down the panel polls every 5 s.
+ *
+ * Keys go by the key's place (ev.code), so a Hebrew layout still works, and a
+ * held key fires once.
  */
 'use strict';
 
@@ -41,6 +45,9 @@
   let target = 'random';            // the picker's value while Choir is off
   let lastPoll = 0;
   let busy = false;
+  let loadSeq = 0;                  // only the newest state counts
+  let refreshTimer = 0;
+  let sigs = { picker: '', board: '', quick: '' };   // rebuild only what changed
 
   function store(value) {
     try {
@@ -68,7 +75,7 @@
       script: Array.isArray(obj(state.script).sections) ? obj(state.script) : { sections: [] },
       targets: arr(state.targets), choir: !!state.choir, connected: arr(state.connected),
       preparing: !!state.preparing, playing: state.playing || null,
-      error: str(state.error),
+      error: str(state.error), note: str(state.note),
     };
     cues = {}; order = []; byHotkey = {};
     arr(W.script.sections).forEach(sec => arr(obj(sec).cues).forEach(c => {
@@ -86,7 +93,9 @@
 
   async function load() {
     lastPoll = performance.now();
+    const seq = ++loadSeq;
     const r = await RA.get('/api/group/woz');
+    if (seq !== loadSeq) return;                  // a newer state came in meanwhile
     if (!r.ok) {
       if (r.status === 404 || r.status === 405) { missingEndpoint = true; render(); }
       return;
@@ -96,8 +105,16 @@
 
   function onEvent(m) {
     m = obj(m);
-    if (m.state) { apply(m.state); return; }
+    if (m.state) { loadSeq++; apply(m.state); return; }
     if ('playing' in m) { W.playing = m.playing || null; renderNow(); }
+    refresh();
+  }
+
+  // Ask the hub again soon (many events in a row make one request), so who is
+  // connected is never stale: robots that dropped, a hub that restarted.
+  function refresh() {
+    if (missingEndpoint || refreshTimer) return;
+    refreshTimer = setTimeout(() => { refreshTimer = 0; load(); }, 300);
   }
 
   /* --------------------------------------------------------------- render */
@@ -108,7 +125,21 @@
 
   function targetValue() { return choirNow() ? 'auto' : target; }
 
+  // The keys a cue has taken win; a quick line only gets the keys left over.
+  function quickKey(i) { const k = QUICK_KEYS[i]; return byHotkey[k] ? '' : k; }
+
+  // Robots the cues would play on that are not connected now.
+  function notConnected() {
+    const want = new Set();
+    W.targets.forEach(t => arr(obj(t).members).forEach(k => want.add(str(k))));
+    const have = new Set(W.connected.map(str));
+    return [...want].filter(k => !have.has(k));
+  }
+
   function renderPicker() {
+    const sig = JSON.stringify([choirNow(), W.targets, target]);
+    if (sig === sigs.picker) return;              // an open list stays open
+    sigs.picker = sig;
     E.picker.textContent = '';
     if (choirNow()) {
       const all = el('option', '', 'All robots');
@@ -133,29 +164,41 @@
     if (cue.ready === false) { b.style.opacity = '.5'; b.title = "The audio isn't recorded yet."; }
     const head = el('div', 'ch');
     if (cue.hotkey) head.append(el('span', 'k', str(cue.hotkey).toUpperCase()));
-    head.append(el('span', 'lb', str(cue.label || cue.id)));
+    const lb = el('span', 'lb', str(cue.label || cue.id));
+    lb.setAttribute('dir', 'auto');
+    head.append(lb);
     const dur = num(cue.duration_s, 0);
     if (dur) head.append(el('span', 'du', `${dur.toFixed(1)} s`));
     b.append(head);
     const tx = el('div', 'tx', str(cue.text));
     tx.setAttribute('dir', 'auto');
     b.append(tx);
-    b.addEventListener('click', () => { pointer = Math.max(0, order.indexOf(cue.id)); markPointer(); fire(cue.id, false); });
+    b.addEventListener('click', () => { pointer = Math.max(0, order.indexOf(cue.id)); markPointer(); fire(cue.id, false); b.blur(); });
     return b;
   }
 
   function renderBoard() {
+    const sig = JSON.stringify(W.script.sections);
+    if (sig !== sigs.board) {                     // a click in flight keeps its button
+      sigs.board = sig;
+      buildBoard();
+    }
+    markPointer();
+  }
+
+  function buildBoard() {
     E.board.textContent = '';
     arr(W.script.sections).forEach(sec => {
       sec = obj(sec);
       const wrap = el('div', 'gw-sec');
-      wrap.append(el('h3', 'gw-st', str(sec.title)));
+      const title = el('h3', 'gw-st', str(sec.title));
+      title.setAttribute('dir', 'auto');
+      wrap.append(title);
       const grid = el('div', 'cues');
       arr(sec.cues).forEach(c => grid.append(cueCard(obj(c))));
       wrap.append(grid);
       E.board.append(wrap);
     });
-    markPointer();
   }
 
   function markPointer() {
@@ -164,15 +207,37 @@
 
   function renderQuick() {
     if (!E.quick) return;
+    const lines = quickLines();
+    const keys = QUICK_KEYS.map((k, i) => quickKey(i));
+    const sig = JSON.stringify([lines, keys]);
+    if (sig === sigs.quick) return;
+    sigs.quick = sig;
     E.quick.textContent = '';
-    quickLines().forEach((line, i) => {
+    lines.forEach((line, i) => {
       const b = el('button', 'btn btn-sm gw-q');
       b.type = 'button';
-      b.append(el('span', 'dk', QUICK_KEYS[i].toUpperCase()), document.createTextNode(` ${line}`));
+      if (keys[i]) b.append(el('span', 'dk', keys[i].toUpperCase()), document.createTextNode(' '));
+      b.append(document.createTextNode(line));
       b.setAttribute('dir', 'auto');
-      b.addEventListener('click', () => say(line));
+      b.title = keys[i] ? `Say it (${keys[i].toUpperCase()})` : 'Say it';
+      b.addEventListener('click', () => { say(line); b.blur(); });
       E.quick.append(b);
     });
+    // The hint names only the keys that really reach a quick line.
+    const free = keys.filter(Boolean);
+    E.qkeys.textContent = free.length ? ' ·' : '';
+    free.forEach(k => E.qkeys.append(' ', el('span', 'kbd', k.toUpperCase())));
+    if (free.length) E.qkeys.append(' quick lines');
+    E.qkeys.hidden = !free.length;
+  }
+
+  // While open, the panel takes the digits that have cues: say so.
+  function renderDigits() {
+    const taken = ['0', '1', '2', '3', '4', '5'].filter(k => byHotkey[k]);
+    E.digits.textContent = '';
+    taken.forEach(k => E.digits.append(el('span', 'kbd', k), ' '));
+    if (taken.length) E.digits.append('fire cues here, not interrupting');
+    E.digits.hidden = !taken.length;
   }
 
   let tick = 0;
@@ -206,20 +271,29 @@
     E.body.hidden = !open;
     E.toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     E.toggle.classList.toggle('open', open);
-    E.connect.hidden = W.connected.length > 0;
+    // Connect also brings back robots that dropped out.
+    E.connect.hidden = W.connected.length > 0 && !notConnected().length;
     E.prep.hidden = !W.preparing;
-    E.error.hidden = !W.error || arr(W.script.sections).length > 0;
-    E.error.textContent = W.error;
+    const hasCues = arr(W.script.sections).length > 0;
+    // Why cues are grey (no voice: offline, no key), while any still is.
+    const note = W.note && order.some(id => cues[id].ready === false) ? W.note : '';
+    const msg = !hasCues ? W.error : note;
+    E.error.hidden = !msg;
+    E.error.textContent = msg;
     renderPicker();
     renderBoard();
     renderQuick();
+    renderDigits();
     renderNow();
   }
 
   /* -------------------------------------------------------------- actions */
+  // The hub's own reason is short and says what to do; ours only as a fallback.
   function fail(r) {
     const b = obj(r.body);
-    RA.toast(ERRORS[b.code] || RA.errorText(r) || 'That did not work.', true);
+    const own = str(b.error || (typeof b.detail === 'string' ? b.detail : '')).trim();
+    RA.toast(RA.cap(own) || ERRORS[b.code] || RA.errorText(r) || 'That did not work.', true);
+    if (b.code === 'NOT_CONNECTED' || b.code === 'NO_ROBOTS' || !r.status) refresh();
   }
   function afterOk(b) {
     const missing = arr(b.missing).map(str).filter(Boolean);
@@ -275,27 +349,69 @@
   }
 
   /* ------------------------------------------------------------- keyboard */
+  // The key by its place on the keyboard: KeyS is 's' on a Hebrew layout too.
+  function keyOf(ev) {
+    const code = str(ev && ev.code);
+    let m = /^Key([A-Z])$/.exec(code);
+    if (m) return m[1].toLowerCase();
+    m = /^(?:Digit|Numpad)(\d)$/.exec(code);
+    if (m) return m[1];
+    const k = str(ev && ev.key);
+    return k.length === 1 ? k.toLowerCase() : '';
+  }
+  const isSpace = (ev) => ev.code === 'Space' || ev.key === ' ';
+  const isEsc = (ev) => ev.key === 'Escape' || ev.code === 'Escape';
+
+  // A dialog or drawer open: the keyboard is its own (Esc closes it, no STOP).
+  function dialogOpen() {
+    return !!document.querySelector('.modal-wrap:not([hidden]), .drawer-wrap:not([hidden])');
+  }
+
+  // Typing somewhere. The target picker is not: the keys stay the panel's.
+  const TEXT_TYPES = ['', 'text', 'search', 'number', 'email', 'password', 'url', 'tel', 'range', 'date', 'time'];
+  function typing(t) {
+    if (!t || t === E.picker) return false;
+    if (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+    return t.tagName === 'INPUT' && TEXT_TYPES.includes(str(t.type).toLowerCase());
+  }
+
+  // Focus back to the page, so Space never presses the last-used control.
+  function release(t) {
+    if (t && t.blur && (t.tagName === 'BUTTON' || t.tagName === 'INPUT' || t === E.picker)) t.blur();
+  }
+
+  function active() {
+    return RA.route.tab === 'group' && !!E.panel && !E.panel.hidden;
+  }
+
   // Scoped to the Group tab, like the single-robot tab is scoped to its own,
-  // so a key never reaches both. 0 to 5 stay the Group tab's interrupting keys.
+  // so a key never reaches both. 0 to 5 stay the Group tab's interrupting keys
+  // unless a cue is on them. Listens in the capture phase, so a dialog that
+  // this Esc is about to close still counts as open here.
   function onKey(ev) {
-    if (RA.route.tab !== 'group' || !E.panel || E.panel.hidden || E.body.hidden) return;
+    if (!active() || dialogOpen()) return;
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-    if (!$('groups-modal').hidden || !$('copy-modal').hidden) return;
     const t = ev.target;
-    if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) {
-      if (t === E.sayText && ev.key === 'Escape') { ev.preventDefault(); stopAll(); }
+    if (E.body.hidden) {
+      // Folded: only STOP, and only while a cue plays.
+      if (isEsc(ev) && W.playing && !typing(t)) { ev.preventDefault(); if (!ev.repeat) stopAll(); }
       return;
     }
-    if (ev.key === 'Escape') { ev.preventDefault(); stopAll(); return; }
-    if (ev.key === ' ') {
-      if (t && t.tagName === 'BUTTON') return;      // Space on a focused button presses it
-      ev.preventDefault();
-      if (order[pointer]) fire(order[pointer], true);
+    if (typing(t)) {
+      if (t === E.sayText && isEsc(ev)) { ev.preventDefault(); if (!ev.repeat) stopAll(); }
       return;
     }
-    if (ev.key.startsWith('Arrow')) {
+    if (isEsc(ev)) { ev.preventDefault(); if (!ev.repeat) stopAll(); return; }
+    if (isSpace(ev)) {
+      ev.preventDefault();                        // always the outlined cue, whatever has focus
+      release(t);
+      if (!ev.repeat && order[pointer]) fire(order[pointer], true);   // a held key fires once
+      return;
+    }
+    if (str(ev.key).startsWith('Arrow')) {
+      ev.preventDefault();                        // never moves the target picker
+      release(t);
       if (!order.length) return;
-      ev.preventDefault();
       const step = ev.key === 'ArrowDown' || ev.key === 'ArrowRight' ? 1 : -1;
       pointer = (pointer + step + order.length) % order.length;
       markPointer();
@@ -303,12 +419,26 @@
       if (n && n.scrollIntoView) n.scrollIntoView({ block: 'nearest' });
       return;
     }
-    const k = str(ev.key).toLowerCase();
+    const k = keyOf(ev);
+    if (!k) return;
     // A digit with no cue on it is left to the Group tab (0-5 set interrupting).
-    if (k.length !== 1 || (GROUP_LEVEL_KEYS.test(k) && !byHotkey[k])) return;
-    if (byHotkey[k]) { ev.preventDefault(); fire(byHotkey[k], true); return; }
+    if (GROUP_LEVEL_KEYS.test(k) && !byHotkey[k]) return;
     const q = QUICK_KEYS.indexOf(k);
-    if (q >= 0) { ev.preventDefault(); say(quickLines()[q]); }
+    if (!byHotkey[k] && q < 0) {
+      if (t === E.picker) ev.preventDefault();    // no type-to-pick on the picker
+      return;
+    }
+    ev.preventDefault();
+    release(t);
+    if (ev.repeat) return;                        // a held key fires once
+    if (byHotkey[k]) { fire(byHotkey[k], true); return; }   // a script cue wins
+    say(quickLines()[q]);
+  }
+
+  // A focused button would also click on Space key-up; Space belongs to the outlined cue.
+  function onKeyUp(ev) {
+    if (!isSpace(ev) || !active() || E.body.hidden || dialogOpen() || typing(ev.target)) return;
+    ev.preventDefault();
   }
 
   /* ----------------------------------------------------------------- boot */
@@ -319,13 +449,15 @@
       panel, body: $('gwoz-body'), toggle: $('gwoz-toggle'), picker: $('gwoz-target'), connect: $('gwoz-connect'),
       stop: $('gwoz-stop'), now: $('gwoz-now'), count: $('gwoz-count'), prep: $('gwoz-prep'), error: $('gwoz-error'),
       board: $('gwoz-board'), quick: $('gwoz-quick'), sayForm: $('gwoz-say-form'), sayText: $('gwoz-say-text'),
+      qkeys: $('gwoz-qkeys'), digits: $('gwoz-digits'),
     };
-    E.toggle.addEventListener('click', () => { store(!isOpen()); render(); });
-    E.picker.addEventListener('change', () => { target = E.picker.value; });
-    E.connect.addEventListener('click', connect);
-    E.stop.addEventListener('click', stopAll);
+    E.toggle.addEventListener('click', () => { store(!isOpen()); render(); E.toggle.blur(); });
+    E.picker.addEventListener('change', () => { target = E.picker.value; E.picker.blur(); });
+    E.connect.addEventListener('click', () => { E.connect.blur(); connect(); });
+    E.stop.addEventListener('click', () => { E.stop.blur(); stopAll(); });
     E.sayForm.addEventListener('submit', (ev) => { ev.preventDefault(); say(E.sayText.value); });
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('keyup', onKeyUp, true);
     RA.onHub((kind) => { if (kind === 'settings' || kind === 'all') renderQuick(); });
     let lastChoir = null;
     // Loads when the Group tab first shows; polls only while the socket is down.
@@ -340,11 +472,12 @@
   }
 
   // The Group tab asks before using 0-5: a cue on that key, with the panel
-  // open, wins.
-  function ownsKey(key) {
-    if (RA.route.tab !== 'group' || !E.panel || E.panel.hidden || !E.body || E.body.hidden) return false;
-    return !!byHotkey[str(key).toLowerCase()];
+  // open, wins. Takes the key event (or a key).
+  function ownsKey(ev) {
+    if (!active() || !E.body || E.body.hidden || dialogOpen()) return false;
+    const k = ev && typeof ev === 'object' ? keyOf(ev) : str(ev).toLowerCase();
+    return !!byHotkey[k];
   }
 
-  RA.GroupWoz = { init, onEvent, reload: load, ownsKey };
+  RA.GroupWoz = { init, onEvent, reload: load, refresh, ownsKey };
 })();

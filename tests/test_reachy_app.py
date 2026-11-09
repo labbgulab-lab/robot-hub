@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -447,3 +449,346 @@ def test_proxy_and_relay_against_a_real_upstream(tmp_path):
     finally:
         server.should_exit = True
         thread.join(5)
+
+
+# ----------------------------------------- the Group tab's Wizard of Oz page
+WEB = Path(__file__).resolve().parent.parent / "web"
+NODE = shutil.which("node")
+
+# A tiny fake DOM, enough to run web/reachy-group-woz.js under node and press
+# keys on it. Prints one JSON object with what happened.
+GWOZ_HARNESS = r"""
+'use strict';
+const fs = require('fs');
+const vm = require('vm');
+const out = {};
+const calls = [];
+const toasts = [];
+const blurred = [];
+const listeners = { keydown: [], keyup: [] };
+
+class Node {
+  constructor(tag) {
+    this.tagName = tag.toUpperCase(); this.children = []; this.attrs = {}; this.dataset = {};
+    this.hidden = false; this.className = ''; this._text = ''; this.on = {}; this.style = {};
+    this.disabled = false; this.value = ''; this.type = ''; this.id = '';
+    const self = this;
+    this.classList = {
+      has: (c) => self.className.split(/\s+/).includes(c),
+      add: (c) => { if (!self.classList.has(c)) self.className = `${self.className} ${c}`.trim(); },
+      remove: (c) => { self.className = self.className.split(/\s+/).filter(x => x && x !== c).join(' '); },
+      toggle: (c, on) => { if (on === undefined) on = !self.classList.has(c); if (on) self.classList.add(c); else self.classList.remove(c); },
+      contains: (c) => self.classList.has(c),
+    };
+  }
+  get textContent() { return this._text + this.children.map(c => (typeof c === 'string' ? c : c.textContent)).join(''); }
+  set textContent(v) { this._text = String(v); this.children = []; }
+  append(...xs) { xs.forEach(x => this.children.push(x)); }
+  setAttribute(k, v) { this.attrs[k] = String(v); }
+  getAttribute(k) { return this.attrs[k]; }
+  addEventListener(t, f) { (this.on[t] = this.on[t] || []).push(f); }
+  click() { (this.on.click || []).forEach(f => f({ preventDefault() {} })); }
+  blur() { blurred.push(this.id || this.tagName); if (document.activeElement === this) document.activeElement = document.body; }
+  focus() { document.activeElement = this; }
+  all() { const r = []; this.children.forEach(c => { if (typeof c !== 'string') { r.push(c); r.push(...c.all()); } }); return r; }
+  matches(sel) {
+    const m = /^\[data-cue-id="(.*)"\]$/.exec(sel);
+    if (m) return this.dataset.cueId === m[1];
+    return sel.split('.').filter(Boolean).every(c => this.classList.has(c));
+  }
+  querySelectorAll(sel) { return this.all().filter(n => n.matches(sel)); }
+  querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+}
+
+const ids = {};
+function make(id, tag, cls) { const n = new Node(tag || 'div'); n.id = id; if (cls) n.className = cls; ids[id] = n; return n; }
+['gwoz', 'gwoz-body', 'gwoz-now', 'gwoz-count', 'gwoz-prep', 'gwoz-error', 'gwoz-board', 'gwoz-quick', 'gwoz-digits'].forEach(i => make(i));
+make('gwoz-qkeys', 'span');
+make('gwoz-toggle', 'button'); make('gwoz-connect', 'button'); make('gwoz-stop', 'button');
+make('gwoz-target', 'select'); make('gwoz-say-form', 'form');
+make('gwoz-say-text', 'input').type = 'text';
+make('more-time', 'button');
+make('seat-box', 'input').type = 'checkbox';
+make('groups-modal', 'div', 'modal-wrap').hidden = true;
+make('copy-modal', 'div', 'modal-wrap').hidden = true;
+make('logs-drawer', 'div', 'drawer-wrap').hidden = true;
+make('details-drawer', 'div', 'drawer-wrap').hidden = true;
+
+const body = new Node('body');
+global.window = global;
+global.CSS = { escape: (s) => s };
+global.document = {
+  body, activeElement: body,
+  getElementById: (id) => ids[id] || null,
+  createElement: (tag) => new Node(tag),
+  createTextNode: (t) => String(t),
+  addEventListener: (type, f, capture) => { (listeners[type] = listeners[type] || []).push({ f, capture: !!capture }); },
+  querySelector: (sel) => (sel.includes(':not([hidden])')
+    ? Object.values(ids).find(n => (n.classList.has('modal-wrap') || n.classList.has('drawer-wrap')) && !n.hidden) || null
+    : null),
+};
+const store = { 'reachy.group.woz.open': '1' };
+global.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
+global.setInterval = () => 0;
+global.clearInterval = () => {};
+
+let state = null;
+const answers = {};
+const RA = global.RA = {
+  arr: (v) => (Array.isArray(v) ? v : []),
+  obj: (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {}),
+  str: (v) => (v === null || v === undefined ? '' : String(v)),
+  num: (v, f) => { const n = Number(v); return v !== null && v !== '' && v !== undefined && Number.isFinite(n) ? n : f; },
+  el: (tag, cls, text) => { const n = new Node(tag); if (cls) n.className = cls; if (text !== undefined && text !== null) n.textContent = text; return n; },
+  $: (id) => ids[id] || null,
+  cap: (t) => { const s = RA.str(t); return s ? s[0].toUpperCase() + s.slice(1) : s; },
+  toast: (m, bad) => toasts.push([m, !!bad]),
+  errorText: () => 'generic',
+  route: { tab: 'group' },
+  hub: { settings: {}, groupLive: true },
+  onHub: () => {},
+  Group: { choir: () => false },
+  get: async (url) => { calls.push(['GET', url]); return { ok: true, status: 200, body: state }; },
+  post: async (url, payload) => {
+    calls.push(['POST', url, payload]);
+    return answers[url] || { ok: true, status: 200, body: { ok: true } };
+  },
+};
+
+vm.runInThisContext(fs.readFileSync(process.argv[2], 'utf8'));
+
+const tick = () => new Promise(r => setTimeout(r, 0));
+const posts = () => calls.filter(c => c[0] === 'POST');
+function key(type, o) {
+  const ev = { key: '', code: '', repeat: false, ctrlKey: false, metaKey: false, altKey: false, target: document.activeElement,
+    defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...o };
+  listeners[type].forEach(l => l.f(ev));
+  return ev;
+}
+const down = (o) => key('keydown', o);
+
+(async () => {
+  state = {
+    script: { sections: [{ id: 's', title: 'תגובות (בטוח)', cues: [
+      { id: 'greet', hotkey: '1', label: 'שלום', text: 'hi', ready: true, duration_s: 1 },
+      { id: 'hold', hotkey: 's', label: 'Hold on', text: 'רגע', ready: true },
+      { id: 'later', hotkey: '', label: 'Later', text: 'x', ready: false },
+    ] }] },
+    targets: [{ id: 'r1', name: 'reachy1', members: ['r1'] }, { id: 'r2', name: 'reachy2', members: ['r2'] }],
+    choir: false, connected: ['r1'], note: 'could not voice later: offline',
+  };
+  RA.GroupWoz.init();
+  out.capture = listeners.keydown.map(l => l.capture);
+  out.keyup = listeners.keyup.length;
+  RA.GroupWoz.onEvent({ state });
+  const E = (id) => ids[id];
+  out.connectShownOneMissing = !E('gwoz-connect').hidden;
+  out.note = E('gwoz-error').hidden ? '' : E('gwoz-error').textContent;
+  const h3 = E('gwoz-board').querySelectorAll('.gw-st')[0];
+  out.titleDir = h3 && h3.attrs.dir;
+  out.labelDir = E('gwoz-board').querySelectorAll('.lb').map(n => n.attrs.dir);
+  const quick = E('gwoz-quick').children;
+  out.quickBadges = quick.map(b => b.querySelectorAll('.dk').map(n => n.textContent).join(''));
+  out.qkeys = E('gwoz-qkeys').hidden ? '' : E('gwoz-qkeys').textContent;
+  out.digits = E('gwoz-digits').hidden ? '' : E('gwoz-digits').textContent;
+
+  // Space on the last-clicked button: the outlined cue, never the button.
+  E('more-time').focus();
+  let ev = down({ key: ' ', code: 'Space' });
+  const up = key('keyup', { key: ' ', code: 'Space' });
+  await tick();
+  out.spaceOnButton = { prevented: ev.defaultPrevented, upPrevented: up.defaultPrevented, blurred: blurred.includes('more-time') };
+  ev = down({ key: ' ', code: 'Space', target: body });
+  await tick();
+  ev = down({ key: ' ', code: 'Space', target: body, repeat: true });
+  await tick();
+  out.fired = posts().filter(c => c[1] === '/api/group/woz/fire').map(c => c[2].cue_id);
+
+  // A clicked cue gives focus back; a clicked quick line too.
+  E('gwoz-board').querySelector('[data-cue-id="greet"]').click();
+  quick[1].click();
+  await tick();
+  out.clickBlurs = blurred.filter(b => b === 'BUTTON').length;
+
+  // Hebrew layout: the key's place decides.
+  calls.length = 0;
+  down({ key: 'ד', code: 'KeyS', target: body });
+  down({ key: 'ג', code: 'KeyD', target: body });
+  down({ key: 'ג', code: 'KeyD', target: body, repeat: true });
+  await tick();
+  out.hebrew = posts().map(c => [c[1], c[2].cue_id || c[2].text]);
+
+  // The picker keeps its target under arrows and letters.
+  calls.length = 0;
+  E('gwoz-target').value = 'r2';
+  E('gwoz-target').on.change[0]();
+  out.pickerBlurOnChange = blurred.includes('gwoz-target');
+  E('gwoz-target').focus();
+  ev = down({ key: 'ArrowDown', code: 'ArrowDown' });
+  const ev2 = down({ key: 'ר', code: 'KeyR', target: E('gwoz-target') });
+  out.picker = { arrowPrevented: ev.defaultPrevented, letterPrevented: ev2.defaultPrevented, value: E('gwoz-target').value };
+  // A checkbox clicked last: Space still fires, and does not tick it.
+  E('seat-box').focus();
+  ev = down({ key: ' ', code: 'Space' });
+  await tick();
+  out.checkboxSpace = { prevented: ev.defaultPrevented, fired: posts().length };
+  // Typing: the keys are the text box's.
+  calls.length = 0;
+  ev = down({ key: ' ', code: 'Space', target: E('gwoz-say-text') });
+  await tick();
+  out.typing = { prevented: ev.defaultPrevented, posts: posts().length };
+
+  // Esc closing a dialog is not STOP; Esc otherwise is.
+  calls.length = 0;
+  E('groups-modal').hidden = false;
+  down({ key: 'Escape', code: 'Escape', target: body });
+  E('groups-modal').hidden = true;
+  E('logs-drawer').hidden = false;
+  down({ key: ' ', code: 'Space', target: body });
+  E('logs-drawer').hidden = true;
+  await tick();
+  out.dialogPosts = posts().length;
+  down({ key: 'Escape', code: 'Escape', target: body });
+  await tick();
+  out.escStops = posts().map(c => c[1]);
+
+  // 0-5: the panel owns a digit with a cue on it while open.
+  out.owns = [RA.GroupWoz.ownsKey({ key: '1', code: 'Digit1' }), RA.GroupWoz.ownsKey({ key: '1', code: 'Numpad1' }),
+    RA.GroupWoz.ownsKey({ key: '2', code: 'Digit2' }), RA.GroupWoz.ownsKey('1')];
+
+  // Folded: Esc stops only while a cue plays.
+  E('gwoz-toggle').click();
+  out.folded = E('gwoz-body').hidden;
+  out.ownsFolded = RA.GroupWoz.ownsKey({ key: '1', code: 'Digit1' });
+  calls.length = 0;
+  down({ key: 'Escape', code: 'Escape', target: body });
+  RA.GroupWoz.onEvent({ playing: { cue_id: 'greet', until: Date.now() / 1000 + 10 } });
+  down({ key: 'Escape', code: 'Escape', target: body });
+  down({ key: ' ', code: 'Space', target: body });
+  await tick();
+  out.foldedPosts = posts().map(c => c[1]);
+  E('gwoz-toggle').click();
+
+  // The hub's own reason in the toast; a stale "connected" asks again.
+  await new Promise(r => setTimeout(r, 400));     // the refresh the playing event asked for
+  calls.length = 0;
+  toasts.length = 0;
+  answers['/api/group/woz/fire'] = { ok: false, status: 409,
+    body: { ok: false, code: 'NO_ROBOTS', error: "none of reachy2 can be reached (the robots' WiFi?)" } };
+  down({ key: ' ', code: 'Space', target: body });
+  await new Promise(r => setTimeout(r, 450));
+  out.toast = toasts[0];
+  out.refreshed = calls.some(c => c[0] === 'GET');
+  answers['/api/group/woz/fire'] = { ok: false, status: 409, body: { ok: false, code: 'NO_AUDIO' } };
+  toasts.length = 0;
+  down({ key: ' ', code: 'Space', target: body });
+  await tick(); await tick();
+  out.fallbackToast = toasts[0];
+
+  // All connected: Connect hides; a refresh does not rebuild an unchanged board.
+  const before = E('gwoz-board').children[0];
+  RA.GroupWoz.onEvent({ state: { ...state, connected: ['r1', 'r2'] } });
+  out.connectHiddenAll = E('gwoz-connect').hidden;
+  out.boardKept = E('gwoz-board').children[0] === before;
+  RA.GroupWoz.onEvent({ state: { ...state, connected: [] } });
+  out.connectShownNone = !E('gwoz-connect').hidden;
+
+  console.log(JSON.stringify(out));
+})().catch(e => { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.fixture(scope="module")
+def gwoz(tmp_path_factory):
+    if not NODE:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("gwoz") / "harness.js"
+    harness.write_text(GWOZ_HARNESS, encoding="utf-8")
+    run = subprocess.run([NODE, str(harness), str(WEB / "reachy-group-woz.js")],
+                         capture_output=True, text=True, encoding="utf-8", timeout=60)
+    assert run.returncode == 0, run.stderr
+    return json.loads(run.stdout.strip().splitlines()[-1])
+
+
+@pytest.mark.parametrize("name", ["reachy-group-woz.js", "reachy-group.js", "reachy.js"])
+def test_group_pages_parse(name):
+    if not NODE:
+        pytest.skip("node is not installed")
+    run = subprocess.run([NODE, "--check", str(WEB / name)], capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr
+
+
+def test_gwoz_space_fires_the_outlined_cue_whatever_has_focus(gwoz):
+    # Finding 1: Space on the last-clicked button fired that button again.
+    assert gwoz["spaceOnButton"] == {"prevented": True, "upPrevented": True, "blurred": True}
+    # Three presses, the last one a held key: two cues, in script order.
+    assert gwoz["fired"] == ["greet", "hold"]
+    assert gwoz["clickBlurs"] >= 2                     # cue and quick-line clicks
+    assert gwoz["checkboxSpace"] == {"prevented": True, "fired": 1}
+    assert gwoz["typing"] == {"prevented": False, "posts": 0}
+
+
+def test_gwoz_keys_by_place_and_once(gwoz):
+    # Findings 22, 24, 32: Hebrew layout, held keys, the script's own s/d/f.
+    assert gwoz["hebrew"] == [["/api/group/woz/fire", "hold"],
+                              ["/api/group/woz/say", "Let me think about that for a second."]]
+
+
+def test_gwoz_picker_keeps_its_target(gwoz):
+    # Finding 21: arrows and letters on a focused picker changed the target.
+    assert gwoz["pickerBlurOnChange"] is True
+    assert gwoz["picker"] == {"arrowPrevented": True, "letterPrevented": True, "value": "r2"}
+
+
+def test_gwoz_esc_and_dialogs(gwoz):
+    # Findings 23, 39: Esc closing a dialog is not STOP; drawers keep their
+    # keys; folded, Esc stops a playing cue and nothing else fires.
+    assert gwoz["capture"] == [True]
+    assert gwoz["keyup"] == 1
+    assert gwoz["dialogPosts"] == 0
+    assert gwoz["escStops"] == ["/api/group/woz/stop"]
+    assert gwoz["folded"] is True
+    assert gwoz["foldedPosts"] == ["/api/group/woz/stop"]
+
+
+def test_gwoz_quick_keys_and_digits_say_what_they_do(gwoz):
+    # Findings 32, 33, 34: badges only on keys that reach a quick line; the
+    # digits a cue takes are named while the panel is open.
+    assert gwoz["quickBadges"] == ["", "D", "F"]
+    assert "D" in gwoz["qkeys"] and "F" in gwoz["qkeys"] and "S" not in gwoz["qkeys"]
+    assert gwoz["digits"].startswith("1") and "fire cues" in gwoz["digits"]
+    assert gwoz["owns"] == [True, True, False, True]
+    assert gwoz["ownsFolded"] is False
+
+
+def test_gwoz_connect_errors_and_note(gwoz):
+    # Findings 9, 35, 36: Connect shows while any target robot is not
+    # connected; a NO_ROBOTS answer asks the hub again.
+    assert gwoz["connectShownOneMissing"] is True
+    assert gwoz["connectHiddenAll"] is True
+    assert gwoz["connectShownNone"] is True
+    assert gwoz["refreshed"] is True
+    assert gwoz["boardKept"] is True
+    # Finding 37: the hub's reason, ours only as a fallback.
+    assert gwoz["toast"] == ["None of reachy2 can be reached (the robots' WiFi?)", True]
+    assert gwoz["fallbackToast"] == ["That cue has no recording yet.", True]
+    # Finding 38: why cues are grey.
+    assert gwoz["note"] == "could not voice later: offline"
+
+
+def test_gwoz_hebrew_titles_and_labels(gwoz):
+    # Finding 42.
+    assert gwoz["titleDir"] == "auto"
+    assert gwoz["labelDir"] == ["auto", "auto", "auto"]
+
+
+def test_gwoz_page_hooks():
+    page = (WEB / "reachy.html").read_text(encoding="utf-8")
+    group = (WEB / "reachy-group.js").read_text(encoding="utf-8")
+    # Finding 41: the tooltip says what STOP does now.
+    assert "the cue and any line being said" in page
+    assert 'id="gwoz-qkeys"' in page and 'id="gwoz-digits"' in page
+    assert "quick lines</p>" not in page                # no fixed S D F promise
+    # Findings 9, 35: fresh woz state on every group.state and socket open.
+    assert group.count("RA.GroupWoz.refresh()") >= 2
+    assert "RA.GroupWoz.ownsKey(event)" in group
