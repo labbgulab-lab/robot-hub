@@ -50,12 +50,16 @@
   let refreshTimer = 0;
   let sigs = { picker: '', board: '', quick: '' };   // rebuild only what changed
 
+  // Kept in memory too: with browser storage blocked the panel still opens.
+  let openMem = null;
   function store(value) {
+    if (value !== undefined) openMem = !!value;
     try {
       if (value === undefined) { const v = localStorage.getItem(STORE_KEY); return v === null ? null : v === '1'; }
       localStorage.setItem(STORE_KEY, value ? '1' : '0');
-    } catch (err) { /* private window: the panel still works */ }
-    return null;
+      return null;
+    } catch (err) { /* storage blocked: the in-memory value holds */ }
+    return value === undefined ? openMem : null;
   }
 
   function choirNow() {
