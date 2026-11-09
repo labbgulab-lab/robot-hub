@@ -518,6 +518,7 @@ button.chk.bad{box-shadow:inset 0 0 0 1px #F2A7A7;cursor:pointer}
 .gwoz .gw-count{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--brand-text)}
 .gwoz .woz-stop{min-height:36px}
 .gwoz #gwoz-body:not([hidden]){display:flex}
+.gwoz-digits .lvl-keys{display:none}
 .gwoz .fold-btn{margin-left:0}
 .gw-board{display:flex;flex-direction:column;gap:12px;background:#171412;border-radius:12px;padding:12px;max-height:420px;overflow:auto}
 .gw-sec{display:flex;flex-direction:column;gap:8px}

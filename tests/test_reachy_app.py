@@ -693,6 +693,53 @@ const down = (o) => key('keydown', o);
   RA.GroupWoz.onEvent({ state: { ...state, connected: [] } });
   out.connectShownNone = !E('gwoz-connect').hidden;
 
+  // A robot ticked after Connect (or unreachable then) is in no target: out
+  // of a conversation Connect still offers it; in one, the session decides.
+  const seats = [{ key: 'r1', included: true }, { key: 'r2', included: true }, { key: 'r3', included: true },
+    { key: 'r4', included: false }];
+  RA.Group.state = () => ({ running: false, seats });
+  RA.GroupWoz.onEvent({ state: { ...state, connected: ['r1', 'r2'] } });
+  out.connectShownTickedLater = !E('gwoz-connect').hidden;
+  seats[2].included = false;
+  RA.GroupWoz.onEvent({ state: { ...state, connected: ['r1', 'r2'] } });
+  out.connectHiddenUnticked = E('gwoz-connect').hidden;
+  seats[2].included = true;
+  RA.Group.state = () => ({ running: true, seats });
+  RA.GroupWoz.onEvent({ state: { ...state, connected: ['r1', 'r2'] } });
+  out.connectHiddenRunning = E('gwoz-connect').hidden;
+
+  // Open with digits on cues: the Group tab's 0-5 hints step aside.
+  out.digitsHeld = body.classList.has('gwoz-digits');
+  // Folded during a conversation: Esc is STOP (it cuts the line), no cue needed.
+  E('gwoz-toggle').click();
+  out.digitsHeldFolded = body.classList.has('gwoz-digits');
+  calls.length = 0;
+  down({ key: 'Escape', code: 'Escape', target: body });
+  RA.Group.state = () => ({ running: false, seats });
+  down({ key: 'Escape', code: 'Escape', target: body });
+  await tick();
+  out.foldedRunningPosts = posts().map(c => c[1]);
+  E('gwoz-toggle').click();
+
+  // No cues: arrows are the page's again (scroll, radio buttons); the picker
+  // still never moves.
+  RA.GroupWoz.onEvent({ state: { ...state, script: { sections: [] } } });
+  ev = down({ key: 'ArrowDown', code: 'ArrowDown', target: body });
+  out.arrowNoCuesPage = ev.defaultPrevented;
+  ev = down({ key: 'ArrowDown', code: 'ArrowDown', target: E('gwoz-target') });
+  out.arrowNoCuesPicker = ev.defaultPrevented;
+
+  // Nothing saved yet and Choir on: the panel stays folded and the digits
+  // stay the Group tab's interrupting keys.
+  delete store['reachy.group.woz.open'];
+  RA.Group.choir = () => true;
+  RA.GroupWoz.onEvent({ state: { ...state, choir: true } });
+  out.choirFolded = E('gwoz-body').hidden;
+  out.choirOwns = RA.GroupWoz.ownsKey({ key: '1', code: 'Digit1' });
+  out.choirDigitsHeld = body.classList.has('gwoz-digits');
+  E('gwoz-toggle').click();
+  out.choirOpenedOwns = RA.GroupWoz.ownsKey({ key: '1', code: 'Digit1' });
+
   console.log(JSON.stringify(out));
 })().catch(e => { console.error(e); process.exit(1); });
 """
@@ -749,6 +796,9 @@ def test_gwoz_esc_and_dialogs(gwoz):
     assert gwoz["escStops"] == ["/api/group/woz/stop"]
     assert gwoz["folded"] is True
     assert gwoz["foldedPosts"] == ["/api/group/woz/stop"]
+    # Finding 41: folded, Esc is STOP during a conversation too (the line is
+    # cut, as the button says); with nothing to silence it is left alone.
+    assert gwoz["foldedRunningPosts"] == ["/api/group/woz/stop"]
 
 
 def test_gwoz_quick_keys_and_digits_say_what_they_do(gwoz):
@@ -761,12 +811,46 @@ def test_gwoz_quick_keys_and_digits_say_what_they_do(gwoz):
     assert gwoz["ownsFolded"] is False
 
 
+def test_gwoz_never_takes_the_digits_by_itself(gwoz):
+    # Finding 33 (round 2): Choir on opened the panel by itself and 2 fired a
+    # cue on every robot instead of setting interrupting. Only the operator's
+    # own open hands the digits over, and the Group tab's 0-5 hints hide then.
+    assert gwoz["choirFolded"] is True
+    assert gwoz["choirOwns"] is False
+    assert gwoz["choirDigitsHeld"] is False
+    assert gwoz["choirOpenedOwns"] is True
+    assert gwoz["digitsHeld"] is True
+    assert gwoz["digitsHeldFolded"] is False
+    page = (WEB / "reachy.html").read_text(encoding="utf-8")
+    css = (WEB / "reachy.css").read_text(encoding="utf-8")
+    assert page.count("lvl-keys") == 2
+    assert ".gwoz-digits .lvl-keys{display:none}" in css
+
+
+def test_gwoz_arrows_left_alone_without_cues(gwoz):
+    # Round 2 regression: arrows were swallowed on the whole tab with no cues.
+    assert gwoz["arrowNoCuesPage"] is False
+    assert gwoz["arrowNoCuesPicker"] is True
+
+
+def test_group_digits_wait_while_any_dialog_is_open():
+    # Round 2 regression: with Groups open, 2 set every robot's interrupting.
+    group = (WEB / "reachy-group.js").read_text(encoding="utf-8")
+    start = group.index("function onKey(event)")
+    body = group[start:group.index("RA.GroupWoz.ownsKey(event)", start)]
+    assert "document.querySelector('.modal-wrap:not([hidden])')" in body
+
+
 def test_gwoz_connect_errors_and_note(gwoz):
     # Findings 9, 35, 36: Connect shows while any target robot is not
     # connected; a NO_ROBOTS answer asks the hub again.
     assert gwoz["connectShownOneMissing"] is True
     assert gwoz["connectHiddenAll"] is True
     assert gwoz["connectShownNone"] is True
+    # Round 2: a ticked robot in no target yet still shows Connect.
+    assert gwoz["connectShownTickedLater"] is True
+    assert gwoz["connectHiddenUnticked"] is True
+    assert gwoz["connectHiddenRunning"] is True
     assert gwoz["refreshed"] is True
     assert gwoz["boardKept"] is True
     # Finding 37: the hub's reason, ours only as a fallback.

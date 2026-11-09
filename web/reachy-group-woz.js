@@ -12,7 +12,8 @@
  * again); while the socket is down the panel polls every 5 s.
  *
  * Keys go by the key's place (ev.code), so a Hebrew layout still works, and a
- * held key fires once.
+ * held key fires once. The panel stays folded until the operator opens it:
+ * only then do the digits with cues stop setting interrupting.
  */
 'use strict';
 
@@ -62,9 +63,13 @@
     if (RA.Group && typeof RA.Group.choir === 'function') return !!RA.Group.choir();
     return !!W.choir;
   }
-  function isOpen() {
-    const saved = store();
-    return saved === null ? choirNow() : saved;
+  // Only the operator's own open: an open panel takes the digits that have
+  // cues, so it never opens by itself (Choir on included).
+  function isOpen() { return store() === true; }
+
+  // The Group tab's own state (running, seats), when that page is there.
+  function groupState() {
+    return RA.Group && typeof RA.Group.state === 'function' ? obj(RA.Group.state()) : {};
   }
 
   /* ---------------------------------------------------------------- state */
@@ -128,10 +133,14 @@
   // The keys a cue has taken win; a quick line only gets the keys left over.
   function quickKey(i) { const k = QUICK_KEYS[i]; return byHotkey[k] ? '' : k; }
 
-  // Robots the cues would play on that are not connected now.
+  // Robots the cues would play on that are not connected now. Out of a
+  // conversation that is every ticked robot too: one that was ticked after
+  // Connect, or could not be reached then, is in no target yet.
   function notConnected() {
     const want = new Set();
     W.targets.forEach(t => arr(obj(t).members).forEach(k => want.add(str(k))));
+    const g = groupState();
+    if (!g.running) arr(g.seats).forEach(s => { s = obj(s); if (s.key && s.included !== false) want.add(str(s.key)); });
     const have = new Set(W.connected.map(str));
     return [...want].filter(k => !have.has(k));
   }
@@ -231,13 +240,18 @@
     E.qkeys.hidden = !free.length;
   }
 
-  // While open, the panel takes the digits that have cues: say so.
-  function renderDigits() {
-    const taken = ['0', '1', '2', '3', '4', '5'].filter(k => byHotkey[k]);
+  // While open, the panel takes the digits that have cues: say so here, and
+  // the Group tab's "0 to 5 set interrupting" hints step aside meanwhile.
+  function renderDigits(open) {
+    const taken = open ? ['0', '1', '2', '3', '4', '5'].filter(k => byHotkey[k]) : [];
     E.digits.textContent = '';
     taken.forEach(k => E.digits.append(el('span', 'kbd', k), ' '));
     if (taken.length) E.digits.append('fire cues here, not interrupting');
     E.digits.hidden = !taken.length;
+    holdDigits(taken.length > 0);
+  }
+  function holdDigits(on) {
+    if (document.body && document.body.classList) document.body.classList.toggle('gwoz-digits', !!on);
   }
 
   let tick = 0;
@@ -266,7 +280,7 @@
   function render() {
     if (!E.panel) return;
     E.panel.hidden = missingEndpoint || !loaded;
-    if (E.panel.hidden) return;
+    if (E.panel.hidden) { holdDigits(false); return; }
     const open = isOpen();
     E.body.hidden = !open;
     E.toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -283,7 +297,7 @@
     renderPicker();
     renderBoard();
     renderQuick();
-    renderDigits();
+    renderDigits(open);
     renderNow();
   }
 
@@ -393,8 +407,12 @@
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const t = ev.target;
     if (E.body.hidden) {
-      // Folded: only STOP, and only while a cue plays.
-      if (isEsc(ev) && W.playing && !typing(t)) { ev.preventDefault(); if (!ev.repeat) stopAll(); }
+      // Folded: only STOP (its button stays in view), while there is something
+      // to silence: a cue, or the conversation's line.
+      if (isEsc(ev) && (W.playing || groupState().running) && !typing(t)) {
+        ev.preventDefault();
+        if (!ev.repeat) stopAll();
+      }
       return;
     }
     if (typing(t)) {
@@ -409,9 +427,10 @@
       return;
     }
     if (str(ev.key).startsWith('Arrow')) {
-      ev.preventDefault();                        // never moves the target picker
+      if (t === E.picker) ev.preventDefault();    // never moves the target picker
+      if (!order.length) return;                  // no cues: arrows scroll the page
+      ev.preventDefault();
       release(t);
-      if (!order.length) return;
       const step = ev.key === 'ArrowDown' || ev.key === 'ArrowRight' ? 1 : -1;
       pointer = (pointer + step + order.length) % order.length;
       markPointer();

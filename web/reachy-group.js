@@ -1506,11 +1506,11 @@
   }
 
   // 0-5 set every robot's interrupting level at once (a quick switch
-  // mid-demo), on the Group tab, unless typing somewhere.
+  // mid-demo), on the Group tab, unless typing somewhere or a dialog is open.
   function onKey(event) {
     if (RA.route.tab !== 'group') return;
     const t = event.target;
-    if (!$('copy-modal').hidden) return;
+    if (document.querySelector('.modal-wrap:not([hidden])')) return;   // Groups, Copy: their own keys
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (!/^[0-5]$/.test(event.key) || !draft.seats.length) return;
