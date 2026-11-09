@@ -83,19 +83,39 @@ Do this on a Windows lab laptop with robot-hub and reachy_chat side by side.
    powershell -ExecutionPolicy Bypass -File tools\install.ps1 -Uninstall -RemoveData -Root <temp folder>\root -DesktopDir <temp folder> -StartMenuDir <temp folder>
    ```
 
+## Build the Mac app
+
+The Mac app is built on GitHub's own Macs, by the **Mac release** GitHub Action (`.github/workflows/mac-release.yml`). You do not need a Mac. For each Mac type (Apple Silicon `arm64` and Intel `x86_64`) it:
+
+1. builds `RobotHub-mac-<arch>-<version>.tar.gz` with `tools/build_release_mac.sh`, from the tag's robot-hub and reachy_chat's `main` branch (the same Python 3.12 as Windows; Windows-only packages are left out);
+2. installs it into a temp folder with `install-mac.sh --tar ... --no-launch`;
+3. runs the installed app's self-test (`launch_mac.py --check`). The run fails unless the hub starts and reports the tag's version;
+4. runs the hub's tests on macOS. A failure there is shown in the run's summary and marks the run red at the end, but the assets are still uploaded: read it and decide;
+5. uploads `RobotHub-mac-arm64-<version>.tar.gz`, `RobotHub-mac-x86_64-<version>.tar.gz`, their `.sha256` files and `install-mac.sh` to the release. They are also kept for 14 days as the run's artifact.
+
+On a Mac with both repos side by side you can build by hand: `bash tools/build_release_mac.sh arm64` (or `x86_64`), then test with `bash dist/install-mac.sh --tar dist/RobotHub-mac-arm64-<version>.tar.gz --root /tmp/rh --apps-dir /tmp/apps --no-launch` and `/tmp/rh/app/runtime/bin/python3 /tmp/rh/app/launch_mac.py --check`.
+
+The build picks packages for the oldest macOS it can (11 first). The result is in the app as `MACOS_MIN`; the installer refuses an older Mac with a clear line.
+
 ## Publish a release
 
-1. On GitHub, open the repo's releases and make a new release. Tag it `v<version>` (for example `v1.0.1`).
-2. Upload `dist\RobotHub-<version>.zip` and `dist\install.ps1`.
-3. Mark it as the latest release. The student install line and the **Update** button use the latest release's `install.ps1`. The `robot-files` release must not be the latest.
-4. Test the install line on a second laptop.
+Windows and Mac assets go into the same release. Students on a Mac only get a release that has the Mac tarball for their Mac, so a release published without them is never offered to Macs. But the Mac install line downloads the **latest** release's `install-mac.sh`, so always add the Mac assets before you publish.
+
+1. Push the tag: `git tag v<version>` then `git push origin v<version>` (for example `v1.0.6`). The tag must be on the commit that has the new `VERSION`.
+2. On GitHub, open the repo's releases and make a new release on that tag. Upload `dist\RobotHub-<version>.zip` and `dist\install.ps1`. Press **Save draft**, not **Publish**.
+3. Open **Actions**, **Mac release**, **Run workflow**. Type the tag (`v<version>`), leave **Upload** ticked and press **Run workflow**. It takes about 15 minutes. Both jobs (arm64 and x86_64) must be green. If the Intel job cannot start because GitHub has no `macos-15-intel` machine any more, change that label in the workflow (see the comment there).
+4. Open the draft again. It now also has `RobotHub-mac-arm64-<version>.tar.gz`, `RobotHub-mac-x86_64-<version>.tar.gz`, their `.sha256` files and `install-mac.sh`.
+5. Publish it and mark it as the latest release. The student install lines and the **Update** button use the latest release's `install.ps1` and `install-mac.sh`. The `robot-files` release must not be the latest.
+6. Test the install line on a second laptop, and on a Mac if you have one.
+
+If you forgot the Mac step and already published, run **Mac release** for that tag anyway: it uploads to a published release too.
 
 ## How the in-app update check works
 
-- The hub asks GitHub for the repo's releases at most every 6 hours (also when the app starts). **Check for updates** asks GitHub at once (at most once a minute), so right after you publish, press it and a running app offers **Update**. It picks the highest version among the published releases whose tag starts with `v` and which has a `RobotHub-*.zip`. Drafts, pre-releases and `robot-files` are skipped.
+- The hub asks GitHub for the repo's releases at most every 6 hours (also when the app starts). **Check for updates** asks GitHub at once (at most once a minute), so right after you publish, press it and a running app offers **Update**. It picks the highest version among the published releases whose tag starts with `v` and which has the app for this computer: a `RobotHub-*.zip` on Windows, a `RobotHub-mac-arm64-*.tar.gz` or `RobotHub-mac-x86_64-*.tar.gz` on a Mac. Drafts, pre-releases and `robot-files` are skipped.
 - If that version is newer than the installed one, students see **New version** and **Update** at the top, and **Update** in **Settings**, **About**.
 - **Updates itself on start (1.0.3 and later):** when the installed app finds a newer release in its first 3 minutes and no robot is connected, it shows the spinning logo, "Robot Hub <version> is out", and counts down 5 s (**Update now**, **Not now**). Then it installs the update and opens again. A lab checkout never does this. Apps older than 1.0.3 need one manual **Update** to get this.
-- **Update** opens PowerShell, runs the install line, stops the hub, swaps the app folder and opens the app again. If the network is down, the check fails quietly and tries again later.
+- **Update** opens PowerShell, runs the install line, stops the hub, swaps the app folder and opens the app again. On a Mac it runs the Mac install line in the background instead (no window; its output goes to `data/logs/update.log`). If the network is down, the check fails quietly and tries again later.
 - The previous app stays as `app.old` until the next install.
 
 ## Where student data lives
@@ -109,6 +129,8 @@ Everything is under `%LOCALAPPDATA%\LabaLab\RobotHub`, per Windows user:
   - `transcripts\`: saved conversations
   - `logs\`, `cache\`, `pepper\`, `edge-profile\`
 - The Pepper and NAO kit is in `C:\LabaLab\naoqi-sdk`, or in `%PUBLIC%\LabaLab\naoqi-sdk` if `C:\` is not writable.
+
+On a Mac the same folders are under `~/Library/Application Support/LabaLab/RobotHub` (`app/`, `app.old/`, `data/`), and the icon is `~/Applications/LabaLab Robot Hub.app`. The Mac app opens the hub in the default web browser. Pepper and NAO cards say they need a Windows laptop: their kit is Windows only.
 
 The hub listens on 127.0.0.1 only (port 8099). It needs no admin rights and no firewall rule.
 
@@ -125,3 +147,11 @@ On the student's laptop, in PowerShell:
 This closes the app and removes `app\`, `app.old` and both shortcuts. The `data\` folder stays. Add `-RemoveData` to delete it too (keys, settings, transcripts, logs). The NAO kit in `C:\LabaLab` is not removed.
 
 With a saved copy of the installer: `powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall -RemoveData`.
+
+On a Mac, in Terminal:
+
+```bash
+curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh | bash -s -- --uninstall
+```
+
+This closes the app and removes `app/`, `app.old/` and `~/Applications/LabaLab Robot Hub.app`. Add ` --remove-data` at the end to delete `data/` too.

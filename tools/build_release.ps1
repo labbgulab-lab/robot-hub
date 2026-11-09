@@ -54,11 +54,12 @@ $NeverDirs = @("logs", "cache", ".venv", "venv", "__pycache__", ".pytest_cache",
 $KeyRegex = 'sk-(or-v1-)?[A-Za-z0-9_\-]{32,}|AIza[0-9A-Za-z_\-]{35}|sk_[0-9a-f]{40,}|hf_[A-Za-z0-9]{30,}'
 
 # Per repo: what a student's laptop does not need.
-$HubDrop = @("docs", "tests", "launch", ".gitignore", ".gitattributes", ".env.example", "CLAUDE.md",
+$HubDrop = @("docs", "tests", "launch", ".github", ".gitignore", ".gitattributes", ".env.example", "CLAUDE.md",
              "NEXT-SESSION.md", "PLAN.md", "run.ps1", "run.sh", "Start Robot Hub.cmd", "pepper_app\data", "data",
              "tools\build_release.ps1", "tools\install.ps1", "tools\make_icon.py",
              "tools\release-extra-requirements.txt", "tools\release-constraints.txt",
-             "tools\setup-windows.ps1", "tools\start-hub.ps1")
+             "tools\setup-windows.ps1", "tools\start-hub.ps1",
+             "tools\build_release_mac.sh", "tools\install-mac.sh", "tools\release-constraints-mac.txt")
 $ChatDrop = @("docs", "tests", ".gitignore", ".gitattributes", "show\audio", "show\backups")
 
 $hubRepo = Split-Path $PSScriptRoot -Parent

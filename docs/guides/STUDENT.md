@@ -1,6 +1,6 @@
 # Robot Hub: student guide
 
-Robot Hub finds the lab's robots on the WiFi, connects them and starts their apps. It runs on your own Windows 10 or 11 laptop. You do not need admin rights, Python or Git.
+Robot Hub finds the lab's robots on the WiFi, connects them and starts their apps. It runs on your own Windows 10 or 11 laptop, or on a Mac (Apple Silicon or Intel). You do not need admin rights, Python or Git.
 
 ## Install
 
@@ -18,6 +18,25 @@ Robot Hub finds the lab's robots on the WiFi, connects them and starts their app
 1. Open the [latest release](https://github.com/labbgulab-lab/robot-hub/releases/latest).
 2. Download `RobotHub-<version>.zip` and unzip it.
 3. Double-click `Install Robot Hub.cmd`.
+
+## Install on a Mac
+
+1. Press Cmd+Space, type `Terminal` and press Enter.
+2. Paste this line (Cmd+V) and press Enter:
+
+   ```bash
+   curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh | bash
+   ```
+
+3. Wait. It downloads the app for your Mac, puts **LabaLab Robot Hub** in `~/Applications` (and Launchpad), and opens it in your web browser. You can close Terminal.
+
+On a Mac:
+
+- Open the app from Launchpad, or from Finder, your home folder, **Applications**. Drag it to the Dock to keep it there.
+- If macOS asks to let Robot Hub find devices on local networks, press **Allow**. Without it, no robots show up. If it asks about the microphone, press **Allow** for group conversation with this laptop's microphone.
+- The app opens as a tab in your web browser, not in its own window. Closing the tab does not stop the robots. To stop everything, use **Settings**, then **About**, then **Quit** and **Press again to quit**.
+- **Pepper and NAO need a Windows laptop.** Their kit is Windows only, and on a Mac their cards say so. Reachy (Talk, group conversation, Wizard of Oz) and Furhat work.
+- Your keys, settings and logs are in `~/Library/Application Support/LabaLab/RobotHub/data`.
 
 ## First start
 
@@ -91,7 +110,7 @@ A conversation is saved as a transcript on this laptop while the **Saving transc
 When you open the app and a new version is out, it updates itself: the logo spins, it says **Please wait**, and the app opens again in about two minutes. Press **Not now** to skip it once. If you skipped it:
 
 1. When a new version is out, **New version** and an **Update** button appear at the top. Or open **Settings**, then **About**, and press **Check for updates**.
-2. Press **Update**. A PowerShell window opens, the app closes, and the new version opens. Robots stop for about a minute.
+2. Press **Update**. A PowerShell window opens, the app closes, and the new version opens. Robots stop for about a minute. On a Mac there is no window: the update runs in the background and the app opens again by itself.
 
 Your keys and settings stay. You can also run the install line again.
 
@@ -104,6 +123,12 @@ In PowerShell, paste this and press Enter:
 ```
 
 This removes the app and the shortcuts, and keeps your keys, settings and logs. To delete those too, add `-RemoveData` at the end of the line.
+
+On a Mac, paste this into Terminal (add ` --remove-data` at the end to delete your keys, settings and logs too):
+
+```bash
+curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh | bash -s -- --uninstall
+```
 
 ## When something fails
 
