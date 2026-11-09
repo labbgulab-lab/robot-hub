@@ -55,7 +55,7 @@ from hub.adapters.reachy_wireless import (DEFAULT_SSH_PASSWORD,  # noqa: E402
                                           DEFAULT_SSH_USER, ROBOT_READY_CHECK,
                                           _ssh_run)
 from hub.config import load_config  # noqa: E402
-from hub.discovery.netscan import _neighbourhood, local_networks  # noqa: E402
+from hub.discovery.netscan import _block_hosts, _neighbourhood, local_networks  # noqa: E402
 
 NEARBY_24S = 4      # the hub's discovery.netscan_nearby_24s default
 
@@ -266,7 +266,8 @@ def sweep() -> dict[str, dict]:
         if network.num_addresses > 256:
             blocks = _neighbourhood(network, own, NEARBY_24S)
         for block in blocks:
-            hosts += [str(h) for h in block.hosts() if str(h) != own]
+            hosts += [str(h) for h in _block_hosts(block, network)
+                      if str(h) != own]
     found: dict[str, dict] = {}
     with cf.ThreadPoolExecutor(64) as pool:
         open_ = [h for h, up in zip(hosts, pool.map(_port_open, hosts)) if up]

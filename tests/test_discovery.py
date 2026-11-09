@@ -176,7 +176,7 @@ def test_a_big_network_sweeps_the_laptops_own_slash_24_and_its_neighbours(config
     assert "172.19.84.41" not in targets, "never itself"
     assert "172.19.87.1" not in targets and "172.19.81.1" not in targets, "not the whole /16"
     assert "172.19.200.7" in targets, "a robot found before is asked again"
-    assert len(targets) == 5 * 254 - 1 + 1
+    assert len(targets) == 5 * 256 - 1 + 1   # .0 and .255 are hosts inside a /16
     said = " ".join(e["text"] for e in bus.recent())
     assert "sweeping 172.19.82.0/24 to 172.19.86.0/24" in said
 
@@ -192,6 +192,21 @@ def test_the_neighbourhood_stays_inside_the_network():
     blocks = [str(b) for b in _neighbourhood(net, "10.0.0.7", 4)]
     assert blocks == ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
     assert _neighbourhood(ipaddress.ip_network("10.0.0.0/24"), "10.0.0.7", 4) == []
+
+
+def test_a_24_inside_a_bigger_network_includes_its_0_and_255():
+    # Furhat got 172.19.94.255 on the /16 lab WiFi and the sweep never asked it.
+    import ipaddress
+    from hub.discovery.netscan import _block_hosts
+
+    lab = ipaddress.ip_network("172.19.0.0/16")
+    hosts = [str(h) for h in _block_hosts(ipaddress.ip_network("172.19.94.0/24"), lab)]
+    assert len(hosts) == 256
+    assert "172.19.94.0" in hosts and "172.19.94.255" in hosts
+    edge = [str(h) for h in _block_hosts(ipaddress.ip_network("172.19.255.0/24"), lab)]
+    assert "172.19.255.255" not in edge and "172.19.255.254" in edge
+    home = ipaddress.ip_network("192.168.1.0/24")
+    assert len(_block_hosts(home, home)) == 254
 
 
 def test_known_robots_are_refreshed_between_sweeps(config):

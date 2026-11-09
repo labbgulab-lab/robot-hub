@@ -173,7 +173,8 @@ class NetscanDetector:
                 self._refuse(network, hosts, near)
                 for block in near:
                     ranges.append(str(block))
-                    targets += [str(h) for h in block.hosts() if str(h) != own]
+                    targets += [str(h) for h in _block_hosts(block, network)
+                                if str(h) != own]
                 continue
             ranges.append(str(network))
             targets += [str(h) for h in network.hosts() if str(h) != own]
@@ -593,6 +594,17 @@ def _neighbourhood(network: Any, own: str, radius: int = 0) -> list[Any]:
             if block.subnet_of(network):
                 blocks.append(block)
     return blocks
+
+
+def _block_hosts(block: Any, network: Any) -> list[Any]:
+    """Every address in `block` a device can hold on `network`. A /24 cut out
+    of a bigger network has no network/broadcast address of its own, so its
+    .0 and .255 are ordinary hosts -- Furhat got 172.19.94.255 on the /16 lab
+    WiFi (2026-11-09) and block.hosts() skipped it."""
+    if block == network:
+        return list(network.hosts())
+    edges = (network.network_address, network.broadcast_address)
+    return [a for a in block if a not in edges]
 
 
 def _page_id(body: str) -> Optional[str]:

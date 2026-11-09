@@ -206,7 +206,7 @@ def test_a_big_network_is_searched_around_the_laptops_own_slash_24(monkeypatch):
     monkeypatch.setattr(B, "_port_open", lambda ip, timeout=0.8: asked.append(ip) or ip == "172.19.85.33")
     monkeypatch.setattr(B, "daemon_status", lambda ip, timeout=3.0: {"hardware_id": HW})
     assert list(B.sweep()) == ["172.19.85.33"]
-    assert len(asked) == 3 * 254 - 1 and "172.19.84.41" not in asked
+    assert len(asked) == 3 * 256 - 1 and "172.19.84.41" not in asked
     assert "172.19.86.1" not in asked
 
 
