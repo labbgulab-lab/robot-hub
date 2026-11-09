@@ -325,7 +325,9 @@ WHEELHOUSE="$STAGING/wheelhouse"
 mkdir -p "$WHEELHOUSE"
 if [ "$ARCH" = "x86_64" ]; then
     step "zeroconf as plain Python (no Intel Mac wheel on PyPI)"
-    zc_pin=$(grep -i '^zeroconf==' "$CONSTRAINTS" | head -n 1 | sed 's/^[^=]*==//')
+    # The tested version (Intel has no constraints file of its own; grep
+    # finding nothing must not stop the build under set -e -o pipefail).
+    zc_pin=$(grep -i '^zeroconf==' "$HUB_REPO/tools/release-constraints.txt" 2>/dev/null | head -n 1 | sed 's/^[^=]*==//' || true)
     zc_spec="zeroconf${zc_pin:+==$zc_pin}"
     rm -rf "$STAGING/zc-raw" "$STAGING/wheeltool"
     SKIP_CYTHON=1 "$PY" -m pip wheel --no-deps --no-binary zeroconf "$zc_spec" \
