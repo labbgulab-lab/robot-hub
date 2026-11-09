@@ -93,6 +93,7 @@
     RA.hydrateIcons(document);
     document.querySelectorAll('template').forEach(t => RA.hydrateIcons(t.content));
     RA.Group.init();
+    if (RA.GroupWoz) RA.GroupWoz.init();
     RA.Talk.init();
     RA.Woz.init();
     RA.startTips();

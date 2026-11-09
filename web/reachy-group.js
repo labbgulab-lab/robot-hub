@@ -1514,6 +1514,9 @@
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (!/^[0-5]$/.test(event.key) || !draft.seats.length) return;
+    // An open Wizard of Oz panel with a cue on this digit fires the cue instead
+    // (the lab's script puts its main cues on 1, 2, 3...).
+    if (RA.GroupWoz && RA.GroupWoz.ownsKey && RA.GroupWoz.ownsKey(event.key)) return;
     const level = Number(event.key);
     draft.seats.forEach(s => { s.interrupt_level = level; });
     markDirty(QUICK_SAVE_MS);
@@ -1554,6 +1557,7 @@
         markCurrent();
         break;
       case 'group.levels': applyLevels(m.levels); break;
+      case 'group.woz': if (RA.GroupWoz) RA.GroupWoz.onEvent(m); break;
       case 'group.people': peopleLiveText = str(m.text); renderPeopleLive(); break;
       default: break;
     }
@@ -1677,6 +1681,7 @@
     holds: (key) => S.connected && (S.connected_seats.length ? S.connected_seats.includes(key)
       : S.seats.some(s => s.key === key && s.included)),
     show() { renderSaveState(); renderError(); scrollToEnd(); },
+    choir: () => isChoir(),
     handle,          // demo mode feeds messages here
   };
 })();

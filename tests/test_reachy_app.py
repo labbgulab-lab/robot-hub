@@ -382,6 +382,15 @@ def test_main_app_serves_the_reachy_app_and_redirects_the_group_page():
     assert client.get("/api/transcripts/current").status_code == 200
 
 
+def test_group_tab_has_the_table_wizard_of_oz_panel():
+    from hub.main import app
+    client = TestClient(app)
+    page = client.get("/reachy.html").text
+    assert 'id="gwoz"' in page and "/reachy-group-woz.js?v=" in page
+    js = client.get("/reachy-group-woz.js")
+    assert js.status_code == 200 and "/api/group/woz/fire" in js.text
+
+
 # ------------------------------------------------- end to end, real sockets
 def test_proxy_and_relay_against_a_real_upstream(tmp_path):
     """A fake reachy_chat on a real port: the default httpx client and the

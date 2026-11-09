@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from .conductor import GroupManager
+from .woz import WozError
 
 log = logging.getLogger("hub.group.api")
 
@@ -74,6 +75,39 @@ def make_router(group: GroupManager) -> APIRouter:
     @router.post("/api/group/nudge")
     async def post_nudge(body: dict = Body(...)) -> JSONResponse:
         return reply(group.nudge(str(body.get("text", ""))))
+
+    # --- Wizard of Oz: the table's pre-recorded cues (woz.py) ---
+    async def woz_call(make: Any) -> JSONResponse:
+        try:
+            return reply(await make())
+        except WozError as exc:
+            return reply({"ok": False, "error": exc.message, "code": exc.code})
+        except Exception as exc:  # noqa: BLE001
+            log.exception("wizard of oz call failed")
+            return reply({"ok": False, "error": str(exc)[:200] or type(exc).__name__,
+                          "code": "NO_ROBOTS"})
+
+    @router.get("/api/group/woz")
+    async def get_woz() -> dict[str, Any]:
+        return group.woz.state()
+
+    @router.post("/api/group/woz/connect")
+    async def post_woz_connect(body: dict = Body(default={})) -> JSONResponse:
+        return await woz_call(group.woz.connect)
+
+    @router.post("/api/group/woz/fire")
+    async def post_woz_fire(body: dict = Body(...)) -> JSONResponse:
+        return await woz_call(lambda: group.woz.fire(
+            str((body or {}).get("cue_id") or ""), str((body or {}).get("target") or "auto")))
+
+    @router.post("/api/group/woz/say")
+    async def post_woz_say(body: dict = Body(...)) -> JSONResponse:
+        return await woz_call(lambda: group.woz.say(
+            str((body or {}).get("text") or ""), str((body or {}).get("target") or "auto")))
+
+    @router.post("/api/group/woz/stop")
+    async def post_woz_stop(body: dict = Body(default={})) -> JSONResponse:
+        return await woz_call(group.woz.stop)
 
     @router.websocket("/ws/group")
     async def ws_group(ws: WebSocket) -> None:

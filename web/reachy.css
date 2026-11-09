@@ -512,3 +512,18 @@ button.chk.bad{box-shadow:inset 0 0 0 1px #F2A7A7;cursor:pointer}
   .top .ttl{display:none}
 }
 #persona-msg:empty{display:none}
+
+/* Group tab: Wizard of Oz for the whole table */
+.gwoz .gw-now{font-size:14px;font-weight:600;min-width:0}
+.gwoz .gw-count{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--brand-text)}
+.gwoz .woz-stop{min-height:36px}
+.gwoz #gwoz-body:not([hidden]){display:flex}
+.gwoz .fold-btn{margin-left:0}
+.gw-board{display:flex;flex-direction:column;gap:12px;background:#171412;border-radius:12px;padding:12px;max-height:420px;overflow:auto}
+.gw-sec{display:flex;flex-direction:column;gap:8px}
+.gw-st{margin:0;font-size:12px;line-height:16px;font-weight:600;color:#A79F95;text-transform:uppercase;letter-spacing:.05em}
+.gw-board .cue{min-height:0}
+.gw-quick{display:flex;gap:8px;flex-wrap:wrap}
+.gw-quick .gw-q{background:#2A2521;color:#EDE8E1;max-width:100%}
+.gw-quick .gw-q:hover{background:#352F2A;color:#EDE8E1}
+@media (max-width:900px){.gw-board .cues{grid-template-columns:repeat(2,minmax(0,1fr))}}

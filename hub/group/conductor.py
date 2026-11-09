@@ -1113,8 +1113,13 @@ class Session:
     """
 
     def __init__(self, manager: "GroupManager", seats: list[dict], settings: dict,
-                 services: Services) -> None:
+                 services: Services, lite: bool = False) -> None:
         self.m = manager
+        # A lite session is only the robots' links (no ears, no warm-up): what
+        # the table's Wizard of Oz (woz.py) needs when no conversation is on.
+        self.lite = lite
+        # Bumped by the Wizard of Oz to cut the line a conversation is saying.
+        self.cut_seq = 0
         self.seats = seats
         self.settings = settings            # the manager's live dict
         self.services = services
@@ -1138,7 +1143,7 @@ class Session:
         self._clocks: Optional[asyncio.Task] = None
         self.eleven_down = False
         self.phrases = Phrases()
-        self.signature = self.make_signature(seats, settings)
+        self.signature = "lite" if lite else self.make_signature(seats, settings)
         self._keeper: Optional[asyncio.Task] = None
         self._warm: Optional[asyncio.Task] = None
         self._bg: set = set()
@@ -1264,6 +1269,63 @@ class Session:
         self.rewarm()
 
     # ------------------------------------------------------- the people's mic
+    async def open_lite(self) -> None:
+        """Only the robots' links, for the Wizard of Oz with no conversation
+        (2026-11-09): no internet, no keys, no voice detection. The same steps
+        as open() for the links; clocks are measured so a Choir cue still
+        starts on every robot together."""
+        from .robots import LaptopLink, RobotLink
+
+        simulate = bool(self.settings.get("simulate"))
+        if not simulate:
+            async def _stop(seat: dict) -> None:
+                adapter = self.m.hub.adapters.get(seat["key"])
+                stop = getattr(adapter, "stop_system", None)
+                if stop is None or is_laptop_seat(seat):
+                    return
+                try:
+                    await asyncio.wait_for(stop(), 40)
+                except Exception as exc:  # noqa: BLE001
+                    self.note("could not stop {}'s own app: {}".format(seat["name"], exc))
+            await asyncio.gather(*(_stop(s) for s in self.seats))
+        for seat in self.seats:
+            if simulate or is_laptop_seat(seat):
+                link = LaptopLink(seat["key"], seat["name"], listen=False)
+            else:
+                adapter = self.m.hub.adapters.get(seat["key"])
+                robot = self.m.hub.registry.get(seat["key"])
+                if adapter is None or robot is None or not robot.address:
+                    self.note("{} is not connected; it sits this one out".format(seat["name"]))
+                    continue
+                if robot.state == "RUNNING":
+                    self.m.hub.registry.set_state(seat["key"], "CONNECTED",
+                                                  "in a Wizard of Oz show")
+                user, password = adapter._ssh_creds()
+                link = RobotLink(seat["key"], seat["name"], robot.address, user, password,
+                                 listen=False, standby=False)
+            self.links[seat["key"]] = link
+
+        async def _open(key: str, link: Any) -> None:
+            try:
+                await asyncio.wait_for(link.open(), 60)
+            except Exception as exc:  # noqa: BLE001
+                self.links.pop(key, None)
+                self.note("{} could not join: {}".format(link.name, exc))
+
+        await asyncio.gather(*(_open(k, l) for k, l in list(self.links.items())))
+        self.seats = [s for s in self.seats if s["key"] in self.links]
+        if not self.seats:
+            raise RuntimeError("no robot could be reached")
+        await self.measure_clocks()
+        self._clocks = asyncio.create_task(self.keep_clocks())
+
+    async def wait_floor(self) -> None:
+        """A line waits while the Wizard of Oz is playing a cue (never long)."""
+        woz = getattr(self.m, "woz", None)
+        t0 = time.monotonic()
+        while woz is not None and woz.active() and time.monotonic() - t0 < 60.0:
+            await asyncio.sleep(0.1)
+
     async def open_people_mic(self, choice: str = "auto") -> Optional[dict]:
         """Open the people's own mic (laptop_mic.MIC_WATCH knows what is
         plugged in); None when there is none or it would not open."""
@@ -2282,10 +2344,12 @@ class Conversation:
         from .robots import GROUP_START_LEAD_S
 
         s = self.s
+        await s.wait_floor()
         link = s.speaker_link(line.seat)
         if link is None:
             return True
         key = line.seat["key"]
+        cut_seq = s.cut_seq
         # A talking group: every member plays the line (its echo counts on
         # each one's mic); a synced group starts GROUP_START_LEAD_S from now.
         voices = list(getattr(link, "keys", [key]))
@@ -2309,6 +2373,8 @@ class Conversation:
         calm = self.calm(line.seat)
 
         def cut_now() -> bool:
+            if s.cut_seq != cut_seq:
+                return True         # the Wizard of Oz fired a cue over this line
             return (cut_by_people and ears.capturing and ears.during_robot
                     and time.monotonic() - ears.started_at >= BARGE_HOLD_S
                     and ears.silence() < 0.25)
@@ -3766,6 +3832,9 @@ class GroupManager:
         # The first line of each mode, made while the robots wait (premake).
         self._premade: Optional[dict] = None
         self._premake_task: Optional[asyncio.Future] = None
+        # The table's Wizard of Oz: pre-recorded cues through the robot links.
+        from .woz import TableWoz
+        self.woz = TableWoz(self)
 
     # ------------------------------------------------------------ config
     def _load(self) -> dict:
@@ -3947,6 +4016,7 @@ class GroupManager:
         self._save()
         self.apply_live()
         self.publish_state()
+        self.woz.publish_state()        # groups and seats decide the targets
         if self.session is not None and not self.running and self._premade is not None:
             self.schedule_premake(3.0)      # the first lines follow the new settings
         return {"ok": True}
@@ -4238,7 +4308,8 @@ class GroupManager:
         self.error = None
         if self.session is not None and self.session.signature != Session.make_signature(
                 seats, settings):
-            self.note("the seats changed: reconnecting the robots")
+            self.note("opening the robots for the conversation"
+                      if self.session.lite else "the seats changed: reconnecting the robots")
             await self._disconnect()
         if self.session is None:
             self.drop_premade()
@@ -4257,6 +4328,24 @@ class GroupManager:
             self._levels_task = asyncio.create_task(self._levels())
             self._connecting = asyncio.create_task(session.open())
             self.publish_state()
+        return None
+
+    async def open_lite(self, seats: list[dict]) -> Optional[str]:
+        """Connect only the robots' links (under self._lock, no conversation
+        running), for the Wizard of Oz. None, or why it could not."""
+        self.error = None
+        live = {"simulate": self.cfg["settings"].get("simulate"), "people_mic": "robots"}
+        session = Session(self, seats, live, self.shared_services(), lite=True)
+        self.session = session
+        self._connecting = asyncio.create_task(session.open_lite())
+        self.publish_state()
+        try:
+            await self._connected()
+        except Exception as exc:  # noqa: BLE001
+            self._connecting = None
+            await self._disconnect()
+            return str(exc)
+        self.publish_state()
         return None
 
     async def _connected(self) -> None:
@@ -4290,6 +4379,7 @@ class GroupManager:
             self._connecting = None
             await self.disconnect()
             return {"ok": False, "error": self.error}
+        self.woz.prepare_soon()      # cue audio that is missing, made in the background
         self.set_status({"phase": "ready", "detail": "getting ready: checking every service"})
         await self.warm_up(full=True)
         await self.premake()
@@ -4635,6 +4725,7 @@ class GroupManager:
 
     async def _disconnect(self) -> None:
         session, self.session = self.session, None
+        self.woz.session_closed()
         if self._connecting is not None:
             self._connecting.cancel()
             self._connecting = None

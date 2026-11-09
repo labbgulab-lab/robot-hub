@@ -7,7 +7,7 @@
 <title>Reachy app</title>
 <link rel="icon" href="/photos/labalab-mark.png">
 <link rel="stylesheet" href="/fonts/fonts.css">
-<link rel="stylesheet" href="/reachy.css?v=2026-11-05a">
+<link rel="stylesheet" href="/reachy.css?v=2026-11-09a">
 </head>
 <body>
 <div class="app" id="app">
@@ -156,6 +156,29 @@
       <button class="chk" type="button" id="checks-pill" hidden aria-expanded="false" aria-controls="ready-checks" title="Every service the conversation needs (writers, voices, speech to text), checked with a real request. Click to see each one.">checks</button>
     </div>
     <div class="chips2" id="ready-checks" hidden aria-label="Service checks"></div>
+  </section>
+
+  <section class="pnl gwoz" id="gwoz" hidden aria-labelledby="gwoz-title">
+    <div class="pnlh" style="gap: 10px;">
+      <button class="fold-btn" type="button" id="gwoz-toggle" aria-expanded="false" aria-controls="gwoz-body" aria-labelledby="gwoz-title" title="Show or hide the cues."><i data-ic="chev" data-s="16"></i></button>
+      <h2 id="gwoz-title">Wizard of Oz</h2>
+      <select class="select" id="gwoz-target" aria-label="Target" style="width: 170px; height: 36px;" title="Who plays the cue. Random: a random speaker (a talking group counts as one). Choir on: all robots, as one."></select>
+      <button class="btn btn-quiet btn-sm" type="button" id="gwoz-connect" hidden title="Connect the robots to play cues without a conversation.">Connect</button>
+      <span class="sub" id="gwoz-prep" hidden>Recording cues...</span>
+      <span class="gw-now" id="gwoz-now" role="status" aria-live="polite" dir="auto"></span><span class="gw-count" id="gwoz-count"></span>
+      <span class="spacer"></span>
+      <button class="btn woz-stop btn-sm" type="button" id="gwoz-stop" title="Silences the robots at once. Safe any time."><i data-ic="stop" data-s="16"></i>STOP <span class="dk" style="border-color: rgba(255,255,255,.5); color: #FFFFFF;">Esc</span></button>
+    </div>
+    <div id="gwoz-body" hidden style="flex-direction: column; gap: 10px;">
+      <p class="sub" id="gwoz-error" hidden></p>
+      <div class="gw-board" id="gwoz-board"></div>
+      <form class="steer" id="gwoz-say-form" autocomplete="off">
+        <input class="input" id="gwoz-say-text" type="text" dir="auto" maxlength="600" aria-label="Say" placeholder="Type a line, press Enter" title="A typed line needs the internet. Recorded cues do not.">
+        <button class="btn btn-dark btn-sm" type="submit" title="Say it now (Enter works too).">Say</button>
+      </form>
+      <div class="gw-quick" id="gwoz-quick"></div>
+      <p class="sub"><span class="kbd">Space</span> fires the outlined cue · arrows move · <span class="kbd">Esc</span> stop · cue keys fire · <span class="kbd">S</span> <span class="kbd">D</span> <span class="kbd">F</span> quick lines</p>
+    </div>
   </section>
 
   <div class="g-cols">
@@ -424,9 +447,10 @@
 
 <noscript><p style="padding: 24px;">Enable JavaScript to see the Reachy app.</p></noscript>
 <script src="/reachy-core.js?v=2026-11-05a"></script>
-<script src="/reachy-group.js?v=2026-11-05a"></script>
+<script src="/reachy-group.js?v=2026-11-09a"></script>
+<script src="/reachy-group-woz.js?v=2026-11-09a"></script>
 <script src="/reachy-talk.js?v=2026-11-05a"></script>
 <script src="/reachy-woz.js?v=2026-11-05a"></script>
-<script src="/reachy.js?v=2026-11-05a"></script>
+<script src="/reachy.js?v=2026-11-09a"></script>
 </body>
 </html>
