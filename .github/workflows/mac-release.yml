@@ -20,6 +20,10 @@
 # Then one last job uploads install-mac.sh, whatever the Mac jobs did: every
 # release must carry it (the install line and the Update button fetch it from
 # the latest release). build_release.ps1 also puts it next to install.ps1.
+#
+# Test build without a tag: untick Upload and type a branch or a commit
+# (for example master) as the tag. Nothing goes to any release; the build is
+# kept as the run's artifact, and VERSION need not match.
 
 name: Mac release
 
@@ -27,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to build, for example v1.0.6 (the tag must exist; the release may be a draft)"
+        description: "Release tag to build, for example v1.0.6 (the tag must exist; the release may be a draft). With Upload off, a branch or commit also works (a test build)"
         required: true
         type: string
       upload:
@@ -100,8 +104,11 @@ jobs:
           version=$(tr -d ' \r\n' < VERSION)
           echo "VERSION=$version" >> "$GITHUB_ENV"
           if [ "v$version" != "$TAG" ]; then
-            echo "::error::VERSION says $version but the tag is $TAG"
-            exit 1
+            if [ "$UPLOAD" = "true" ]; then
+              echo "::error::VERSION says $version but the tag is $TAG"
+              exit 1
+            fi
+            echo "::notice::Test build of $TAG (VERSION $version): Upload is off, so it need not be a release tag"
           fi
           for f in tools/build_release_mac.sh tools/install-mac.sh launch/launch_mac.py; do
             if [ ! -f "$f" ]; then
