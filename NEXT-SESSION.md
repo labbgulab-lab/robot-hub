@@ -1,6 +1,6 @@
 # Next session: start here
 
-**Updated 2026-11-09, evening.** **v1.0.8 is the published latest**, for Windows and for both kinds of Mac (Apple Silicon and Intel). Nothing is on hold. Each fix that is ready ships as its own patch version (1.0.7, 1.0.8, ...); several fixes are not held back for one release.
+**Updated 2026-11-09, evening.** **v1.0.9 is the published latest**, for Windows and for both kinds of Mac (Apple Silicon and Intel). Nothing is on hold. Each fix that is ready ships as its own patch version (1.0.7, 1.0.8, ...); several fixes are not held back for one release.
 
 ## Where things are
 
@@ -11,11 +11,12 @@
 | robot-lab (`job`) | `main` | `01431d2` reachy10 | Pushed |
 
 - **Releases:**
-  - **v1.0.8**, latest: one Quit closes the whole app. Built from `92b87e4`.
+  - **v1.0.9**, latest: the in-app Update works on Windows. It never had before: the app started the installer with its own folder (`appobot-hub`) as the current directory, and Windows will not rename a folder a process is in, so the swap always failed and the window closed blank. `install.ps1` now steps out of the install folder first. Apps of every version fetch the latest installer, so their Update works too. Built from `f5e04db`.
+  - **v1.0.8**: one Quit closes the whole app. Built from `92b87e4`.
   - **v1.0.7**: robots on `.0` and `.255` addresses get their card (Furhat had `172.19.94.255` on HOT-WiFi), plus the first Intel Mac build. Built from `d155c50`.
   - Both carry all 8 assets: `RobotHub-<v>.zip`, `install.ps1`, `install-mac.sh`, `RobotHub-mac-arm64-<v>.tar.gz`, `RobotHub-mac-x86_64-<v>.tar.gz`, and the `.sha256` file of each archive.
   - **v1.0.6** stays an unpublished **draft**. It was the Apple Silicon-only Mac release, and 1.0.7 holds everything in it. It can be deleted.
-- **Tests:** 714 pass on Windows (`.venv\Scripts\python.exe -m pytest tests -q -p no:cacheprovider`).
+- **Tests:** 715 pass on Windows (`.venv\Scripts\python.exe -m pytest tests -q -p no:cacheprovider`).
 - **Worktrees:** none left; all were removed on 2026-11-09 evening.
 - **Main checkout `job/robot-hub`:** still on the old local `fix/v1.0.1` branch. It has the uncommitted `.0`/`.255` change, now redundant because it is on master, and a 4-line note in this file. Its `git pull --ff-only` fails because of them, so `Start Robot Hub.cmd` there runs old code. Move it to `master` and drop those changes. This laptop also has the **installed** app now, under `%LOCALAPPDATA%\LabaLab\RobotHub`. When both are started, the installed app holds port 8099.
 
