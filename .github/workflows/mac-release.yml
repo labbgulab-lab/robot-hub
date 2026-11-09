@@ -1,0 +1,248 @@
+# Mac student app: build, test and upload the Mac assets of a release.
+#
+# Run it by hand (Actions > Mac release > Run workflow) after the release
+# v<version> exists as a DRAFT with the Windows assets (docs/guides/LAB-STAFF.md,
+# "Publish a release"). This file must be on master for the Run workflow
+# button to show, and the tag must hold tools/build_release_mac.sh and
+# launch/launch_mac.py (1.0.6 and later). For each Mac (Apple Silicon and
+# Intel) it:
+#   1. builds dist/RobotHub-mac-<arch>-<version>.tar.gz (tools/build_release_mac.sh)
+#   2. installs it into a temp folder with dist/install-mac.sh --tar
+#   3. runs the installed app's self-test (launch_mac.py --check): the job
+#      fails unless the hub starts and reports this version
+#   4. runs the installer's own tests (tests/test_mac_ship.py) with the Mac's
+#      bash 3.2 and awk: the job fails if they fail
+#   5. runs the rest of the hub's tests on macOS, for information only: they
+#      were written on Windows, so a failure there is a warning in the run's
+#      summary, never a red job
+#   6. uploads the tarball and its .sha256 to the release (and keeps them as a
+#      workflow artifact either way)
+# Then one last job uploads install-mac.sh, whatever the Mac jobs did: every
+# release must carry it (the install line and the Update button fetch it from
+# the latest release). build_release.ps1 also puts it next to install.ps1.
+
+name: Mac release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build, for example v1.0.6 (the tag must exist; the release may be a draft)"
+        required: true
+        type: string
+      upload:
+        description: "Upload the Mac assets to that release"
+        required: false
+        default: true
+        type: boolean
+      reachy_chat_ref:
+        description: "reachy_chat branch, tag or commit to bundle (the same one the Windows build used)"
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    name: Mac ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          # Intel runner (GitHub keeps macos-15-intel until 2027).
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      TAG: ${{ inputs.tag }}
+      ARCH: ${{ matrix.arch }}
+      UPLOAD: ${{ inputs.upload }}
+      CHAT_REF: ${{ inputs.reachy_chat_ref }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check the release exists
+        if: ${{ inputs.upload }}
+        run: |
+          if ! gh release view "$TAG" --json tagName,isDraft > /dev/null; then
+            echo "::error::No release $TAG in $GH_REPO. Make it first (a draft with the Windows assets), then run this again."
+            exit 1
+          fi
+
+      - name: Check out robot-hub at the tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          path: robot-hub
+
+      - name: Check out reachy_chat
+        run: |
+          url=https://github.com/labbgulab-lab/reachy-mini-conversation-app-bgu-lab.git
+          if printf '%s' "$CHAT_REF" | grep -Eq '^[0-9a-f]{7,40}$'; then
+            # A commit: the exact one the Windows build used.
+            git clone "$url" reachy_chat
+            git -C reachy_chat checkout --detach "$CHAT_REF"
+          else
+            git clone --depth 1 --branch "$CHAT_REF" "$url" reachy_chat
+          fi
+          commit=$(git -C reachy_chat rev-parse HEAD)
+          git -C reachy_chat log -1 --format='reachy_chat %h %s'
+          echo "### Mac $ARCH: reachy_chat $CHAT_REF = $commit" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check VERSION matches the tag
+        working-directory: robot-hub
+        run: |
+          version=$(tr -d ' \r\n' < VERSION)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::VERSION says $version but the tag is $TAG"
+            exit 1
+          fi
+          for f in tools/build_release_mac.sh tools/install-mac.sh launch/launch_mac.py; do
+            if [ ! -f "$f" ]; then
+              echo "::error::$TAG has no $f: only releases from 1.0.6 on can be built for Macs"
+              exit 1
+            fi
+          done
+
+      - name: Build
+        working-directory: robot-hub
+        run: bash tools/build_release_mac.sh "$ARCH" --reachy-chat ../reachy_chat --out dist
+
+      - name: Install into a temp folder
+        working-directory: robot-hub
+        run: |
+          bash dist/install-mac.sh --tar "dist/RobotHub-mac-$ARCH-$VERSION.tar.gz" \
+            --root "$RUNNER_TEMP/rh" --apps-dir "$RUNNER_TEMP/apps" --no-launch
+          test -x "$RUNNER_TEMP/apps/LabaLab Robot Hub.app/Contents/MacOS/robothub"
+          plutil -lint "$RUNNER_TEMP/apps/LabaLab Robot Hub.app/Contents/Info.plist"
+          echo "reachy_chat in the bundle: $(cat "$RUNNER_TEMP/rh/app/reachy_chat/COMMIT")"
+
+      - name: Self-test of the installed app (launch_mac.py --check)
+        run: |
+          py="$RUNNER_TEMP/rh/app/runtime/bin/python3"
+          set +e
+          out=$("$py" "$RUNNER_TEMP/rh/app/launch_mac.py" --check)
+          rc=$?
+          set -e
+          echo "$out"
+          if [ $rc -ne 0 ]; then
+            echo "::error::launch_mac.py --check failed (exit $rc)"
+            cat "$RUNNER_TEMP/rh/data/logs/hub-stdout.log" 2>/dev/null | tail -n 80 || true
+            exit 1
+          fi
+          printf '%s' "$out" | "$py" -I -c '
+          import json, os, sys
+          text = sys.stdin.read()
+          result = json.loads(text[text.index("{"):text.rindex("}") + 1])
+          app = result.get("app") or {}
+          want = os.environ["VERSION"]
+          print("ok:", result.get("ok"), " app version:", app.get("version"), " want:", want)
+          if result.get("ok") is not True:
+              sys.exit("the self-test did not say ok true")
+          if app.get("version") != want:
+              sys.exit("the installed app reports version %r, not %r" % (app.get("version"), want))
+          '
+
+      - name: Uninstall from the temp folder
+        working-directory: robot-hub
+        run: |
+          bash dist/install-mac.sh --uninstall --remove-data \
+            --root "$RUNNER_TEMP/rh" --apps-dir "$RUNNER_TEMP/apps"
+          test ! -e "$RUNNER_TEMP/rh/app"
+          test ! -e "$RUNNER_TEMP/apps/LabaLab Robot Hub.app"
+
+      - name: Set up Python 3.12 for the tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer tests on macOS (bash 3.2, the Mac's awk)
+        working-directory: robot-hub
+        run: |
+          python -m venv "$RUNNER_TEMP/tools"
+          "$RUNNER_TEMP/tools/bin/python" -m pip install --disable-pip-version-check -q pytest pyyaml
+          "$RUNNER_TEMP/tools/bin/python" -m pytest tests/test_mac_ship.py -q -p no:cacheprovider
+
+      - name: Hub tests on macOS (information only)
+        id: pytest
+        continue-on-error: true
+        working-directory: robot-hub
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --disable-pip-version-check -q -r requirements.txt pytest
+          set -o pipefail
+          "$RUNNER_TEMP/venv/bin/python" -m pytest tests -q -p no:cacheprovider 2>&1 | tee "$RUNNER_TEMP/pytest.txt"
+
+      - name: Report the hub tests
+        if: always()
+        run: |
+          {
+            echo "### Hub tests on macOS ($ARCH): ${{ steps.pytest.outcome }}"
+            echo "Information only: the suite was written on Windows. The gate is the build, launch_mac.py --check and the installer tests."
+            echo '```'
+            tail -n 40 "$RUNNER_TEMP/pytest.txt" 2>/dev/null || echo "(no test output)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.pytest.outcome }}" = "failure" ]; then
+            echo "::warning::Some hub tests failed on macOS ($ARCH). Information only; the Mac assets are fine if the job is green."
+          fi
+
+      - name: Keep the build as a workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: robothub-mac-${{ matrix.arch }}
+          path: |
+            robot-hub/dist/RobotHub-mac-*.tar.gz
+            robot-hub/dist/*.sha256
+            robot-hub/dist/install-mac.sh
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload to the release
+        if: ${{ inputs.upload }}
+        working-directory: robot-hub
+        run: |
+          files="dist/RobotHub-mac-$ARCH-$VERSION.tar.gz dist/RobotHub-mac-$ARCH-$VERSION.tar.gz.sha256"
+          gh release upload "$TAG" $files --clobber
+          echo "Uploaded to $TAG: $files"
+
+  # install-mac.sh goes on the release even when a Mac job failed: without
+  # it, a Mac offered this release (or any older one) by the Update button,
+  # and every new Mac user's install line, gets a 404.
+  install-script:
+    name: install-mac.sh
+    needs: mac
+    if: ${{ always() && inputs.upload }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check out robot-hub at the tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          path: robot-hub
+
+      - name: Upload install-mac.sh to the release
+        working-directory: robot-hub
+        run: |
+          if ! gh release view "$TAG" --json tagName > /dev/null; then
+            echo "::error::No release $TAG in $GH_REPO."
+            exit 1
+          fi
+          if [ ! -f tools/install-mac.sh ]; then
+            echo "::error::$TAG has no tools/install-mac.sh"
+            exit 1
+          fi
+          bash -n tools/install-mac.sh
+          gh release upload "$TAG" tools/install-mac.sh --clobber
+          echo "Uploaded to $TAG: install-mac.sh"

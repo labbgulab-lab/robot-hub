@@ -4,7 +4,8 @@ The lab's app for the robots. It finds Reachy Mini, Pepper, NAO and Furhat on
 the WiFi, connects them, and lets you talk to them, run group conversations
 and drive them by hand.
 
-For Windows 10 and 11. You do not need admin rights, Python or Git.
+For Windows 10 and 11, and for Macs (Apple Silicon and Intel). You do not
+need admin rights, Python or Git. On a Mac, see [On a Mac](#on-a-mac) below.
 
 ## Install in 3 steps
 
@@ -27,6 +28,51 @@ PowerShell.
 
 That's it. You do not need to download anything from the Releases page by
 hand.
+
+## On a Mac
+
+**1. Open Terminal.**
+Press Cmd+Space, type `Terminal`, and press Enter. A window with a text
+prompt opens.
+
+**2. Copy this line, paste it into that window, and press Enter.**
+
+```bash
+curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh | bash
+```
+
+To paste in Terminal, press Cmd+V.
+
+**3. Wait about two minutes.**
+It downloads the app for your Mac (Apple Silicon or Intel), puts
+**LabaLab Robot Hub** in your Applications folder (`~/Applications`, also in
+Launchpad), and opens it in your web browser. When it says "You can close
+this window", close Terminal.
+
+- **Open:** **LabaLab Robot Hub** in Launchpad, or in Finder under your
+  home folder, **Applications**. Drag it to the Dock to keep it there.
+- **Update:** the app updates itself as it starts, like on Windows. You can
+  also paste the same line again. Your keys and settings stay.
+- **Uninstall:** paste this into Terminal. Add ` --remove-data` at the end to
+  delete your keys and settings too.
+
+  ```bash
+  curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh | bash -s -- --uninstall
+  ```
+
+- **NAO and Pepper need a Windows laptop.** Their kit is Windows only. On a
+  Mac, their cards say so. Reachy (Talk, group conversation, Wizard of Oz) and
+  Furhat work.
+
+| Problem on a Mac | What to do |
+|---|---|
+| macOS asks to let Robot Hub find devices on local networks | Press **Allow**. Without it, no robot cards appear. To change it later: **System Settings**, **Privacy & Security**, **Local Network**. |
+| macOS asks whether "python3" may accept incoming network connections | Press **Allow**. With **Deny**, no robots are found. To change it later: **System Settings**, **Network**, **Firewall**, **Options**. |
+| macOS asks about the microphone | Press **Allow** if you use group conversation with this laptop's microphone. |
+| "Robot Hub needs macOS ... or newer" | This Mac is too old for the app. Use a lab laptop. |
+| The download failed | Check the internet connection and paste the line again. |
+| "Robot Hub could not update" | The old version opens again. Try **Update** later, or paste the line again in Terminal: it shows what went wrong. |
+| The app does not open | Paste the line again. If it still fails, send the lab the file `update.log` or `hub-stdout.log` from `~/Library/Application Support/LabaLab/RobotHub/data/logs`. |
 
 ## First time in the app
 
@@ -76,10 +122,14 @@ network.
 
 **Making a release:** bump `VERSION`, commit, then on Windows run
 `powershell -ExecutionPolicy Bypass -File tools\build_release.ps1` (it builds
-from the committed HEAD of robot-hub and of reachy_chat's `multi-provider`
-branch). Make a GitHub release tagged `v<version>` and upload
-`dist\RobotHub-<version>.zip` and `dist\install.ps1`, marked as the latest
-release.
+from the committed HEAD of robot-hub and of reachy_chat's `main` branch).
+Push the tag `v<version>`, make a **draft** GitHub release on it and upload
+`dist\RobotHub-<version>.zip`, `dist\install.ps1` and `dist\install-mac.sh`.
+Then run the **Mac release** GitHub Action for that tag: it builds, tests and
+uploads the Mac assets (`RobotHub-mac-arm64-<version>.tar.gz`,
+`RobotHub-mac-x86_64-<version>.tar.gz`, `install-mac.sh`) to the draft.
+Then publish it as the latest release. Details:
+[lab staff guide](docs/guides/LAB-STAFF.md#publish-a-release).
 
 Lab members who work on the code use the git setup below instead of the
 installer.
@@ -191,7 +241,7 @@ The hub launches each robot's own program. Clone the ones you need **next to
 - **Reachy Mini**: needs `reachy_chat`:
 
   ```bash
-  git clone -b multi-provider https://github.com/labbgulab-lab/reachy-mini-conversation-app-bgu-lab.git reachy_chat
+  git clone -b main https://github.com/labbgulab-lab/reachy-mini-conversation-app-bgu-lab.git reachy_chat
   cd reachy_chat
   python -m venv .venv
   # Windows: .venv\Scripts\python -m pip install -r requirements.txt

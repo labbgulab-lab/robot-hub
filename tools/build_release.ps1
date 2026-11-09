@@ -1,12 +1,13 @@
-# Build the student app bundle: dist\RobotHub-<version>.zip (+ dist\install.ps1).
+# Build the student app bundle: dist\RobotHub-<version>.zip (+ dist\install.ps1,
+# + dist\install-mac.sh: every release carries the Mac installer too).
 #
 #   powershell -ExecutionPolicy Bypass -File tools\build_release.ps1                  # HEAD of both repos
 #   powershell -ExecutionPolicy Bypass -File tools\build_release.ps1 -FromWorkingTree # uncommitted work too
 #
 # Options: -Ref <git ref of robot-hub> (default HEAD), -ReachyChat <checkout>
 # (default ..\reachy_chat or ..\reachy-mini\reachy_chat), -ReachyChatRef
-# (default multi-provider), -Version (default: the VERSION file, else 0.0.0),
-# -OutDir (default dist), -KeepStaging.
+# (default main, the same as the Mac build), -Version (default: the VERSION
+# file, else 0.0.0), -OutDir (default dist), -KeepStaging.
 #
 # What goes in (docs/BUILD-PLAN.md, "Install layout"; STUDENT-APP-PLAN 2.4):
 #   runtime\      python-build-standalone CPython 3.12 (pinned + sha256-checked)
@@ -15,7 +16,8 @@
 #                 plus the VC++ runtime DLLs it lacks, copied app-local
 #   robot-hub\    git archive of -Ref (or the tracked + untracked-not-ignored
 #                 files with -FromWorkingTree), without tests, docs, dev scripts
-#   reachy_chat\  the same for reachy_chat (deployed onto the robots by the hub)
+#   reachy_chat\  the same for reachy_chat (deployed onto the robots by the hub),
+#                 with COMMIT: the reachy_chat commit inside (the Mac build too)
 #   launch.pyw, VERSION, install.ps1, "Install Robot Hub.cmd"
 #
 # Never in the zip: git-ignored files, keys.local.json, .env, config.toml,
@@ -26,7 +28,7 @@ param(
     [string]$Ref = "HEAD",
     [switch]$FromWorkingTree,
     [string]$ReachyChat = "",
-    [string]$ReachyChatRef = "multi-provider",
+    [string]$ReachyChatRef = "main",
     [string]$Version = "",
     [string]$OutDir = "",
     [switch]$KeepStaging
@@ -54,11 +56,12 @@ $NeverDirs = @("logs", "cache", ".venv", "venv", "__pycache__", ".pytest_cache",
 $KeyRegex = 'sk-(or-v1-)?[A-Za-z0-9_\-]{32,}|AIza[0-9A-Za-z_\-]{35}|sk_[0-9a-f]{40,}|hf_[A-Za-z0-9]{30,}'
 
 # Per repo: what a student's laptop does not need.
-$HubDrop = @("docs", "tests", "launch", ".gitignore", ".gitattributes", ".env.example", "CLAUDE.md",
+$HubDrop = @("docs", "tests", "launch", ".github", ".gitignore", ".gitattributes", ".env.example", "CLAUDE.md",
              "NEXT-SESSION.md", "PLAN.md", "run.ps1", "run.sh", "Start Robot Hub.cmd", "pepper_app\data", "data",
              "tools\build_release.ps1", "tools\install.ps1", "tools\make_icon.py",
              "tools\release-extra-requirements.txt", "tools\release-constraints.txt",
-             "tools\setup-windows.ps1", "tools\start-hub.ps1")
+             "tools\setup-windows.ps1", "tools\start-hub.ps1",
+             "tools\build_release_mac.sh", "tools\install-mac.sh", "tools\release-constraints-mac.txt")
 $ChatDrop = @("docs", "tests", ".gitignore", ".gitattributes", "show\audio", "show\backups")
 
 $hubRepo = Split-Path $PSScriptRoot -Parent
@@ -191,6 +194,12 @@ Remove-Secrets (Join-Path $app "robot-hub")
 
 Step "reachy_chat"
 Export-Repo $ReachyChat $ReachyChatRef (Join-Path $app "reachy_chat")
+# Which reachy_chat this bundle deploys onto the robots: the Mac build of the
+# same version must hold the same commit (Mac release, reachy_chat_ref).
+if ($FromWorkingTree) { $chatCommit = "$(& git -C $ReachyChat rev-parse HEAD)+working-tree" }
+else { $chatCommit = (& git -C $ReachyChat rev-parse "$ReachyChatRef^{commit}") }
+if ($LASTEXITCODE -ne 0 -or -not $chatCommit) { throw "git rev-parse $ReachyChatRef failed in $ReachyChat" }
+Set-Content -LiteralPath (Join-Path $app "reachy_chat\COMMIT") -Value $chatCommit -Encoding ASCII
 Remove-Listed (Join-Path $app "reachy_chat") $ChatDrop
 Remove-Secrets (Join-Path $app "reachy_chat")
 
@@ -288,6 +297,12 @@ if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
 $entries = Get-ChildItem -LiteralPath $app -Force | ForEach-Object { $_.Name }
 Invoke-Native "tar -a" { & $tar -a -c -f $zip -C $app @entries }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install.ps1") -Destination (Join-Path $OutDir "install.ps1") -Force
+# The Mac installer goes on every release too, so the Mac install line and
+# Update never meet a latest release without it. Copied as bytes: it must
+# keep LF line ends (.gitattributes keeps *.sh LF in the checkout).
+$macInstaller = Join-Path $PSScriptRoot "install-mac.sh"
+if ([IO.File]::ReadAllBytes($macInstaller) -contains 13) { throw "tools\install-mac.sh has CR line ends; a Mac cannot run it" }
+Copy-Item -LiteralPath $macInstaller -Destination (Join-Path $OutDir "install-mac.sh") -Force
 $zipHash = (Get-Sha256 $zip)
 Set-Content -LiteralPath "$zip.sha256" -Value "$zipHash  RobotHub-$Version.zip" -Encoding ASCII
 
@@ -298,5 +313,7 @@ Step "done"
 Write-Host ""
 Write-Host "  $zip"
 Write-Host "  zip $zipMb MB, installed $appMb MB, sha256 $zipHash"
+Write-Host "  reachy_chat $chatCommit"
 Write-Host "  $(Join-Path $OutDir 'install.ps1')"
-Write-Host "  Release: tag v$Version, assets RobotHub-$Version.zip and install.ps1."
+Write-Host "  $(Join-Path $OutDir 'install-mac.sh')"
+Write-Host "  Release: tag v$Version, assets RobotHub-$Version.zip, install.ps1 and install-mac.sh."
