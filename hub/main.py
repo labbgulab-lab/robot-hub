@@ -122,8 +122,12 @@ _quit_started = False
 # robot that never answers, a stuck thread): this many seconds after the
 # server was told to stop, the process exits anyway, with code 0, so the
 # launcher still sees a quit and closes the window. Only main() arms it;
-# tests that call quit_app() never do.
-QUIT_HARD_EXIT_S = 15.0
+# tests that call quit_app() never do. It is longer than the shutdown's own
+# time limits added up (about 40 s: the group session's links, then putting
+# every Reachy to sleep), so it never cuts that work short. Once the robots
+# are done, QUIT_AFTER_ROBOTS_S is all the rest may take.
+QUIT_HARD_EXIT_S = 60.0
+QUIT_AFTER_ROBOTS_S = 5.0
 _hard_exit_on_quit = False
 
 
@@ -203,6 +207,10 @@ async def lifespan(app: FastAPI):
         logging.getLogger("hub.group").removeHandler(forwarder)
         await group.shutdown()
         await hub.stop()
+        if _quit_started and _hard_exit_on_quit:
+            # The robots are asleep; what is left (threads still waiting on a
+            # robot that left the WiFi) must not keep the process alive.
+            _exit_soon(QUIT_AFTER_ROBOTS_S)
 
 
 app = FastAPI(title="Robot Hub", lifespan=lifespan)

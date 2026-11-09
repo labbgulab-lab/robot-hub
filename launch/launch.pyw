@@ -244,6 +244,14 @@ def hub_answers() -> bool:
         return False         # something else holds the port
 
 
+def _is_installer(proc) -> bool:
+    """True for the Update's installer (powershell running install.ps1)."""
+    try:
+        return any("install.ps1" in part for part in proc.cmdline())
+    except Exception:  # noqa: BLE001 - gone, or no access
+        return False
+
+
 class HubProcess:
     """The hub this launcher started (None when it was already running)."""
 
@@ -332,7 +340,10 @@ class HubProcess:
         try:
             import psutil
             parent = psutil.Process(pid)
-            procs = parent.children(recursive=True) + [parent]
+            # Not the installer an Update started (a child of the hub): it
+            # stops this hub on purpose and must live on to swap the app.
+            procs = [p for p in parent.children(recursive=True)
+                     if not _is_installer(p)] + [parent]
             for p in procs:
                 try:
                     p.kill()
@@ -683,7 +694,10 @@ def wait_and_close(hub: HubProcess) -> None:
         return
     code = hub.proc.wait()
     log.info("the hub ended (exit code %s)", code)
-    if code in CLEAN_EXITS:
+    if code in CLEAN_EXITS and port_open():
+        # Ours found another hub on the port and left: that one still runs.
+        log.info("another hub holds the port; leaving its window open")
+    elif code in CLEAN_EXITS:
         close_windows()
 
 

@@ -179,6 +179,9 @@
       S.live = 'live';
       ui.stopped = false;
       ui.quitting = false;
+      // A reason from an earlier stop must not label the next one (a Quit
+      // from Settings sets its own just before the hub hears it).
+      ui.stopReason = '';
       clearTimeout(stopTimer);
       stopTimer = null;
       refreshApp();

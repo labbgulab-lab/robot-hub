@@ -142,6 +142,31 @@ def test_without_the_tray_a_quit_still_closes_the_window(monkeypatch):
     hub.proc = subprocess.Popen([sys.executable, "-c", "raise SystemExit(3)"])
     mod.wait_and_close(hub)
     assert closed == [1]
+    # Ours left because another hub holds the port: that one keeps its window.
+    monkeypatch.setattr(mod, "port_open", lambda: True)
+    hub.proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    mod.wait_and_close(hub)
+    assert closed == [1]
+
+
+def test_the_tree_kill_spares_the_update_installer():
+    """An Update's installer is a child of the hub; killing a hub that will
+    not quit must not kill the installer that is replacing it."""
+    mod = load_launcher()
+
+    class P:
+        def __init__(self, cmd):
+            self.cmd = cmd
+
+        def cmdline(self):
+            if self.cmd is None:
+                raise RuntimeError("gone")
+            return self.cmd
+
+    url = "https://github.com/x/y/releases/latest/download/install.ps1"
+    assert mod._is_installer(P(["powershell", "-NoProfile", "-Command", f"irm {url} | iex"]))
+    assert not mod._is_installer(P(["python.exe", "-m", "pepper_app"]))
+    assert not mod._is_installer(P(None))
 
 
 def test_nothing_on_the_port_is_not_a_hub(monkeypatch):

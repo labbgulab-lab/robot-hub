@@ -222,6 +222,11 @@ RA.CONNECTED = ['CONNECTED', 'RUNNING', 'DEGRADED'];
 
 function hubMessage(m) {
   switch (m.type) {
+    case 'quitting':
+      // Quit (Settings, the tray or the installer): the hub is about to end.
+      // This window closes with it when the link drops (RA.startHub).
+      RA.hub.quitting = true;
+      break;
     case 'snapshot':
       RA.hub.robots = new Map(RA.arr(m.robots).map(r => [r.key, r]));
       RA.hub.settings = RA.obj(m.settings);
@@ -262,16 +267,25 @@ function renderLive() {
   const on = RA.hub.live && (RA.route.tab !== 'group' || RA.hub.groupLive !== false);
   live.classList.toggle('off', !on);
   live.querySelector('.spin').hidden = on;
-  RA.$('ws-text').textContent = on ? 'Live' : (RA.hub.everLive ? 'Reconnecting' : 'Connecting');
+  RA.$('ws-text').textContent = on ? 'Live'
+    : RA.hub.quitting ? 'Stopped' : (RA.hub.everLive ? 'Reconnecting' : 'Connecting');
   live.title = on ? 'Robot Hub is running' : 'Waiting for Robot Hub. The screen may be out of date.';
 }
 
 RA.renderLive = renderLive;
 RA.startHub = () => {
   RA.socket('/ws', {
-    open() { RA.hub.live = true; RA.hub.everLive = true; renderLive(); loadTranscripts(); },
+    open() { RA.hub.live = true; RA.hub.everLive = true; RA.hub.quitting = false; renderLive(); loadTranscripts(); },
     message: hubMessage,
-    close() { RA.hub.live = false; renderLive(); },
+    close() {
+      RA.hub.live = false;
+      renderLive();
+      // After a Quit the hub is gone: close this window too (the hub page
+      // opened it, so the browser allows it). The launcher only closes the
+      // windows titled Robot Hub. If the browser refuses, the link keeps
+      // trying, and a hub started again brings the page back.
+      if (RA.hub.quitting) setTimeout(() => { try { window.close(); } catch (err) { /* not ours */ } }, 300);
+    },
   });
   renderLive();
   loadTranscripts();

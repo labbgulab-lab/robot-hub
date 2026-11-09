@@ -594,6 +594,28 @@ def test_page_quits_with_one_press():
     assert "case 'quitting':" in js
     onclose = js[js.index("ws.onclose"):js.index("ws.onerror")]
     assert "ui.quitting" in onclose and "window.close()" in onclose
+    onopen = js[js.index("ws.onopen"):js.index("ws.onmessage")]
+    assert "ui.stopReason = ''" in onopen       # an old reason never labels a new stop
+
+
+def test_reachy_window_closes_on_quit_too():
+    """The Reachy app opens in its own window, which the launcher does not
+    close (its title is not Robot Hub): it hears Quit and closes itself."""
+    js = (REPO_ROOT / "web" / "reachy-core.js").read_text(encoding="utf-8")
+    msg = js[js.index("function hubMessage"):]
+    assert "case 'quitting':" in msg[:msg.index("case 'snapshot':") + 400]
+    start = js[js.index("RA.startHub = "):]
+    start = start[:start.index("/* ---")]
+    assert "RA.hub.quitting" in start and "window.close()" in start
+    assert "RA.hub.quitting = false" in start      # a hub started again resets it
+
+
+def test_the_robots_get_their_time_before_the_hard_exit():
+    """The safety net is longer than the shutdown's own limits (group links,
+    then every Reachy to sleep); after the robots, only a short one."""
+    from hub import main
+    assert main.QUIT_HARD_EXIT_S >= 45
+    assert main.QUIT_AFTER_ROBOTS_S <= 10
 
 
 def test_log_report_zips_todays_logs_without_keys(tmp_path):
