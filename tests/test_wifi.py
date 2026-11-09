@@ -32,6 +32,7 @@ MAC = {"SPAirPortDataType": [{"spairport_airport_interfaces": [
 def _on(monkeypatch, platform, text):
     monkeypatch.setattr(wifi.sys, "platform", platform)
     monkeypatch.setattr(wifi, "_run", lambda argv, timeout=8.0: text)
+    wifi._mac_cache.clear()         # each case is a fresh system_profiler answer
 
 
 def test_an_iphone_hotspot_on_5ghz_is_flagged(monkeypatch):

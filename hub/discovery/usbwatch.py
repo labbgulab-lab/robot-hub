@@ -14,8 +14,9 @@ sighting disappears well before the daemon does.
 Both backends are optional. On Windows this is WMI, which needs
 `pythoncom.CoInitialize()` on the thread that uses it -- so the poll runs in a
 worker thread on a 2 s cadence rather than as an async WMI event watcher,
-which cannot be driven from the event loop. On Linux it is pyudev. With
-neither installed the detector says so once, in one sentence, and stops. It
+which cannot be driven from the event loop. On Linux it is pyudev. A Mac has
+neither, so there it says so once and stops. With neither installed the
+detector says so once, in one sentence, and stops. It
 never raises: a robot you do not own costs nothing (13.6).
 """
 
@@ -105,6 +106,12 @@ class UsbWatchDetector:
                     "pip install wmi pywin32".format(exc))
                 return None
             return _wmi_devices
+
+        if sys.platform == "darwin":
+            # Neither WMI nor udev on a Mac: one short line, not a pip hint.
+            self.bus.emit_log("info", "Reachy Mini Lite (USB) is not found on a Mac; "
+                                      "the wireless Reachy works here.")
+            return None
 
         try:
             import pyudev  # noqa: F401

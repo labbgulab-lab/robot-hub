@@ -90,6 +90,10 @@ def _importable(module: str, why: str) -> dict[str, Any]:
 
 
 def _wmi() -> dict[str, Any]:
+    if sys.platform == "darwin":
+        return _check("import wmi", True,
+                      "macOS: the USB Reachy Mini Lite is not detected here; "
+                      "the wireless Reachy and Furhat are unaffected")
     if sys.platform != "win32":
         return _check(
             "import wmi", True,
@@ -110,6 +114,10 @@ def _wmi() -> dict[str, Any]:
 def _naoqi(config: Config) -> list[dict[str, Any]]:
     if not config.robot("naoqi").enabled:
         return [_check("NAO: Python 2.7", True, "naoqi is disabled in config")]
+    from .platforms import NAOQI_WINDOWS_ONLY, naoqi_supported
+    if not naoqi_supported():
+        return [_check("NAO: Python 2.7", True, NAOQI_WINDOWS_ONLY,
+                       "use a Windows laptop for NAO and Pepper")]
 
     python2 = config.path("naoqi", "python2")
     remedy2 = ("install Python 2.7 and set robots.naoqi.settings.python2 to its "

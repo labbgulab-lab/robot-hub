@@ -73,6 +73,8 @@ _PAGE_IDS = (
 
 _MAC_RE = re.compile(
     r"^\s*(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9A-Fa-f]{2}(?:[-:][0-9A-Fa-f]{2}){5})\s")
+_BSD_ARP_RE = re.compile(
+    r"\((\d{1,3}(?:\.\d{1,3}){3})\) at ([0-9A-Fa-f]{1,2}(?::[0-9A-Fa-f]{1,2}){5})\b")
 
 
 class NetscanDetector:
@@ -435,10 +437,7 @@ class NetscanDetector:
                 except Exception as exc:  # noqa: BLE001
                     log.debug("ICMP echo to %s failed: %s", ip, exc)
                     return False
-        if sys.platform == "win32":
-            args = ["ping", "-n", "1", "-w", "700", ip]
-        else:
-            args = ["ping", "-c", "1", "-W", "1", ip]
+        args = ping_argv(ip)
         async with self._sem:
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -471,6 +470,18 @@ class NetscanDetector:
 
 
 # ---------------------------------------------------------------- helpers
+def ping_argv(ip: str, plat: Optional[str] = None) -> list[str]:
+    """One echo with a short wait, in each system's own flags. macOS (BSD
+    ping): -W is the wait for the reply in milliseconds and -t the whole
+    run's limit in seconds; Linux: -W is seconds."""
+    plat = plat or sys.platform
+    if plat == "win32":
+        return ["ping", "-n", "1", "-w", "700", ip]
+    if plat == "darwin":
+        return ["ping", "-c", "1", "-W", "700", "-t", "1", ip]
+    return ["ping", "-c", "1", "-W", "1", ip]
+
+
 def local_networks() -> list[tuple[Any, str]]:
     """Every IPv4 network this laptop is actually on, as (network, own ip).
 
@@ -518,19 +529,36 @@ async def arp_table() -> dict[str, str]:
     """ip -> mac, lowercase colon form. Empty dict when it cannot be read."""
     if sys.platform.startswith("linux"):
         return await asyncio.to_thread(_arp_from_proc)
+    # macOS: -n, or arp looks up a host name for every entry (seconds each).
+    args = ("arp", "-an") if sys.platform == "darwin" else ("arp", "-a")
     try:
         proc = await asyncio.create_subprocess_exec(
-            "arp", "-a", stdout=asyncio.subprocess.PIPE,
+            *args, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL, **no_window())
         out, _ = await asyncio.wait_for(proc.communicate(), 5.0)
     except Exception as exc:  # noqa: BLE001
         log.debug("could not read the ARP table: %s", exc)
         return {}
+    return parse_arp(out.decode("utf-8", "replace"))
+
+
+def parse_arp(text: str) -> dict[str, str]:
+    """`arp -a` output -> {ip: mac}, the MAC as "00:1a:2b:3c:4d:5e" whichever
+    system printed it. Windows: "  172.20.10.5   00-1a-2b-3c-4d-5e   dynamic".
+    macOS (BSD): "? (172.20.10.5) at 0:1a:2b:3c:4d:5e on en0 ifscope
+    [ethernet]", with leading zeros dropped; an unanswered entry reads
+    "(incomplete)" and is skipped. The Furhat card is keyed on this MAC, so
+    both forms must come out the same."""
     table: dict[str, str] = {}
-    for line in out.decode("utf-8", "replace").splitlines():
+    for line in (text or "").splitlines():
         match = _MAC_RE.match(line)
         if match:
             table[match.group(1)] = match.group(2).replace("-", ":").lower()
+            continue
+        match = _BSD_ARP_RE.search(line)
+        if match:
+            table[match.group(1)] = ":".join(
+                part.zfill(2) for part in match.group(2).lower().split(":"))
     return table
 
 

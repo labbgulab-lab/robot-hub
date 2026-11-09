@@ -27,6 +27,7 @@ from . import inuse
 from . import keycheck
 from .keys import KEYS_FILE, PROVIDERS, ROBOT_SLOTS, KeyError_, KeyStore, normalize_provider
 from . import network as hub_network
+from . import platforms
 from . import settings as hub_settings
 from . import registry as R
 from .registry import BATTERY_LOW_PCT, Registry
@@ -144,7 +145,7 @@ class Hub:
                 type_id=type_id,
                 name=cfg.display_name or DISPLAY_NAMES[type_id],
                 state=R.ABSENT,
-                detail="waiting for this robot to appear",
+                detail=self._waiting_detail(type_id),
                 needs_setup=self._needs_setup(type_id),
                 staff_only_actions=list(STAFF_ONLY_ACTIONS.get(type_id, [])),
             )
@@ -157,9 +158,22 @@ class Hub:
             return False
 
     def _needs_setup(self, type_id: str) -> Optional[str]:
+        if type_id in platforms.NAOQI_TYPES and not platforms.naoqi_supported():
+            return None         # nothing to set up on a Mac (hub/platforms.py)
         if type_id in ("naoqi", "pepper") and not self._kit_ready:
             return "naoqi_kit"
         return None
+
+    @staticmethod
+    def _waiting_detail(type_id: str) -> str:
+        """A dim card's line. On a Mac, NAO's and Pepper's say why they will
+        not run here; a NAOqi robot seen anyway gets a disabled card with
+        the same sentence (NaoqiAdapter)."""
+        if type_id in platforms.NAOQI_TYPES and not platforms.naoqi_supported():
+            return platforms.NAOQI_WINDOWS_ONLY
+        if type_id == "reachy_lite" and not platforms.usb_lite_supported():
+            return platforms.LITE_WINDOWS_ONLY
+        return "waiting for this robot to appear"
 
     def _setup_changed(self) -> None:
         """A setup item moved: re-label the placeholder cards and, when the
@@ -175,7 +189,7 @@ class Hub:
             self.registry.upsert(ph, needs_setup=self._needs_setup(type_id))
             if ready and r.state == R.DISABLED and r.needs_setup is None:
                 self.registry.upsert(ph, address=None, disabled_reason=None)
-                self.registry.set_state(ph, R.ABSENT, "waiting for this robot to appear")
+                self.registry.set_state(ph, R.ABSENT, self._waiting_detail(type_id))
         if changed and self._manager is not None:
             hook = getattr(self._manager, "naoqi_setup_changed", None)
             if hook is not None:
@@ -495,7 +509,7 @@ class Hub:
             ph = self.registry.get("placeholder:{}".format(type_id))
             if ph is not None and ph.state == R.DISABLED:
                 self.registry.upsert(ph.key, address=None)
-                self.registry.set_state(ph.key, R.ABSENT, "waiting for this robot to appear")
+                self.registry.set_state(ph.key, R.ABSENT, self._waiting_detail(type_id))
             return
         # A robot the hub is actively running is not "lost" on one silent
         # detector cycle -- it goes amber and the probe loop decides (5.2).

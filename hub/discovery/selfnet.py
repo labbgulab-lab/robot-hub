@@ -128,13 +128,16 @@ class SelfNetDetector:
 # hooks outbound connects (the Check Point adapter answers port 80 for hosts
 # that do not exist, 2.9), and a sweep of a VPN or virtual-switch subnet only
 # wastes the round (STUDENT-APP-PLAN 7).
+# macOS names its interfaces by kind: utunN and ipsecN carry VPNs, bridgeN is
+# Internet Sharing or a virtual machine, awdl/llw are AirDrop's own links.
 VPN_NAMES = re.compile(
     r"(?i)vpn|tailscale|wireguard|wintun|openvpn|tap-windows|\btun\d*\b|check ?point|"
     r"anyconnect|cisco|fortinet|forticlient|globalprotect|pangp|zerotier|nordlynx|"
-    r"proton|mullvad|zscaler|juniper|pulse secure|sonicwall")
+    r"proton|mullvad|zscaler|juniper|pulse secure|sonicwall|\butun\d*\b|\bipsec\d*\b")
 VIRTUAL_NAMES = re.compile(
     r"(?i)vethernet|hyper-v|virtualbox|vbox|vmware|vmnet|docker|\bwsl\b|loopback|"
-    r"bluetooth|npcap|default switch")
+    r"bluetooth|npcap|default switch|\bbridge\d+\b|vmenet|\bawdl\d*\b|\bllw\d*\b|"
+    r"\banpi\d*\b")
 
 
 def is_vpn_adapter(name: str) -> bool:

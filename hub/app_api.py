@@ -42,6 +42,7 @@ log = logging.getLogger("hub.app")
 RELEASE_REPO = os.environ.get("ROBOT_HUB_RELEASE_REPO", "labbgulab-lab/robot-hub")
 RELEASES_API = "https://api.github.com/repos/{}/releases?per_page=30"
 INSTALL_URL = "https://github.com/{}/releases/latest/download/install.ps1"
+MAC_INSTALL_URL = "https://github.com/{}/releases/latest/download/install-mac.sh"
 UPDATE_EVERY_S = 6 * 3600.0
 # "Check for updates" asks GitHub at once, but not more than once a minute:
 # GitHub allows 60 unauthenticated API calls an hour per address, and a lab
@@ -57,10 +58,12 @@ STARTED_AT = time.time()
 
 
 def is_installed(root: Path = REPO_ROOT) -> bool:
-    """The student app (app/robot-hub next to app/runtime and app/launch.pyw),
-    not a lab checkout run from git: only the installed app updates itself."""
+    """The student app (app/robot-hub next to app/runtime and the launcher:
+    app/launch.pyw on Windows, app/launch_mac.py on a Mac), not a lab
+    checkout run from git: only the installed app updates itself."""
     app = root.parent
-    return (app / "launch.pyw").is_file() and (app / "runtime").is_dir()
+    launcher = (app / "launch.pyw").is_file() or (app / "launch_mac.py").is_file()
+    return launcher and (app / "runtime").is_dir()
 
 
 def read_version(root: Path = REPO_ROOT) -> str:
@@ -88,8 +91,10 @@ def error(message: str, code: str, status: int = 400, **extra: Any) -> JSONRespo
 Fetch = Callable[[], Awaitable[dict[str, Any]]]
 
 
-async def github_latest(repo: str = RELEASE_REPO) -> dict[str, Any]:
-    """The newest release: {"tag": ..., "url": ...}; {} when there is none."""
+async def github_latest(repo: str = RELEASE_REPO, plat: Optional[str] = None,
+                        machine: Optional[str] = None) -> dict[str, Any]:
+    """The newest release for this laptop: {"tag": ..., "url": ...}; {} when
+    there is none."""
     import httpx
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         resp = await client.get(RELEASES_API.format(repo),
@@ -97,19 +102,37 @@ async def github_latest(repo: str = RELEASE_REPO) -> dict[str, Any]:
     if resp.status_code == 404:
         return {}
     resp.raise_for_status()
-    return pick_app_release(resp.json())
+    return pick_app_release(resp.json(), plat, machine)
 
 
-def pick_app_release(releases: Any) -> dict[str, Any]:
-    """The newest published app release: a `v<number>` tag that carries a
-    RobotHub-*.zip. Other releases in the repo (the robot-files library) and
-    drafts or pre-releases are skipped."""
+def app_asset_matches(name: str, plat: Optional[str] = None,
+                      machine: Optional[str] = None) -> bool:
+    """Whether a release asset is the student app for this laptop.
+
+    Windows (and anything not a Mac): RobotHub-<version>.zip. A Mac:
+    RobotHub-mac-<arch>-<version>.tar.gz for its own processor, arm64 or
+    x86_64 (platform.machine())."""
+    from .platforms import mac_arch
+    name = str(name or "")
+    if (plat or sys.platform) == "darwin":
+        prefix = "RobotHub-mac-{}-".format(mac_arch(machine))
+        return name.startswith(prefix) and name.endswith(".tar.gz")
+    return name.startswith("RobotHub-") and name.endswith(".zip")
+
+
+def pick_app_release(releases: Any, plat: Optional[str] = None,
+                     machine: Optional[str] = None) -> dict[str, Any]:
+    """The newest published app release for this laptop: a `v<number>` tag
+    that carries this platform's app (app_asset_matches). Other releases in
+    the repo (the robot-files library), drafts and pre-releases are skipped,
+    and so is a release that has only the other platform's app: the Windows
+    zip is published first, and a Mac must not be offered it."""
     best: dict[str, Any] = {}
     for rel in releases if isinstance(releases, list) else []:
         tag = str(rel.get("tag_name") or "")
         if rel.get("draft") or rel.get("prerelease") or not re.match(r"^v\d", tag):
             continue
-        if not any(str(a.get("name", "")).startswith("RobotHub-") and str(a.get("name", "")).endswith(".zip")
+        if not any(app_asset_matches(a.get("name", ""), plat, machine)
                    for a in rel.get("assets") or []):
             continue
         if not best or version_tuple(tag) > version_tuple(best["tag"]):
@@ -187,27 +210,60 @@ class UpdateChecker:
             await asyncio.sleep(min(self.interval_s, 600.0))
 
 
-def start_installer(repo: str = RELEASE_REPO) -> None:
-    """Run the one-line installer in its own process, which outlives the hub.
-    It stops this hub (/api/quit), swaps the app folder and opens the app.
-    A visible window, so the student sees the download progress."""
+def installer_argv(repo: str = RELEASE_REPO, plat: Optional[str] = None) -> list[str]:
+    """The one-line installer, as the student would type it."""
+    if (plat or sys.platform) == "darwin":
+        return ["/bin/bash", "-c",
+                "curl -fsSL {} | bash".format(MAC_INSTALL_URL.format(repo))]
     command = "irm {} | iex".format(INSTALL_URL.format(repo))
-    argv = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]
+    return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]
+
+
+def start_installer(repo: str = RELEASE_REPO, *, popen: Callable[..., Any] = subprocess.Popen,
+                    log_dir: Optional[Path] = None) -> None:
+    """Run the one-line installer in its own process, which outlives the hub.
+    It stops this hub (/api/app/quit), swaps the app folder and opens the app.
+
+    Windows: a visible PowerShell window, so the student sees the download
+    progress. Mac: bash in its own session, its output in
+    <data>/logs/update.log (install-mac.sh reopens the app when done)."""
+    argv = installer_argv(repo)
     kwargs: dict[str, Any] = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
                               "stderr": subprocess.DEVNULL, "close_fds": True}
     if sys.platform == "win32":
         kwargs["creationflags"] = (subprocess.CREATE_NEW_PROCESS_GROUP
                                    | subprocess.CREATE_NEW_CONSOLE)
-    else:
-        kwargs["start_new_session"] = True
-    subprocess.Popen(argv, **kwargs)
+        popen(argv, **kwargs)
+        return
+    kwargs["start_new_session"] = True
+    out = None
+    if sys.platform == "darwin":
+        from .config import data_dir
+        folder = Path(log_dir) if log_dir is not None else data_dir() / "logs"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            out = open(folder / "update.log", "ab")
+            out.write("\n---- {} updating Robot Hub\n".format(
+                time.strftime("%Y-%m-%d %H:%M:%S")).encode())
+            out.flush()
+            kwargs["stdout"] = out
+            kwargs["stderr"] = subprocess.STDOUT
+        except OSError as exc:
+            log.info("no update log: %s", exc)
+    try:
+        popen(argv, **kwargs)
+    finally:
+        if out is not None:
+            out.close()             # the child has its own copy
 
 
-def open_folder(path: Path) -> None:
+def open_folder(path: Path, popen: Callable[..., Any] = subprocess.Popen) -> None:
     if sys.platform == "win32":
         os.startfile(str(path))  # type: ignore[attr-defined]
-    else:  # pragma: no cover
-        subprocess.Popen(["xdg-open" if sys.platform != "darwin" else "open", str(path)])
+    elif sys.platform == "darwin":
+        popen(["open", str(path)])
+    else:
+        popen(["xdg-open", str(path)])
 
 
 # ------------------------------------------------------------ single instance

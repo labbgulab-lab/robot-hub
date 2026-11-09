@@ -280,9 +280,28 @@ class SetupManager:
 
     # ------------------------------------------------------------- views
     def items(self) -> list[dict[str, Any]]:
-        return [self.item(i) for i in ITEMS]
+        """The steps this laptop can take. On a Mac the Windows-only ones
+        (the NAOqi kit, the USB Reachy's app) are left out: the page then
+        shows no "Set up" row for them (hub/platforms.py)."""
+        return [self.item(i) for i in ITEMS if self._supported(i)]
+
+    @staticmethod
+    def _supported(item_id: str) -> bool:
+        from .platforms import naoqi_supported, usb_lite_supported
+        if item_id == "naoqi_kit":
+            return naoqi_supported()
+        if item_id == "reachy_lite_app":
+            return usb_lite_supported()
+        return True
+
+    def _windows_only(self, item_id: str) -> dict[str, Any]:
+        from .platforms import LITE_WINDOWS_ONLY, NAOQI_WINDOWS_ONLY
+        detail = NAOQI_WINDOWS_ONLY if item_id == "naoqi_kit" else LITE_WINDOWS_ONLY
+        return self._base(item_id, "failed", detail, "WINDOWS_ONLY")
 
     def item(self, item_id: str) -> dict[str, Any]:
+        if item_id in ITEMS and not self._supported(item_id):
+            return self._windows_only(item_id)
         if item_id == "naoqi_kit":
             return self._kit_item()
         if item_id == "reachy_lite_app":
@@ -303,6 +322,8 @@ class SetupManager:
         return naoqi_kit_paths(self.config, self.kit_dirs)
 
     def kit_ready(self) -> bool:
+        if not self._supported("naoqi_kit"):
+            return False
         return self._kit_item()["state"] == "ok"
 
     def _kit_item(self) -> dict[str, Any]:
@@ -397,6 +418,8 @@ class SetupManager:
         self.item(item_id)          # raises UNKNOWN_SETUP
         if action not in ACTIONS:
             raise SetupError("There is no action called {}.".format(action), "BAD_ACTION")
+        if not self._supported(item_id):
+            raise SetupError(self._windows_only(item_id)["detail"], "WINDOWS_ONLY")
         if action == "check":
             return await self.check(item_id)
         if action == "open":

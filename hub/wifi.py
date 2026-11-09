@@ -18,6 +18,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from typing import Any, Optional
 
 # iOS Personal Hotspot always hands out 172.20.10.0/28 (measured; also why
@@ -30,10 +31,10 @@ PHONE_WORDS = re.compile(r"(?i)iphone|android|galaxy|pixel|xiaomi|redmi|oneplus|
 
 
 def _run(argv: list[str], timeout: float = 8.0) -> str:
+    from .winproc import no_window
     try:
-        out = subprocess.run(argv, capture_output=True, timeout=timeout,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    except (OSError, subprocess.SubprocessError):
+        out = subprocess.run(argv, capture_output=True, timeout=timeout, **no_window())
+    except (OSError, subprocess.SubprocessError, ValueError):
         return ""
     for enc in ("utf-8", "mbcs" if sys.platform == "win32" else "latin-1"):
         try:
@@ -95,21 +96,68 @@ def _windows() -> dict[str, Any]:
     return info
 
 
-def _macos() -> dict[str, Any]:
+# system_profiler takes a few seconds and the page asks every 10 s, so its
+# answer (band and channel) is kept this long; the name is read every time.
+MAC_PROFILE_S = 60.0
+_mac_cache: dict[str, Any] = {}
+
+
+def _mac_device() -> str:
+    """The Wi-Fi interface (en0 on most Macs, en1 on some older ones)."""
+    if _mac_cache.get("device"):
+        return _mac_cache["device"]
+    text = _run(["networksetup", "-listallhardwareports"])
+    device = "en0"
+    port = ""
+    for line in text.splitlines():
+        name, _, value = line.partition(":")
+        name, value = name.strip().lower(), value.strip()
+        if name == "hardware port":
+            port = value.lower()
+        elif name == "device" and port in ("wi-fi", "airport") and value:
+            device = value
+            break
+    _mac_cache["device"] = device
+    return device
+
+
+def _mac_name(value: Optional[str]) -> Optional[str]:
+    value = (value or "").strip()
+    if not value or "redacted" in value.lower() or value.lower() in ("<hidden>", "none"):
+        return None
+    return value
+
+
+def _mac_ssid(device: str) -> Optional[str]:
+    """The WiFi's name, the quick ways. macOS 14+ hides it from apps without
+    Location access (an empty or "<redacted>" answer): then None."""
+    text = _run(["networksetup", "-getairportnetwork", device], timeout=5)
+    m = re.search(r"Current (?:Wi-Fi|AirPort) Network:\s*(.+)", text)
+    if m and _mac_name(m.group(1)):
+        return _mac_name(m.group(1))
+    text = _run(["ipconfig", "getsummary", device], timeout=5)
+    m = re.search(r"(?m)^\s*SSID\s*:\s*(.+?)\s*$", text)
+    return _mac_name(m.group(1)) if m else None
+
+
+def _mac_profile() -> dict[str, Any]:
+    """system_profiler's view of the current WiFi: {ssid, band, channel}."""
+    now = time.monotonic()
+    cached = _mac_cache.get("profile")
+    if cached is not None and now - cached[0] < MAC_PROFILE_S:
+        return dict(cached[1])
     info: dict[str, Any] = {"ssid": None, "band": None, "channel": None}
     text = _run(["system_profiler", "SPAirPortDataType", "-json"], timeout=15)
     try:
         data = json.loads(text) if text else {}
     except ValueError:
         data = {}
-    for item in data.get("SPAirPortDataType", []):
+    for item in data.get("SPAirPortDataType", []) if isinstance(data, dict) else []:
         for iface in item.get("spairport_airport_interfaces", []):
             current = iface.get("spairport_current_network_information")
             if not current:
                 continue
-            ssid = current.get("_name")
-            # macOS 14+ redacts the name for apps without Location access.
-            info["ssid"] = None if not ssid or "redacted" in ssid.lower() else ssid
+            info["ssid"] = _mac_name(current.get("_name"))
             channel = str(current.get("spairport_network_channel", ""))  # "6 (2GHz, 20MHz)"
             m = re.match(r"\s*(\d+)", channel)
             if m:
@@ -122,7 +170,23 @@ def _macos() -> dict[str, Any]:
                 info["band"] = "6 GHz"
             else:
                 info["band"] = _band_from_channel(info["channel"])
-            return info
+            break
+        if info["band"] or info["ssid"]:
+            break
+    _mac_cache["profile"] = (now, dict(info))
+    return info
+
+
+def _macos() -> dict[str, Any]:
+    """The WiFi on a Mac: the name from networksetup or ipconfig (fast), the
+    band from system_profiler (slow, cached). A name macOS will not tell
+    (Location off) is "unknown", never a warning."""
+    device = _mac_device()
+    profile = _mac_profile()
+    ssid = _mac_ssid(device) or profile.get("ssid")
+    info: dict[str, Any] = {"ssid": ssid, "band": profile.get("band"),
+                            "channel": profile.get("channel")}
+    info["unknown"] = not ssid
     return info
 
 

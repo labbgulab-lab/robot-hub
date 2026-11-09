@@ -54,7 +54,8 @@ def open_wifi_settings() -> None:
     if sys.platform == "win32":
         os.startfile("ms-settings:network-wifi")  # type: ignore[attr-defined]
     elif sys.platform == "darwin":  # pragma: no cover
-        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.network"])
+        # macOS 13+ opens the Wi-Fi pane; an older one opens System Preferences.
+        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.wifi-settings-extension"])
     else:  # pragma: no cover
         subprocess.Popen(["xdg-open", "settings://network"])
 

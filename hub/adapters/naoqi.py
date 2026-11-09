@@ -291,6 +291,11 @@ class NaoqiAdapter(RobotAdapter):
     def __init__(self, found: Found, config: Any, *,
                  port_allocator: Any = None, port: Optional[int] = None) -> None:
         super().__init__(found, config)
+        from ..platforms import NAOQI_WINDOWS_ONLY, naoqi_supported
+        if not naoqi_supported():
+            # The NAOqi kit is a Windows build: on a Mac the card says so
+            # (no "Set up" that cannot work).
+            raise AdapterUnavailable(NAOQI_WINDOWS_ONLY)
         # Pepper shares NAO's Python 2.7 and SDK: its own section only needs
         # what differs, the rest falls back to [robots.naoqi].
         self.settings = {**config.robot("naoqi").settings,
