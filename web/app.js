@@ -259,6 +259,10 @@
       case 'settings': S.settings = Object.assign({}, S.settings, strip(msg)); break;
       case 'keys': S.keys = Object.assign({ slots: {} }, strip(msg)); break;
       case 'setup': onSetup(msg.item); break;
+      case 'update_failed': // a Mac update that stopped while the hub still runs
+        ui.updating = false;
+        toast(sentence(msg.message || "The update didn't finish."), 'err');
+        break;
       case 'heartbeat': return;
       default: return;
     }
@@ -640,7 +644,12 @@
     const liteRow = (setupItem('reachy_lite_app') || {}).state;
     const hasRow = t => (['naoqi', 'pepper'].includes(t) && kitRow && kitRow !== 'ok') || (t === 'reachy_lite' && liteRow && liteRow !== 'ok');
     const waiting = sortRobots([...S.robots.values()].filter(r => r.key.startsWith('placeholder:') && r.state === 'ABSENT' && !r.needs_setup && !hasRow(r.type_id)))
-      .map(r => `<span class="ghost" title="Waiting for this robot to appear"><img src="${typeImg(r.type_id)}" alt="">${esc(r.name)}</span>`);
+      .map(r => {
+        // On a Mac, NAO, Pepper and the USB Lite say why they will not show up.
+        const winOnly = /windows laptop only/i.test(r.detail || '');
+        const why = winOnly ? r.detail : 'Waiting for this robot to appear';
+        return `<span class="ghost${winOnly ? ' ghost-off' : ''}" title="${esc(why)}"><img src="${typeImg(r.type_id)}" alt="">${esc(r.name)}${winOnly ? '<small class="ghost-note">Windows only</small>' : ''}</span>`;
+      });
     const rows = [];
     const kit = setupItem('naoqi_kit');
     if (kit && kit.state !== 'ok') rows.push(setupRow('naoqi_kit', ['pepper', 'naoqi'], 'Pepper and NAO'));
@@ -1954,7 +1963,7 @@
     ui.reportBusy = true; render();
     const res = await api('POST', '/api/log/report');
     ui.reportBusy = false;
-    if (res.ok) toast(`Report saved: ${String(res.path || '').split(/[\\/]/).pop()} in Downloads`);
+    if (res.ok) toast(`Report saved: ${String(res.path || '').split(/[\\/]/).pop()} in ${res.where || 'Downloads'}`);
     else toast(sentence(res.error || "Couldn't save the report."), 'err');
     render();
   }

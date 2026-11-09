@@ -61,6 +61,9 @@ CLOSE_GRACE = 5             # then the hub closes its port; this long to exit af
 # Quit cannot reach (launch.pyw has the same line).
 HUB_ARGS = ("-c", "from hub.main import main; main()")
 OPEN = "/usr/bin/open"
+# --check and --quit run in a terminal or CI, never behind the icon: no alert
+# that waits for a click nobody will make.
+HEADLESS = False
 
 
 # ----------------------------------------------------------------- layout
@@ -151,9 +154,10 @@ URL = f"http://127.0.0.1:{PORT}/"
 
 # ----------------------------------------------------------------- messages
 def message(text: str) -> None:
-    """A dialog the student sees (the app icon has no terminal), and stderr."""
+    """A dialog the student sees (the app icon has no terminal), and stderr.
+    Only stderr when headless (--check, --quit, CI, a terminal)."""
     print(text, file=sys.stderr)
-    if sys.platform != "darwin":
+    if sys.platform != "darwin" or not wants_dialog():
         return
     script = 'display alert "{}" message "{}" as critical'.format(
         APP_NAME, text.replace("\\", "\\\\").replace('"', '\\"'))
@@ -163,6 +167,18 @@ def message(text: str) -> None:
                        stderr=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError):
         pass
+
+
+def wants_dialog(env: Optional[dict[str, str]] = None) -> bool:
+    """True only behind the app icon: not --check/--quit, not CI, and not
+    a terminal (which shows stderr anyway)."""
+    env = os.environ if env is None else env
+    if HEADLESS or env.get("CI"):
+        return False
+    try:
+        return not (sys.stdin is not None and sys.stdin.isatty())
+    except (OSError, ValueError):
+        return True
 
 
 # ----------------------------------------------------------------- hub
@@ -207,6 +223,9 @@ def hub_env(base: Optional[dict[str, str]] = None) -> dict[str, str]:
     env["PYTHONNOUSERSITE"] = "1"
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
+    # Its output is a file, not a console: no line per request in it
+    # (hub/main.py STDOUT_IS_LOG).
+    env["ROBOT_HUB_WINDOWLESS"] = "1"
     if DATA_DIR:
         env["ROBOT_HUB_DATA"] = str(DATA_DIR)
     return env
@@ -365,17 +384,19 @@ class _StartLock:
 def start_and_open(hub: Optional[HubProcess] = None) -> int:
     """The icon: the hub running (started if needed), then the page open."""
     hub = hub or HubProcess()
+    ok = True
     with _StartLock(LOG_DIR / "launcher.lock"):
         if not hub_answers():
             try:
                 hub.start()
+                ok = hub.wait_ready()
             except OSError as exc:
                 log.error("could not start the hub: %s", exc)
-                message(f"Robot Hub could not start.\n\nDetails: {LOG_DIR / 'hub-stdout.log'}")
-                return 1
-            if not hub.wait_ready():
-                message(f"Robot Hub could not start.\n\nDetails: {LOG_DIR / 'hub-stdout.log'}")
-                return 1
+                ok = False
+    if not ok:
+        # After the lock: a second click must not wait for this alert.
+        message(f"Robot Hub could not start.\n\nDetails: {LOG_DIR / 'hub-stdout.log'}")
+        return 1
     open_browser()
     return 0
 
@@ -387,7 +408,13 @@ def self_check(hub: Optional[HubProcess] = None) -> int:
     started = False
     t0 = time.monotonic()
     if not hub_answers():
-        hub.start()
+        try:
+            hub.start()
+        except OSError as exc:
+            print(json.dumps({"ok": False, "started_by_check": False,
+                              "error": "could not start the hub: {}".format(exc),
+                              "app": None, "log": str(LOG_DIR / "hub-stdout.log")}))
+            return 1
         started = True
         if not hub.wait_ready():
             print(json.dumps({"ok": False, "started_by_check": True,
@@ -429,8 +456,10 @@ def quit_hub() -> int:
 
 
 def main(argv: list[str]) -> int:
+    global HEADLESS
     check = "--check" in argv
-    _setup_logging(to_console=check or "--quit" in argv)
+    HEADLESS = check or "--quit" in argv
+    _setup_logging(to_console=HEADLESS)
     log.info("launcher %s (installed=%s, data=%s, url=%s)", __file__, INSTALLED, DATA_DIR, URL)
     if "--quit" in argv:
         return quit_hub()

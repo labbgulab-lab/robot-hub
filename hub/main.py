@@ -24,7 +24,7 @@ from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import applog
+from . import applog, platforms
 from .app_api import UpdateChecker, make_router as make_app_router, port_owner, read_version
 from .config import REPO_ROOT, load_config
 from .core import Hub
@@ -40,7 +40,11 @@ from .discovery.selfnet import local_ipv4
 # Under pythonw (the student app has no console) sys.stdout and sys.stderr are
 # None, and anything that writes to them -- uvicorn's console logging, a stray
 # print -- raises. They go nowhere instead; the log file has everything.
-WINDOWLESS = sys.stdout is None or sys.stderr is None
+# The Mac launcher has no console either, but hands the hub a file for its
+# output (data/logs/hub-stdout.log, for a crash at start) and sets
+# ROBOT_HUB_WINDOWLESS=1: no per-request lines there, only warnings.
+STDOUT_IS_LOG = os.environ.get("ROBOT_HUB_WINDOWLESS") == "1"
+WINDOWLESS = sys.stdout is None or sys.stderr is None or STDOUT_IS_LOG
 if sys.stdout is None:
     sys.stdout = open(os.devnull, "w", encoding="utf-8")
 if sys.stderr is None:
@@ -54,7 +58,7 @@ logging.basicConfig(
 log = logging.getLogger("hub.main")
 
 
-def _log_to_file() -> None:
+def _log_to_file() -> bool:
     """The Activity panel lives in memory, so a failed Launch on someone
     else's laptop left no trace once the window closed (2026-10-06). The same
     lines go to <data>/logs/hub-<date>.log (git-ignored), a new file each day,
@@ -62,10 +66,20 @@ def _log_to_file() -> None:
     so tests never write to it."""
     handler = applog.install_file_log(config.data_dir / "logs")
     if handler is None:
-        return
+        return False
     log.info("hub %s starting; this log is %s", read_version(), handler.baseFilename)
     log.info("data folder %s; config from %s", config.data_dir,
              ", ".join(config.layers) or "built-in defaults")
+    return True
+
+
+def _quiet_console(root: logging.Logger = logging.getLogger()) -> None:
+    """Console handlers (here a file the launcher reads only after a failed
+    start) keep warnings and errors; the dated log file keeps everything.
+    Otherwise hub-stdout.log grows by every line of a long lab session."""
+    for handler in root.handlers:
+        if type(handler) is logging.StreamHandler:
+            handler.setLevel(logging.WARNING)
 
 # The Furhat detector fingerprints every host on the subnet every few seconds,
 # so httpx at INFO would drown the hub's own log in one line per probe. The
@@ -379,7 +393,12 @@ def main() -> None:
         log.error(message)
         print(message, file=sys.stderr)
         raise SystemExit(0 if owner == "hub" else 2)
-    _log_to_file()
+    if _log_to_file() and STDOUT_IS_LOG:
+        _quiet_console()
+    if platforms.is_mac():
+        # Started from Finder or the Dock, the hub has launchd's 256 open
+        # files; the ping sweep alone runs 64 pings with their pipes.
+        platforms.raise_open_file_limit()
     os.environ["HUB_WARM_AT_START"] = "1"   # lifespan: watch the mic, keep services open
     updates.enable()                         # background check, at most every 6 h
     if WINDOWLESS:

@@ -3,12 +3,13 @@
     GET  /api/app                    {version, data_dir, first_run, update}
                                      (?refresh=1: ask GitHub now, at most once a minute)
     POST /api/app/quit               stop the robots' programs, then the hub
-    POST /api/app/update             start the installer, then quit
+    POST /api/app/update             start the installer, then quit (on a Mac
+                                     the installer quits the hub itself)
     GET  /api/settings               the settings (hub/settings.py)
     PUT  /api/settings               any subset -> the full object
     PUT  /api/settings/password/{robot}   {password}  (Furhat)
     POST /api/transcripts/open       opens <data>/transcripts
-    POST /api/log/report             zips today's logs into Downloads -> {path}
+    POST /api/log/report             zips today's logs into Downloads -> {path, where}
 
 Also `/api/version` and `/api/quit`, the names STUDENT-APP-PLAN 2.3 used.
 
@@ -43,6 +44,14 @@ RELEASE_REPO = os.environ.get("ROBOT_HUB_RELEASE_REPO", "labbgulab-lab/robot-hub
 RELEASES_API = "https://api.github.com/repos/{}/releases?per_page=30"
 INSTALL_URL = "https://github.com/{}/releases/latest/download/install.ps1"
 MAC_INSTALL_URL = "https://github.com/{}/releases/latest/download/install-mac.sh"
+# The Mac update takes install-mac.sh from the release the check picked, not
+# from /latest/: the Windows zip is published first, and /latest/ can be a
+# release whose Mac files are not there (yet).
+MAC_INSTALLER = "install-mac.sh"
+MAC_TAG_INSTALL_URL = "https://github.com/{}/releases/download/{}/install-mac.sh"
+MAC_APP = '"$HOME/Applications/LabaLab Robot Hub.app"'
+# How long the hub watches a Mac update before it stops listening for its end.
+MAC_UPDATE_WATCH_S = 900.0
 UPDATE_EVERY_S = 6 * 3600.0
 # "Check for updates" asks GitHub at once, but not more than once a minute:
 # GitHub allows 60 unauthenticated API calls an hour per address, and a lab
@@ -126,14 +135,18 @@ def pick_app_release(releases: Any, plat: Optional[str] = None,
     that carries this platform's app (app_asset_matches). Other releases in
     the repo (the robot-files library), drafts and pre-releases are skipped,
     and so is a release that has only the other platform's app: the Windows
-    zip is published first, and a Mac must not be offered it."""
+    zip is published first, and a Mac must not be offered it. A Mac also
+    needs install-mac.sh in the same release: the update runs that one."""
+    mac = (plat or sys.platform) == "darwin"
     best: dict[str, Any] = {}
     for rel in releases if isinstance(releases, list) else []:
         tag = str(rel.get("tag_name") or "")
         if rel.get("draft") or rel.get("prerelease") or not re.match(r"^v\d", tag):
             continue
-        if not any(app_asset_matches(a.get("name", ""), plat, machine)
-                   for a in rel.get("assets") or []):
+        names = [str(a.get("name", "")) for a in rel.get("assets") or []]
+        if not any(app_asset_matches(n, plat, machine) for n in names):
+            continue
+        if mac and MAC_INSTALLER not in names:
             continue
         if not best or version_tuple(tag) > version_tuple(best["tag"]):
             best = {"tag": tag, "url": str(rel.get("html_url") or "")}
@@ -210,34 +223,61 @@ class UpdateChecker:
             await asyncio.sleep(min(self.interval_s, 600.0))
 
 
-def installer_argv(repo: str = RELEASE_REPO, plat: Optional[str] = None) -> list[str]:
-    """The one-line installer, as the student would type it."""
+def mac_installer_url(repo: str = RELEASE_REPO, tag: Optional[str] = None) -> str:
+    """install-mac.sh of the release the update check picked (`tag`), or of
+    /latest/ when there is no pick."""
+    if tag and re.match(r"^v\d[\w.\-]*$", tag):
+        return MAC_TAG_INSTALL_URL.format(repo, tag)
+    return MAC_INSTALL_URL.format(repo)
+
+
+def mac_installer_script(url: str) -> str:
+    """What bash runs for a Mac update. The installer is downloaded first,
+    not piped: with `curl | bash` a failed download is an empty script that
+    "succeeds", and the student is left with no app. Any failure reopens the
+    app (the old one, or the hub that is still running)."""
+    return ('f=$(mktemp "${{TMPDIR:-/tmp}}/robothub-install.XXXXXX") || exit 1\n'
+            'if curl -fsSL --retry 2 "{url}" -o "$f" && /bin/bash "$f"; then rc=0; else rc=$?; fi\n'
+            'rm -f "$f"\n'
+            'if [ "$rc" -ne 0 ]; then\n'
+            '  echo "the update failed (exit code $rc); opening Robot Hub again"\n'
+            '  /usr/bin/open {app}\n'
+            'fi\n'
+            'exit "$rc"\n').format(url=url, app=MAC_APP)
+
+
+def installer_argv(repo: str = RELEASE_REPO, plat: Optional[str] = None,
+                   tag: Optional[str] = None) -> list[str]:
+    """The installer. Windows: the one-line installer, as the student would
+    type it. Mac: install-mac.sh of the release `tag` (mac_installer_script)."""
     if (plat or sys.platform) == "darwin":
-        return ["/bin/bash", "-c",
-                "curl -fsSL {} | bash".format(MAC_INSTALL_URL.format(repo))]
+        return ["/bin/bash", "-c", mac_installer_script(mac_installer_url(repo, tag))]
     command = "irm {} | iex".format(INSTALL_URL.format(repo))
     return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]
 
 
-def start_installer(repo: str = RELEASE_REPO, *, popen: Callable[..., Any] = subprocess.Popen,
-                    log_dir: Optional[Path] = None) -> None:
-    """Run the one-line installer in its own process, which outlives the hub.
-    It stops this hub (/api/app/quit), swaps the app folder and opens the app.
+def start_installer(repo: str = RELEASE_REPO, *, tag: Optional[str] = None,
+                    popen: Callable[..., Any] = subprocess.Popen,
+                    log_dir: Optional[Path] = None) -> Any:
+    """Run the installer in its own process, which outlives the hub. It stops
+    this hub (/api/app/quit), swaps the app folder and opens the app.
+    Returns the process.
 
     Windows: a visible PowerShell window, so the student sees the download
-    progress. Mac: bash in its own session, its output in
+    progress. Mac: bash in its own session, started in the home folder (the
+    app folder it runs from is about to be renamed), its output in
     <data>/logs/update.log (install-mac.sh reopens the app when done)."""
-    argv = installer_argv(repo)
+    argv = installer_argv(repo, tag=tag)
     kwargs: dict[str, Any] = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
                               "stderr": subprocess.DEVNULL, "close_fds": True}
     if sys.platform == "win32":
         kwargs["creationflags"] = (subprocess.CREATE_NEW_PROCESS_GROUP
                                    | subprocess.CREATE_NEW_CONSOLE)
-        popen(argv, **kwargs)
-        return
+        return popen(argv, **kwargs)
     kwargs["start_new_session"] = True
     out = None
     if sys.platform == "darwin":
+        kwargs["cwd"] = str(Path.home())
         from .config import data_dir
         folder = Path(log_dir) if log_dir is not None else data_dir() / "logs"
         try:
@@ -251,10 +291,29 @@ def start_installer(repo: str = RELEASE_REPO, *, popen: Callable[..., Any] = sub
         except OSError as exc:
             log.info("no update log: %s", exc)
     try:
-        popen(argv, **kwargs)
+        return popen(argv, **kwargs)
     finally:
         if out is not None:
             out.close()             # the child has its own copy
+
+
+async def watch_mac_update(proc: Any, on_failed: Callable[[int], None],
+                           timeout_s: float = MAC_UPDATE_WATCH_S,
+                           every_s: float = 1.0) -> None:
+    """A Mac update that ends while this hub still runs has failed (a
+    working install-mac.sh quits the hub first): tell the page. The installer
+    has reopened the app by then."""
+    poll = getattr(proc, "poll", None)
+    if poll is None:
+        return
+    end = time.monotonic() + timeout_s
+    while time.monotonic() < end:
+        code = poll()
+        if code is not None:
+            if code != 0:
+                on_failed(int(code))
+            return
+        await asyncio.sleep(every_s)
 
 
 def open_folder(path: Path, popen: Callable[..., Any] = subprocess.Popen) -> None:
@@ -293,12 +352,17 @@ def port_owner(host: str, port: int, timeout_s: float = 1.5) -> Optional[str]:
 # ------------------------------------------------------------------ router
 def make_router(hub: Any, *, checker: UpdateChecker,
                 quit_app: Callable[[], Awaitable[None]],
-                installer: Callable[[], None] = start_installer,
+                installer: Optional[Callable[[], Any]] = None,
                 opener: Callable[[Path], None] = open_folder,
                 downloads: Callable[[], Path] = applog.downloads_dir) -> APIRouter:
     router = APIRouter()
     store = hub.settings
     installed = is_installed()
+    if installer is None:
+        def installer() -> Any:
+            # On a Mac, install-mac.sh of the release the check offered.
+            return start_installer(tag=checker.latest if checker.available else None)
+    watchers: set[asyncio.Task] = set()
 
     def data_dir() -> Path:
         return Path(hub.config.data_dir)
@@ -336,12 +400,26 @@ def make_router(hub: Any, *, checker: UpdateChecker,
     @router.post("/api/app/update")
     async def post_update() -> JSONResponse:
         try:
-            installer()
+            proc = installer()
         except Exception as exc:  # noqa: BLE001
             hub.bus.emit_log("error", "could not start the update: {}".format(exc))
             return error("Could not start the update.", "UPDATE_FAILED", 500)
         hub.bus.emit_log("info", "updating Robot Hub; it will open again when done")
-        return JSONResponse({"ok": True}, background=BackgroundTask(quit_app))
+        if sys.platform != "darwin":
+            return JSONResponse({"ok": True}, background=BackgroundTask(quit_app))
+        # A Mac: install-mac.sh quits the hub once it has the new version. If
+        # it fails before that, the hub keeps running and says so.
+
+        def failed(code: int) -> None:
+            text = ("The update did not finish (code {}). Robot Hub is still the "
+                    "old version. Details: {}".format(code, data_dir() / "logs" / "update.log"))
+            hub.bus.emit_log("error", text)
+            hub.bus.publish({"type": "update_failed", "message": text})
+
+        task = asyncio.get_running_loop().create_task(watch_mac_update(proc, failed))
+        watchers.add(task)
+        task.add_done_callback(watchers.discard)
+        return JSONResponse({"ok": True})
 
     # -- settings -------------------------------------------------------
     @router.get("/api/settings")
@@ -403,14 +481,31 @@ def make_router(hub: Any, *, checker: UpdateChecker,
         activity = "\n".join("{}  {:5} {}".format(
             time.strftime("%H:%M:%S", time.localtime(e.get("ts", 0))),
             e.get("level", ""), e.get("text", "")) for e in hub.bus.recent(500))
+        extra = {"about.txt": about, "activity.txt": activity}
+        where = "Downloads"
         try:
             path = await asyncio.to_thread(
-                applog.make_report, data_dir() / "logs", downloads(), secrets,
-                {"about.txt": about, "activity.txt": activity})
+                applog.make_report, data_dir() / "logs", downloads(), secrets, extra)
+        except PermissionError as exc:
+            # A Mac asks before an app writes to Downloads; a student who said
+            # no gets the report in the data folder, shown in Finder.
+            log.info("Downloads refused (%s); the report goes to the data folder", exc)
+            folder = data_dir() / "reports"
+            where = "the Robot Hub data folder"
+            try:
+                path = await asyncio.to_thread(
+                    applog.make_report, data_dir() / "logs", folder, secrets, extra)
+            except Exception as exc2:  # noqa: BLE001
+                hub.bus.emit_log("error", "could not save the logs: {}".format(exc2))
+                return error("Could not save the logs.", "REPORT_FAILED", 500)
+            try:
+                await asyncio.to_thread(opener, folder)
+            except Exception as exc2:  # noqa: BLE001
+                log.info("could not show the reports folder: %s", exc2)
         except Exception as exc:  # noqa: BLE001
             hub.bus.emit_log("error", "could not save the logs: {}".format(exc))
             return error("Could not save the logs.", "REPORT_FAILED", 500)
-        hub.bus.emit_log("ok", "logs saved to {}".format(path.name))
-        return {"ok": True, "path": str(path)}
+        hub.bus.emit_log("ok", "logs saved to {}".format(path))
+        return {"ok": True, "path": str(path), "where": where}
 
     return router

@@ -15,9 +15,15 @@ set it to "darwin" on a Windows laptop.
 
 from __future__ import annotations
 
+import logging
 import platform
 import sys
-from typing import Optional
+from typing import Any, Optional
+
+log = logging.getLogger("hub.platforms")
+
+# Open files a Mac hub asks for (launchd starts apps with 256).
+OPEN_FILES = 4096
 
 NAOQI_TYPES = ("naoqi", "pepper")
 NAOQI_WINDOWS_ONLY = "Pepper and NAO work from a Windows laptop only."
@@ -39,6 +45,26 @@ def naoqi_supported() -> bool:
 
 def usb_lite_supported() -> bool:
     return not is_mac()
+
+
+def raise_open_file_limit(want: int = OPEN_FILES, resource_mod: Any = None) -> Optional[int]:
+    """Lift the soft limit on open files to `want` (never above the hard
+    limit, never lower than it is). Returns the new soft limit, or None when
+    this system has no such limit (Windows)."""
+    try:
+        resource = resource_mod
+        if resource is None:
+            import resource  # type: ignore[no-redef]  # POSIX only
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        cap = want if hard == resource.RLIM_INFINITY else min(want, hard)
+        if soft != resource.RLIM_INFINITY and soft < cap:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (cap, hard))
+            log.info("open files: %s -> %s", soft, cap)
+            return cap
+        return soft
+    except (ImportError, OSError, ValueError) as exc:
+        log.info("open files limit unchanged: %s", exc)
+        return None
 
 
 def mac_arch(machine: Optional[str] = None) -> str:

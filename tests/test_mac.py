@@ -46,6 +46,58 @@ def mac(tmp_path, monkeypatch):
 
 
 # ================================================================ platforms
+class _Resource:
+    RLIMIT_NOFILE = 8
+    RLIM_INFINITY = -1
+
+    def __init__(self, soft, hard):
+        self.limits = (soft, hard)
+
+    def getrlimit(self, which):
+        assert which == self.RLIMIT_NOFILE
+        return self.limits
+
+    def setrlimit(self, which, limits):
+        self.limits = limits
+
+
+def test_the_open_files_limit_is_lifted_for_launchd_apps():
+    res = _Resource(256, -1)
+    assert platforms.raise_open_file_limit(resource_mod=res) == 4096
+    assert res.limits == (4096, -1)
+    res = _Resource(256, 1024)                       # never above the hard limit
+    assert platforms.raise_open_file_limit(resource_mod=res) == 1024
+    assert res.limits == (1024, 1024)
+    res = _Resource(10240, -1)                       # never lowered
+    assert platforms.raise_open_file_limit(resource_mod=res) == 10240
+    assert res.limits == (10240, -1)
+
+
+def test_the_open_files_limit_is_a_no_op_without_resource():
+    class Broken(_Resource):
+        def setrlimit(self, which, limits):
+            raise ValueError("not allowed")
+    assert platforms.raise_open_file_limit(resource_mod=Broken(256, -1)) is None
+    if sys.platform == "win32":
+        assert platforms.raise_open_file_limit() is None
+
+
+def test_a_log_file_console_keeps_only_warnings():
+    import logging
+    from hub import main as hub_main
+    root = logging.Logger("t")
+    console = logging.StreamHandler()
+    to_file = logging.FileHandler(os.devnull)
+    root.addHandler(console)
+    root.addHandler(to_file)
+    try:
+        hub_main._quiet_console(root)
+        assert console.level == logging.WARNING
+        assert to_file.level == logging.NOTSET
+    finally:
+        to_file.close()
+
+
 def test_mac_arch_names_follow_the_release_tarballs():
     assert platforms.mac_arch("arm64") == "arm64"
     assert platforms.mac_arch("aarch64") == "arm64"
@@ -71,6 +123,9 @@ RELEASES = [
     # The Windows-first step: v1.2.0 is out for Windows, the Mac builds are not.
     {"tag_name": "v1.2.0", "assets": [{"name": "RobotHub-1.2.0.zip"}, {"name": "install.ps1"}],
      "html_url": "v120"},
+    # Halfway: the arm64 tarball is up, install-mac.sh is not (yet).
+    {"tag_name": "v1.1.5", "html_url": "v115", "assets": [
+        {"name": "RobotHub-1.1.5.zip"}, {"name": "RobotHub-mac-arm64-1.1.5.tar.gz"}]},
     {"tag_name": "v1.1.0", "html_url": "v110", "assets": [
         {"name": "RobotHub-1.1.0.zip"}, {"name": "install.ps1"},
         {"name": "RobotHub-mac-arm64-1.1.0.tar.gz"}, {"name": "install-mac.sh"}]},
@@ -86,6 +141,14 @@ RELEASES = [
 
 def test_windows_takes_the_newest_zip_as_before():
     assert app_api.pick_app_release(RELEASES, "win32") == {"tag": "v1.2.0", "url": "v120"}
+    windows_only = [r for r in RELEASES if r["tag_name"] != "v1.2.0"]
+    assert app_api.pick_app_release(windows_only, "win32") == {"tag": "v1.1.5", "url": "v115"}
+
+
+def test_a_mac_needs_install_mac_sh_in_the_same_release():
+    # v1.1.5 has the arm64 tarball but no install-mac.sh: the update would
+    # have nothing to run, so v1.1.0 is offered.
+    assert app_api.pick_app_release(RELEASES, "darwin", "arm64")["tag"] == "v1.1.0"
 
 
 def test_a_mac_is_only_offered_a_release_with_its_own_tarball():
@@ -152,13 +215,17 @@ class FakePopen:
         return self
 
 
-def test_the_mac_installer_is_curl_into_bash_in_its_own_session(mac, tmp_path):
+def test_the_mac_installer_runs_in_its_own_session_from_home(mac, tmp_path):
     popen = FakePopen()
-    app_api.start_installer(REPO_NAME, popen=popen, log_dir=tmp_path / "logs")
+    got = app_api.start_installer(REPO_NAME, tag="v1.1.0", popen=popen, log_dir=tmp_path / "logs")
+    assert got is popen
     (argv, kwargs, out_closed_at_call), = popen.calls
-    assert argv == ["/bin/bash", "-c",
-                    "curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/"
-                    "download/install-mac.sh | bash"]
+    assert argv[:2] == ["/bin/bash", "-c"]
+    script = argv[2]
+    assert ('curl -fsSL --retry 2 "https://github.com/labbgulab-lab/robot-hub/releases/'
+            'download/v1.1.0/install-mac.sh" -o "$f"') in script
+    # The app folder it runs from is renamed by the update.
+    assert kwargs["cwd"] == str(Path.home())
     assert kwargs["start_new_session"] is True and kwargs["close_fds"] is True
     assert "creationflags" not in kwargs
     assert kwargs["stdin"] is subprocess.DEVNULL
@@ -179,7 +246,186 @@ def test_the_mac_update_log_goes_to_the_data_folder(mac, tmp_path, monkeypatch):
 def test_installer_argv_per_platform():
     assert app_api.installer_argv(REPO_NAME, "win32")[0] == "powershell"
     assert "install.ps1" in app_api.installer_argv(REPO_NAME, "win32")[-1]
+    # Windows always runs /latest/install.ps1, whatever the check picked.
+    assert app_api.installer_argv(REPO_NAME, "win32", "v1.1.0") == app_api.installer_argv(REPO_NAME, "win32")
     assert app_api.installer_argv(REPO_NAME, "darwin")[:2] == ["/bin/bash", "-c"]
+
+
+def test_the_mac_installer_url_follows_the_picked_release():
+    assert app_api.mac_installer_url(REPO_NAME, "v1.1.0") == (
+        "https://github.com/labbgulab-lab/robot-hub/releases/download/v1.1.0/install-mac.sh")
+    latest = "https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh"
+    assert app_api.mac_installer_url(REPO_NAME, None) == latest
+    assert app_api.mac_installer_url(REPO_NAME, "robot-files") == latest
+    assert app_api.mac_installer_url(REPO_NAME, 'v1"; rm -rf ~') == latest
+
+
+def test_a_failed_mac_download_never_leaves_the_student_without_the_app():
+    script = app_api.mac_installer_script("https://example.invalid/install-mac.sh")
+    assert "| bash" not in script                   # no empty script that "succeeds"
+    assert 'curl -fsSL --retry 2 "https://example.invalid/install-mac.sh" -o "$f"' in script
+    assert '&& /bin/bash "$f"' in script
+    assert '/usr/bin/open "$HOME/Applications/LabaLab Robot Hub.app"' in script
+    assert script.index("/usr/bin/open") > script.index('if [ "$rc" -ne 0 ]')
+    assert 'exit "$rc"' in script
+
+
+def _bash():
+    import shutil
+    found = shutil.which("bash")
+    if not found or "system32" in found.lower():      # WSL's launcher, not a bash
+        return None
+    return found
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash on this laptop")
+def test_the_mac_update_script_is_valid_bash():
+    script = app_api.mac_installer_script("https://example.invalid/install-mac.sh")
+    r = subprocess.run([_bash(), "-n", "-c", script], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+
+
+def _update_client(tmp_path, proc):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from hub.config import Config
+    from hub.events import EventBus
+    from hub import settings as S
+
+    class Hub:
+        bus = EventBus()
+        config = Config(data_dir=tmp_path)
+        settings = S.SettingsStore(tmp_path / "settings.json", config)
+
+    calls = {"quit": 0, "installer": 0}
+
+    async def quit_app():
+        calls["quit"] += 1
+
+    def installer():
+        calls["installer"] += 1
+        return proc
+
+    app = FastAPI()
+    app.include_router(app_api.make_router(
+        Hub, checker=app_api.UpdateChecker("1.0.0"), quit_app=quit_app,
+        installer=installer, opener=lambda p: None, downloads=lambda: tmp_path / "Downloads"))
+    return TestClient(app), Hub, calls
+
+
+class _Proc:
+    def __init__(self, codes):
+        self.codes = list(codes)
+
+    def poll(self):
+        return self.codes.pop(0) if self.codes else None
+
+
+def test_a_mac_update_leaves_quitting_to_the_installer(mac, tmp_path, monkeypatch):
+    monkeypatch.setattr(app_api, "watch_mac_update",
+                        lambda proc, failed, **kw: asyncio.sleep(0))
+    client, _hub, calls = _update_client(tmp_path, _Proc([None]))
+    assert client.post("/api/app/update").json() == {"ok": True}
+    assert calls == {"quit": 0, "installer": 1}
+
+
+def test_windows_still_quits_after_starting_the_installer(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    client, _hub, calls = _update_client(tmp_path, None)
+    assert client.post("/api/app/update").json() == {"ok": True}
+    assert calls == {"quit": 1, "installer": 1}
+
+
+def test_a_failed_mac_update_is_reported_to_the_page():
+    failed = []
+    asyncio.run(app_api.watch_mac_update(_Proc([None, None, 3]), failed.append, every_s=0))
+    assert failed == [3]
+    asyncio.run(app_api.watch_mac_update(_Proc([None, 0]), failed.append, every_s=0))
+    assert failed == [3]                             # success: the hub is quit anyway
+    asyncio.run(app_api.watch_mac_update(None, failed.append, every_s=0))
+    asyncio.run(app_api.watch_mac_update(_Proc([]), failed.append, timeout_s=0.01, every_s=0))
+    assert failed == [3]
+
+
+def test_the_failure_reaches_the_page_through_the_bus(mac, tmp_path, monkeypatch):
+    import functools
+    import time as _time
+    seen = []
+    monkeypatch.setattr(app_api, "watch_mac_update",
+                        functools.partial(app_api.watch_mac_update, every_s=0.01))
+    client, hub, _calls = _update_client(tmp_path, _Proc([None, 7]))
+    monkeypatch.setattr(hub.bus, "publish", seen.append)
+    with client:                                     # one event loop for the watcher
+        assert client.post("/api/app/update").json() == {"ok": True}
+        for _ in range(200):
+            if any(m.get("type") == "update_failed" for m in seen):
+                break
+            _time.sleep(0.01)
+    failed = [m for m in seen if m.get("type") == "update_failed"]
+    assert failed and "code 7" in failed[0]["message"] and "update.log" in failed[0]["message"]
+
+
+def test_the_default_mac_installer_takes_the_offered_release(mac, monkeypatch, tmp_path):
+    seen = []
+    monkeypatch.setattr(app_api, "start_installer", lambda **kw: seen.append(kw) or None)
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from hub.config import Config
+    from hub.events import EventBus
+    from hub import settings as S
+
+    class Hub:
+        bus = EventBus()
+        config = Config(data_dir=tmp_path)
+        settings = S.SettingsStore(tmp_path / "settings.json", config)
+
+    checker = app_api.UpdateChecker("1.0.0")
+    checker.latest = "v1.1.0"
+    app = FastAPI()
+    app.include_router(app_api.make_router(Hub, checker=checker, quit_app=lambda: asyncio.sleep(0)))
+    client = TestClient(app)
+    assert client.post("/api/app/update").json() == {"ok": True}
+    checker.latest = "v0.9.0"                        # nothing newer: /latest/
+    assert client.post("/api/app/update").json() == {"ok": True}
+    assert seen == [{"tag": "v1.1.0"}, {"tag": None}]
+
+
+def test_a_refused_downloads_folder_puts_the_report_in_the_data_folder(mac, tmp_path, monkeypatch):
+    from hub import applog
+    opened = []
+    real = applog.make_report
+
+    def make_report(log_dir, out_dir, *a, **k):
+        if Path(out_dir).name == "Downloads":
+            raise PermissionError("Operation not permitted")
+        return real(log_dir, out_dir, *a, **k)
+    monkeypatch.setattr(applog, "make_report", make_report)
+    client, hub, _ = _update_client(tmp_path, None)
+    hub.keys = type("K", (), {"all_secrets": lambda self: []})()
+    hub.bus.recent = lambda n: []
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    app = FastAPI()
+    app.include_router(app_api.make_router(
+        hub, checker=app_api.UpdateChecker("1.0.0"), quit_app=lambda: asyncio.sleep(0),
+        installer=lambda: None, opener=opened.append, downloads=lambda: tmp_path / "Downloads"))
+    r = TestClient(app).post("/api/log/report")
+    assert r.status_code == 200
+    body = r.json()
+    assert Path(body["path"]).parent == tmp_path / "reports"
+    assert body["where"] == "the Robot Hub data folder"
+    assert opened == [tmp_path / "reports"]
+
+
+def test_the_page_knows_the_windows_only_sentences():
+    # web/app.js marks a waiting card "Windows only" when its detail says so.
+    import re
+    pattern = re.compile(r"windows laptop only", re.I)
+    assert pattern.search(platforms.NAOQI_WINDOWS_ONLY)
+    assert pattern.search(platforms.LITE_WINDOWS_ONLY)
+    js = (REPO / "web" / "app.js").read_text(encoding="utf-8")
+    assert "/windows laptop only/i.test(r.detail" in js
+    assert "case 'update_failed':" in js
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the PowerShell installer is Windows")
@@ -541,6 +787,7 @@ def test_the_installed_layout(tmp_path):
 def test_the_hub_env_points_at_the_data_folder(launcher):
     env = launcher.hub_env({"PYTHONPATH": "/somewhere", "VIRTUAL_ENV": "/v", "HOME": "home-folder"})
     assert env["ROBOT_HUB_DATA"] == str(launcher.DATA_DIR)
+    assert env["ROBOT_HUB_WINDOWLESS"] == "1"        # no request lines in hub-stdout.log
     assert "PYTHONPATH" not in env and "VIRTUAL_ENV" not in env
     assert env["PYTHONNOUSERSITE"] == "1" and env["HOME"] == "home-folder"
 
@@ -653,6 +900,64 @@ def test_a_hub_that_will_not_start_says_where_the_log_is(launcher, monkeypatch):
     _fake_http(launcher, monkeypatch, [False])
     assert launcher.start_and_open(FakeHub(ready=False)) == 1
     assert len(said) == 1 and "hub-stdout.log" in said[0]
+
+
+def test_check_reports_a_hub_that_cannot_be_started(launcher, monkeypatch, capsys):
+    _fake_http(launcher, monkeypatch, [False])
+    hub = FakeHub()
+
+    def broken():
+        raise OSError("no runtime")
+    hub.start = broken
+    assert launcher.self_check(hub) == 1
+    out = json.loads(capsys.readouterr().out)
+    assert out["ok"] is False and "no runtime" in out["error"]
+
+
+def test_the_alert_comes_after_the_start_lock(launcher, monkeypatch):
+    events = []
+
+    class Lock:
+        def __init__(self, path):
+            pass
+
+        def __enter__(self):
+            events.append("lock")
+            return self
+
+        def __exit__(self, *a):
+            events.append("unlock")
+    monkeypatch.setattr(launcher, "_StartLock", Lock)
+    monkeypatch.setattr(launcher, "message", lambda text: events.append("alert"))
+    _fake_http(launcher, monkeypatch, [False])
+    assert launcher.start_and_open(FakeHub(ready=False)) == 1
+    assert events == ["lock", "unlock", "alert"]
+
+
+def test_no_alert_when_headless(launcher, monkeypatch, capsys):
+    ran = []
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(launcher.subprocess, "run", lambda *a, **k: ran.append(a))
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(launcher.sys, "stdin", None)
+    monkeypatch.setattr(launcher, "HEADLESS", True)
+    launcher.message("no runtime")
+    assert ran == [] and "no runtime" in capsys.readouterr().err
+    monkeypatch.setattr(launcher, "HEADLESS", False)
+    monkeypatch.setenv("CI", "true")
+    launcher.message("no runtime")
+    assert ran == []
+    monkeypatch.delenv("CI")
+    launcher.message("no runtime")                   # behind the icon: the alert
+    assert len(ran) == 1
+
+
+def test_check_is_headless(launcher, monkeypatch):
+    monkeypatch.setattr(launcher, "HEADLESS", False)
+    monkeypatch.setattr(launcher, "self_check", lambda: 0)
+    monkeypatch.setattr(launcher, "_setup_logging", lambda to_console: None)
+    launcher.main(["--check"])
+    assert launcher.HEADLESS is True and launcher.wants_dialog({}) is False
 
 
 def test_quit_posts_to_the_hub(launcher, monkeypatch, capsys):
