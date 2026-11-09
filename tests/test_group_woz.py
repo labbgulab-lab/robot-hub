@@ -927,3 +927,20 @@ def test_settings_on_a_woz_connection_start_no_paid_warm_up(tmp_path, monkeypatc
     session.rewarm = lambda: warmed.append(1)
     gm.apply_live()
     assert not warmed
+
+
+def test_a_wizard_of_oz_connection_keeps_a_robot_whose_health_probe_failed(tmp_path, monkeypatch):
+    # Review of round 2: on a WoZ-only connection the targets came from
+    # m.seats() alone, which drops a robot the registry marks ERROR after one
+    # failed health probe, although its audio link is fine: Choir then played
+    # without it. The targets are the robots held plus the included rest.
+    gm, session = setup(tmp_path, monkeypatch, groups=CHOIR)
+    full = gm.seats()
+    monkeypatch.setattr(gm, "seats", lambda: [s for s in full if s["key"] != "k2"])
+    plan = gm.woz.plan()
+    assert plan["choir"] and plan["all"] == ["k1", "k2", "k3"]
+    assert sorted(plan["targets"][0]["members"]) == ["k1", "k2", "k3"]
+    # A robot included but not held yet is still a target (Connect opens it).
+    session.seats = [s for s in session.seats if s["key"] != "k3"]
+    monkeypatch.setattr(gm, "seats", lambda: full)
+    assert gm.woz.plan()["all"] == ["k1", "k2", "k3"]

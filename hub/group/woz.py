@@ -373,7 +373,13 @@ class TableWoz:
         session = self.m.session
         if session is not None and (self.m.running or not getattr(session, "lite", False)):
             return list(session.seats)
-        return [s for s in self.m.seats() if s.get("included")]
+        # The union: the robots this connection holds links to, plus included
+        # robots it does not have yet. m.seats() alone drops a robot whose
+        # health probe failed once (registry ERROR) although its audio link is
+        # fine, and a Choir then plays without it (review, 2026-11-09).
+        held = list(session.seats) if session is not None else []
+        keys = {s["key"] for s in held}
+        return held + [s for s in self.m.seats() if s.get("included") and s["key"] not in keys]
 
     def plan(self) -> dict:
         """The targets for the seats now: {"targets": [{id, name, members,
