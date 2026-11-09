@@ -331,7 +331,8 @@ def _client(tmp_path, **kw):
 def test_get_app_reports_version_data_folder_and_first_run(tmp_path):
     client, _hub, _ = _client(tmp_path)
     body = client.get("/api/app").json()
-    assert body["version"] == read_version() == "1.0.0"
+    assert body["version"] == "1.0.0"          # the checker's version
+    assert read_version() == (REPO_ROOT / "VERSION").read_text().strip()
     assert Path(body["data_dir"]) == tmp_path
     assert body["first_run"] is True
     assert body["update"] == {"available": False, "latest": None, "notes_url": None}
