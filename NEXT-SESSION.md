@@ -1,58 +1,54 @@
 # Next session: start here
 
-**Updated 2026-11-05, end of day: the student app is released.** v1.0.0 is published, both main branches carry it, and lab laptops get it on their next start. What's left needs the robots or another laptop.
+**Updated 2026-11-09, end of the last lab day.** Windows students are on **v1.0.5** (latest). The **Mac version is built but on hold** as the **v1.0.6 draft**. The next job is finishing the Mac release.
 
 ## Where things are
 
 | Repo | Branch | Last commit | State |
 |---|---|---|---|
-| robot-hub (this repo) | `master` = `student-app` | `ffddedd` HOT-WiFi has internet: fix the staff guide, README and comments | Pushed. `master` was fast-forwarded to `student-app` on 2026-11-05 |
-| reachy_chat (`../reachy-mini/reachy_chat`) | `main` = `multi-provider` | `10c4be2` Typed Wizard of Oz lines, live captions, deploy without the heavy deps | Pushed. `main` was fast-forwarded to `multi-provider` on 2026-11-05 |
+| robot-hub (this repo) | `master` | `97d9cb8` Mac build: no exact pins on Intel | Pushed. `fix/v1.0.1` = `master` |
+| reachy_chat (`../reachy-mini/reachy_chat`) | `main` = `multi-provider` | `8a60d92` Deploy: pin google-genai, seed the show folder | Pushed |
+| robot-lab (`job`) | `main` | `01431d2` reachy10 | Pushed |
 
-- **Release:** [v1.0.0](https://github.com/labbgulab-lab/robot-hub/releases/tag/v1.0.0), marked latest. It was built from `9db7123`, and its assets are `RobotHub-1.0.0.zip` (113.6 MB, sha256 `f04918bf…a23637`) and `install.ps1`. Later commits only change docs and comments, so no rebuild is needed.
-- **Tests:** `.venv\Scripts\python.exe -m pytest tests -q` gives **532 passing**.
-- **Not run on a real robot yet.** Everything was verified with fakes, local servers, headless screenshots and real installs on this laptop.
-- **Lab laptops** run `tools/start-hub.ps1`, which runs `git pull` on robot-hub and reachy_chat. So their next start runs the new app against the real robots.
-- `docs/CRAB-SWAP-PLAN.md` is untracked on purpose, to keep it out of this public repo. Never commit it.
+- **Releases:**
+  - **v1.0.5** is the published latest. Its Windows zip was built from `51df373`.
+  - **v1.0.6** is a **DRAFT**, tagged `v1.0.6` -> `7f33b91`. It holds the Windows zip, `install.ps1`, `install-mac.sh` and `RobotHub-mac-arm64-1.0.6.tar.gz`. **No Intel tarball yet.**
+- **Tests:** 700 pass on Windows (`.venv\Scripts\python.exe -m pytest tests -q -p no:cacheprovider`).
+- **Worktrees:**
+  - `job/rh-release` is a worktree on branch `mac-integration`, the same commit as `master`. Delete it when done.
+  - In the main checkout `job/robot-hub`, someone else's **uncommitted** change to `hub/discovery/netscan.py`, `tests/test_discovery.py` and `tools/reachy_bringup.py` makes the sweep also try `.0`/`.255` addresses (a Furhat got one ending in .255). It is not ours: ask before committing it. That checkout's local `fix/v1.0.1` is behind `origin`.
 
-## What was done on 2026-11-05
+## Finish the Mac release (do this first)
 
-1. **Phase 3, verification.**
-   - A parity sweep and a demo-screenshot check found 57 issues. Each was fixed and then checked by a separate verifier (`7175116`).
-   - The verifiers' second round found more problems, also fixed:
-     - a null-seat crash in the group transcript;
-     - a "Disconnected" pill shown in the Stopped and Starting states;
-     - the Pepper rehearsal simulator left running. It is now killed with pepper_app through a Windows Job Object.
-2. **Pepper state hints** from the PepperStates board (`9db7123`):
-   - the key line under the badges;
-   - "Moves, volume and camera wait for the robot";
-   - an amber note when Walking is refused while charging.
-3. **Guides:** `docs/guides/STUDENT.md` and `docs/guides/LAB-STAFF.md`, linked from the README.
-4. **Release build and install tests:**
-   - On this laptop: install from the zip, the `--check` self-test, a tray start that listens on 127.0.0.1:8099 only, Quit with no processes left, reinstall (keeps `app.old` and the data), and uninstall with and without `-RemoveData`.
-   - After publishing: the one-line install from GitHub end to end (download 114 MB, then the self-test). The in-app update check sees v1.0.0.
-5. **HOT-WiFi has internet.** Every "no internet" claim in the guides, the README and the comments is fixed (`ffddedd`).
-6. **Handover:**
-   - The Hebrew docs in `job/handoff` are rewritten for the student app (`04_Robots/01_Robot_Hub.md` and a new `06_Student_guides/Robot_Hub_app.md`), and the book is rebuilt.
-   - The handover board has U28 (release, done), U29 (first run on robots) and U30 (clean-laptop install).
+1. **Intel build.** The Mac Action (`.github/workflows/mac-release.yml`, run with `gh workflow run mac-release.yml -f tag=<tag> -f upload=true`) passes on Apple Silicon: build, install, and `launch_mac.py --check` on a real Mac. On Intel (`macos-15-intel`) it fails because PyPI has no Intel Mac wheels for current zeroconf, cryptography or onnxruntime.
+   - zeroconf is fixed: it is built as plain Python.
+   - The fix for the rest (`97d9cb8`: no exact pins on Intel, so pip takes the newest version that still has an Intel wheel) is pushed but **has not run yet**.
+2. **The tag.** Moving `v1.0.6` to the fix needs a force-push, which the permission check blocked on 2026-11-09. Pick one:
+   - (a) The user approves `git push -f origin v1.0.6`. Then rerun the Action and publish v1.0.6 with Intel.
+   - (b) Publish v1.0.6 as it is (Windows + Apple Silicon), then do Intel as **v1.0.7** under a new tag, which needs no force. For v1.0.7: bump `VERSION`, run `tools\build_release.ps1 -ReachyChat <reachy_chat>`, push the tag, create the release as a draft with the Windows assets, run the Action, then publish as latest.
+   - The user chose to wait. Ask them first.
+3. **Before publishing,** check that the draft has `RobotHub-mac-<arch>-<v>.tar.gz` (+ `.sha256`) for each arch, plus `install-mac.sh`. Publish with `gh release edit <tag> --draft=false --latest`.
+4. **The link for Mac users** works only once a published latest release carries the Mac files: `curl -fsSL https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install-mac.sh | bash`. It is already in the README and the release notes.
+5. **Mac facts:**
+   - Apple Silicon (M1 to M5) needs **macOS 14 or newer**.
+   - NAO and Pepper stay Windows-only.
+   - The hub runs with `-c "from hub.main import main; main()"`.
+   - The data folder is `~/Library/Application Support/LabaLab/RobotHub/data`.
+   - The app is installed as `~/Applications/LabaLab Robot Hub.app`.
 
-## Next steps, in order
+## What was done on 2026-11-09 (lab day)
 
-1. **Lab day, robots needed (board U29).** This is the first real-robot run of the new app:
-   - **Pepper:** the outbound link on 8790, the tablet page from the robot on 8791, and the chip must never say "fallback". Also Rehearse, and the charging refusal note.
-   - **Reachy:** Talk through the proxy, Wizard of Oz Say (prepare/say), live captions, and group talk. Check that the group time limits added on 3.11 stop a hang.
-   - **Every robot:** the in-use marker and **Take over**, Add WiFi with the Knows list, and NAO/Pepper charging.
-   - **NAO:** postures, plus the NAO kit download and verify on a clean laptop.
-   - **Furhat:** the password from Settings, and the skill rebuild without a baked-in key. The password is in Bitwarden.
-   - **reachy0** cannot use the installed app: its mic cable is broken, and the app listens through the robot's mic only. Use a lab checkout with the laptop mic until the cable arrives.
-   - Only reachy6-8 are recorded as knowing HOT-WiFi. Check the others.
-2. **Clean-laptop test (board U30).** Run the one-line install on a laptop that never had the lab setup, as a **standard (non-admin) user**: install, add a key, connect a robot, Quit, uninstall. This laptop can't do it: Windows Home has no Sandbox, and making a test user needs admin.
-3. **Fix what the lab day finds**, then release `v1.0.1`:
-   - bump `VERSION`, build with `tools\build_release.ps1` from a commit;
-   - test it in a temp root (`docs/guides/LAB-STAFF.md`, "Build a release");
-   - publish it marked latest, with the full commit SHA as the target (`gh release create` rejects a short SHA).
-   - The permission check may block `gh release create` for Claude. If it does, the user runs it.
-4. **After 2026-11-11** the lab's interim owner takes over: hand over whatever is left of steps 1-3, with this file and the board.
+- **Robots:**
+  - **reachy9** and **reachy10** were built and set up on HOT-WiFi. Their details are in the private fleet list.
+  - Talk, group, Choir and Wizard of Oz were tried on both.
+- **Fixed and released (1.0.1 to 1.0.5, all pushed):**
+  - **The hub froze on HOT-WiFi.** The search started about 100 `ping.exe` a second from the event loop, and one CreateProcess hung. Now: `hub/discovery/icmp.py` (IcmpSendEcho on daemon threads).
+  - **New Reachys got google-genai 3.0.0**, so every Talk returned HTTP 404. reachy_chat's deploy now pins 2.23.0.
+  - **New Reachys had no Wizard of Oz cues.** The deploy now seeds `show/`.
+  - **Group-tab Wizard of Oz for the whole table** (`hub/group/woz.py`, `web/reachy-group-woz.js`): Choir is one unit, otherwise a random or chosen target; it works offline. The review's 42 findings are all fixed.
+  - **Self-update on start (1.0.3+):** the installed app only, in its first 3 minutes, with no robot connected; a 5 s countdown and **Not now**.
+  - **README:** a 3-step student install at the top.
+- **Not yet seen on a real screen:** the self-update popup. Opening a 1.0.3 or 1.0.4 install should show it.
 
 ## Known gaps (from the builders)
 
