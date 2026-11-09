@@ -136,7 +136,7 @@
     view: 'robots', sheet: null, logs: false, logFilter: 'all', logUnseen: false, logPinned: true,
     popup: null,              // {key, provider, phase, result, chips}
     conflicts: {}, armed: {}, pending: {}, wifi: {}, wifiNote: {}, wifiBusy: {}, moved: {}, known: {},
-    postureErr: {}, barDismissed: {}, keyArm: null, quitArm: false, scanBusy: false,
+    postureErr: {}, barDismissed: {}, keyArm: null, quitting: false, scanBusy: false,
     netChecking: false, keyChecking: {}, addKey: { provider: 'auto', label: '', key: '', busy: false, result: null },
     pwEdit: false, pw: '', pwBusy: false, labEdit: false, lab: null, doctor: null, doctorBusy: false,
     resources: null, bringup: false, updating: false, stopped: false, stopReason: '',
@@ -178,6 +178,7 @@
       backoff = 500;
       S.live = 'live';
       ui.stopped = false;
+      ui.quitting = false;
       clearTimeout(stopTimer);
       stopTimer = null;
       refreshApp();
@@ -185,6 +186,15 @@
     };
     ws.onmessage = e => { try { handle(JSON.parse(e.data)); } catch (err) { /* a bad frame */ } };
     ws.onclose = () => {
+      if (ui.quitting) {
+        // The hub is gone after a Quit: close this window too. The launcher
+        // closes the app window anyway; a browser may refuse for a tab.
+        S.live = 'stopped';
+        render();
+        setTimeout(() => { try { window.close(); } catch (err) { /* not ours to close */ } }, 300);
+        scheduleReconnect();
+        return;
+      }
       S.live = S.gotSnapshot ? 'reconnecting' : 'connecting';
       // A dropped link for a few seconds is a hub restart; longer is a stop.
       if (!stopTimer && S.gotSnapshot) {
@@ -259,6 +269,11 @@
       case 'settings': S.settings = Object.assign({}, S.settings, strip(msg)); break;
       case 'keys': S.keys = Object.assign({ slots: {} }, strip(msg)); break;
       case 'setup': onSetup(msg.item); break;
+      case 'quitting': // Quit from Settings, the tray or the installer
+        if (ui.updating) return;
+        ui.quitting = true; ui.stopped = true;
+        if (!ui.stopReason) ui.stopReason = 'Start it again from its desktop icon.';
+        break;
       case 'update_failed': // a Mac update that stopped while the hub still runs
         ui.updating = false;
         toast(sentence(msg.message || "The update didn't finish."), 'err');
@@ -1527,7 +1542,7 @@
         <div class="panel">
           <div class="row"><div class="rowmain"><p class="rowtitle">LabaLab Robot Hub ${esc(S.app.version || '')}</p><p class="rowsub">${up.available ? `New version ${esc(up.latest || '')} is out` : 'Up to date'}</p></div>
             ${up.available ? `<button class="btn btn-primary btn-sm" type="button" data-act="update">Update</button>` : `<button class="btn btn-ghost btn-sm" type="button" data-act="update-check">Check for updates</button>`}</div>
-          <div class="row"><div class="rowmain"><p class="rowtitle">Quit Robot Hub</p><p class="rowsub">Stops all robots</p></div>${ui.quitArm ? `<button class="btn btn-stop btn-sm" type="button" data-act="quit">Press again to quit</button>` : `<button class="btn btn-ghost btn-sm btn-danger-text" type="button" data-act="quit">Quit</button>`}</div>
+          <div class="row"><div class="rowmain"><p class="rowtitle">Quit Robot Hub</p><p class="rowsub">Stops all robots</p></div><button class="btn btn-ghost btn-sm btn-danger-text" type="button" data-act="quit">Quit</button></div>
         </div>
       </section>`;
     put($('#settings-main'), html);
@@ -2068,13 +2083,15 @@
       case 'doctor': ui.doctorBusy = true; render(); { const r = await api('GET', '/api/doctor'); ui.doctorBusy = false; ui.doctor = r.checks || [{ name: 'Check', ok: false, detail: r.error || 'no answer' }]; render(); } break;
       case 'resources': loadResources(); break;
       case 'quit':
-        if (!ui.quitArm) { ui.quitArm = true; render(); setTimeout(() => { ui.quitArm = false; render(); }, 4000); break; }
-        ui.quitArm = false;
-        await api('POST', '/api/app/quit');
-        ui.stopped = true; ui.stopReason = 'You quit it in Settings. Start it again from its desktop icon.';
+        // One press quits: the hub stops the robots and ends, and the window
+        // closes when it is gone.
+        ui.quitting = true; ui.stopped = true;
+        ui.stopReason = 'You quit it in Settings. Start it again from its desktop icon.';
         render();
+        await api('POST', '/api/app/quit');
         break;
       case 'restart':
+        ui.quitting = false;
         ui.stopReason = 'Trying to reach it…';
         render();
         backoff = 500;

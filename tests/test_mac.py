@@ -970,6 +970,31 @@ def test_quit_posts_to_the_hub(launcher, monkeypatch, capsys):
     assert ("POST", "/api/app/quit") not in calls
 
 
+def test_quit_waits_until_the_hub_is_gone(launcher, monkeypatch, capsys):
+    """--quit returns once the hub stopped answering, not when it was asked."""
+    polls = {"left": 4}                             # the first look finds it running
+
+    def http(method, path, timeout=2.0):
+        if method == "POST":
+            return 200, b'{"ok": true}'
+        if polls["left"] > 0:                       # still stopping the robots
+            polls["left"] -= 1
+            return 200, b'{"robots": []}'
+        return 0, b""
+    monkeypatch.setattr(launcher, "_http", http)
+    monkeypatch.setattr(launcher.time, "sleep", lambda s: None)
+    assert launcher.quit_hub() == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["stopped"] is True and polls["left"] == 0
+
+
+def test_quit_reports_a_hub_that_never_stops(launcher, monkeypatch, capsys):
+    monkeypatch.setattr(launcher, "_http", lambda m, p, timeout=2.0: (200, b'{"robots": []}'))
+    monkeypatch.setattr(launcher, "QUIT_TIMEOUT", 0.05)
+    assert launcher.quit_hub() == 1
+    assert json.loads(capsys.readouterr().out)["stopped"] is False
+
+
 def test_main_refuses_an_incomplete_install(launcher, monkeypatch):
     said = []
     monkeypatch.setattr(launcher, "message", said.append)

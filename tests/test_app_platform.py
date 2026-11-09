@@ -473,10 +473,127 @@ def test_main_quit_stops_children_then_the_server(monkeypatch):
 
     server = type("Srv", (), {"should_exit": False})()
     monkeypatch.setattr(main, "_server", server)
+    monkeypatch.setattr(main, "_quit_started", False)
     monkeypatch.setattr(SV, "get_supervisor", lambda bus=None: Sup())
     monkeypatch.setattr(main.hub, "adapters", {"a": Adapter()})
     asyncio.run(main.quit_app())
     assert stopped == ["system", "children"] and server.should_exit is True
+
+
+def _quit_setup(monkeypatch, sup):
+    """main.quit_app() against a fake server, supervisor and no robots."""
+    from hub import main
+    from hub import supervisor as SV
+
+    server = type("Srv", (), {"should_exit": False})()
+    monkeypatch.setattr(main, "_server", server)
+    monkeypatch.setattr(main, "_quit_started", False)
+    monkeypatch.setattr(main, "_hard_exit_on_quit", False)
+    monkeypatch.setattr(SV, "get_supervisor", lambda bus=None: sup)
+    monkeypatch.setattr(main.hub, "adapters", {})
+    return main, server
+
+
+def test_quit_ends_the_server_even_when_stopping_the_programs_fails(monkeypatch):
+    class Broken:
+        async def stop_all(self):
+            raise RuntimeError("a child that will not die")
+
+    main, server = _quit_setup(monkeypatch, Broken())
+    asyncio.run(main.quit_app())
+    assert server.should_exit is True
+
+
+def test_quit_ends_the_server_even_when_stopping_the_programs_hangs(monkeypatch):
+    class Stuck:
+        async def stop_all(self):
+            await asyncio.sleep(3600)
+
+    main, server = _quit_setup(monkeypatch, Stuck())
+    real_wait_for = asyncio.wait_for
+    monkeypatch.setattr(main.asyncio, "wait_for", lambda aw, timeout: real_wait_for(aw, 0.05))
+    asyncio.run(main.quit_app())
+    assert server.should_exit is True
+
+
+def test_one_quit_at_a_time(monkeypatch):
+    calls = []
+
+    class Sup:
+        async def stop_all(self):
+            calls.append(1)
+
+    main, server = _quit_setup(monkeypatch, Sup())
+    asyncio.run(main.quit_app())
+    server.should_exit = False
+    asyncio.run(main.quit_app())                 # a second press while quitting
+    assert calls == [1] and server.should_exit is False
+
+
+def test_quit_tells_the_page_and_closes_its_websocket(monkeypatch):
+    """The page hears "quitting" (it then closes its window) and its socket is
+    closed by the hub, so the server need not wait for it."""
+    from fastapi.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+
+    class Sup:
+        async def stop_all(self):
+            return []
+
+    main, server = _quit_setup(monkeypatch, Sup())
+    with TestClient(main.app) as client:
+        with client.websocket_connect("/ws") as ws:
+            assert ws.receive_json()["type"] == "snapshot"
+            assert client.post("/api/app/quit").json() == {"ok": True}
+            seen = []
+            with pytest.raises(WebSocketDisconnect):
+                for _ in range(50):
+                    seen.append(ws.receive_json()["type"])
+            assert seen[-1] == "quitting"
+    assert server.should_exit is True
+
+
+def test_quit_arms_the_hard_exit_only_from_main(monkeypatch):
+    """A shutdown that hangs still ends the process (code 0, so the launcher
+    sees a quit); only the real hub arms it, never a test."""
+    class Sup:
+        async def stop_all(self):
+            return []
+
+    main, server = _quit_setup(monkeypatch, Sup())
+    armed = []
+    monkeypatch.setattr(main, "_exit_soon", lambda *a: armed.append(a))
+    asyncio.run(main.quit_app())
+    assert armed == []
+    monkeypatch.setattr(main, "_quit_started", False)
+    monkeypatch.setattr(main, "_hard_exit_on_quit", True)
+    asyncio.run(main.quit_app())
+    assert armed == [()]
+
+
+def test_the_hard_exit_ends_the_process_with_code_0(monkeypatch):
+    from hub import main
+
+    exits = []
+    done = threading.Event()
+    monkeypatch.setattr(main.os, "_exit", lambda code: (exits.append(code), done.set()))
+    timer = main._exit_soon(0.05)
+    assert timer.daemon is True
+    assert done.wait(5) and exits == [0]
+
+
+def test_page_quits_with_one_press():
+    """Settings > Quit: one press, no "Press again"; the window closes once the
+    hub is gone, and a Quit from the tray reaches the page too."""
+    js = (REPO_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    act = js[js.index("case 'quit':"):js.index("case 'restart':")]
+    assert "api('POST', '/api/app/quit')" in act and "Arm" not in act
+    row = js[js.index("Quit Robot Hub"):]
+    row = row[:row.index("</div></div>") if "</div></div>" in row else 600]
+    assert 'data-act="quit"' in row and "Press again" not in row
+    assert "case 'quitting':" in js
+    onclose = js[js.index("ws.onclose"):js.index("ws.onerror")]
+    assert "ui.quitting" in onclose and "window.close()" in onclose
 
 
 def test_log_report_zips_todays_logs_without_keys(tmp_path):

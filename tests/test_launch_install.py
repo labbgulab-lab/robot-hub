@@ -128,6 +128,22 @@ def test_stop_asks_the_hub_to_quit(fake_hub, monkeypatch):
     assert not mod.hub_answers()
 
 
+def test_without_the_tray_a_quit_still_closes_the_window(monkeypatch):
+    """No tray (pystray failed): the launcher waits for its hub, and a hub
+    that quit closes the app window; a crash leaves it open to show why."""
+    mod = load_launcher()
+    closed = []
+    monkeypatch.setattr(mod, "close_windows", lambda: closed.append(1))
+    hub = mod.HubProcess()
+    mod.wait_and_close(hub)                     # nothing started: nothing to wait for
+    hub.proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    mod.wait_and_close(hub)
+    assert closed == [1]
+    hub.proc = subprocess.Popen([sys.executable, "-c", "raise SystemExit(3)"])
+    mod.wait_and_close(hub)
+    assert closed == [1]
+
+
 def test_nothing_on_the_port_is_not_a_hub(monkeypatch):
     mod = load_launcher()
     monkeypatch.setattr(mod, "URL", "http://127.0.0.1:9/")

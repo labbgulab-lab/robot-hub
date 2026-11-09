@@ -88,7 +88,7 @@ this window", close Terminal.
 ## Every day after that
 
 - **Open:** double-click **LabaLab Robot Hub** on the desktop.
-- **Close:** **Settings**, **About**, **Quit**, then **Press again to quit**.
+- **Close:** **Settings**, **About**, **Quit**.
   Closing the window alone leaves the robots running.
 - **Update:** nothing to do. When a new version is out, the app updates
   itself as it starts: it shows the spinning logo and "Please wait", then

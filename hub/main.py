@@ -10,6 +10,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -114,12 +115,44 @@ transcripts.attach_group(group)
 updates = UpdateChecker(read_version())
 # The running uvicorn server, so Quit can end it cleanly (set by main()).
 _server: Any = None
+# One Quit is enough: a second press (or the tray and the page together) while
+# the first is still stopping the robots does nothing more.
+_quit_started = False
+# A Quit always ends the process, even when part of the shutdown hangs (a
+# robot that never answers, a stuck thread): this many seconds after the
+# server was told to stop, the process exits anyway, with code 0, so the
+# launcher still sees a quit and closes the window. Only main() arms it;
+# tests that call quit_app() never do.
+QUIT_HARD_EXIT_S = 15.0
+_hard_exit_on_quit = False
+
+
+def _exit_soon(delay: float = QUIT_HARD_EXIT_S) -> threading.Timer:
+    """The safety net above: a daemon timer, so a normal exit never waits for it."""
+    def go() -> None:
+        log.warning("the hub did not finish quitting within %.0f s; exiting now", delay)
+        for handler in logging.getLogger().handlers:
+            try:
+                handler.flush()
+            except Exception:  # noqa: BLE001
+                pass
+        os._exit(0)
+    timer = threading.Timer(delay, go)
+    timer.daemon = True
+    timer.start()
+    return timer
 
 
 async def quit_app() -> None:
-    """Settings > Quit (and the installer): stop every robot program the hub
-    started, then end the server; the lifespan below does the rest."""
+    """Settings > Quit, the tray's Quit and the installer: stop every robot
+    program the hub started, then end the server; the lifespan below does the
+    rest. The server is told to stop even if stopping a robot fails or hangs."""
+    global _quit_started
     from .supervisor import get_supervisor
+    if _quit_started:
+        log.info("quit requested again; already quitting")
+        return
+    _quit_started = True
     log.info("quit requested")
 
     async def stop(adapter: Any) -> None:
@@ -128,15 +161,22 @@ async def quit_app() -> None:
         except Exception as exc:  # noqa: BLE001
             log.info("stopping %s on quit: %s", getattr(adapter, "display_name", "?"), exc)
 
-    await asyncio.gather(*(stop(a) for a in list(hub.adapters.values())))
     try:
-        await get_supervisor().stop_all()
-    except Exception as exc:  # noqa: BLE001
-        log.warning("stopping the hub's programs on quit: %s", exc)
-    if _server is not None:
-        _server.should_exit = True
-    else:   # started some other way (uvicorn on the command line)
-        signal.raise_signal(signal.SIGINT)
+        await asyncio.gather(*(stop(a) for a in list(hub.adapters.values())))
+        try:
+            await asyncio.wait_for(get_supervisor().stop_all(), 20)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("stopping the hub's programs on quit: %s", exc)
+    finally:
+        # Open pages hear it first: they close their WebSocket (so the server
+        # does not wait for it) and their window.
+        hub.bus.publish({"type": "quitting"})
+        if _hard_exit_on_quit:
+            _exit_soon()
+        if _server is not None:
+            _server.should_exit = True
+        else:   # started some other way (uvicorn on the command line)
+            signal.raise_signal(signal.SIGINT)
 
 
 @asynccontextmanager
@@ -353,6 +393,10 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 await ws.send_json({"type": "heartbeat"})
                 continue
             await ws.send_json(event)
+            if event.get("type") == "quitting":
+                # Quit: close now, or the server waits for this socket.
+                await ws.close()
+                return
     except WebSocketDisconnect:
         pass
     except Exception as exc:  # noqa: BLE001
@@ -378,7 +422,7 @@ if WEB_DIR.exists():
 
 
 def main() -> None:
-    global _server
+    global _server, _hard_exit_on_quit
     import uvicorn
     host, port = config.server.host, config.server.port
     # One hub per laptop: a second start must not fight the first for the
@@ -418,6 +462,7 @@ def main() -> None:
         log_config=None if WINDOWLESS else uvicorn.config.LOGGING_CONFIG,
         access_log=not WINDOWLESS)
     _server = uvicorn.Server(server_config)
+    _hard_exit_on_quit = True              # Quit always ends the process
     _server.run()
 
 

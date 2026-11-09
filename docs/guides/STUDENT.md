@@ -34,7 +34,7 @@ On a Mac:
 
 - Open the app from Launchpad, or from Finder, your home folder, **Applications**. Drag it to the Dock to keep it there.
 - If macOS asks to let Robot Hub find devices on local networks, press **Allow**. Without it, no robots show up. If it asks whether "python3" may accept incoming network connections, press **Allow** too. If it asks about the microphone, press **Allow** for group conversation with this laptop's microphone.
-- The app opens as a tab in your web browser, not in its own window. Closing the tab does not stop the robots. To stop everything, use **Settings**, then **About**, then **Quit** and **Press again to quit**.
+- The app opens as a tab in your web browser, not in its own window. Closing the tab does not stop the robots. To stop everything, use **Settings**, then **About**, then **Quit**. Robot Hub stops the robots and closes.
 - **Pepper and NAO need a Windows laptop.** Their kit is Windows only, and on a Mac their cards say so. Reachy (Talk, group conversation, Wizard of Oz) and Furhat work.
 - Your keys, settings and logs are in `~/Library/Application Support/LabaLab/RobotHub/data`.
 
@@ -42,7 +42,7 @@ On a Mac:
 
 The app opens in its own window and shows **Starting**. Then it asks **Add a key to get started**. Do the next section.
 
-Every later day, double-click **LabaLab Robot Hub**. Closing the window does not stop the robots. To stop everything, use **Settings**, then **About**, then **Quit** and **Press again to quit**, or the tray icon, then **Quit**.
+Every later day, double-click **LabaLab Robot Hub**. Closing the window does not stop the robots. To stop everything, use **Settings**, then **About**, then **Quit**, or the tray icon, then **Quit**. Robot Hub stops the robots and its window closes.
 
 ## Add a key
 

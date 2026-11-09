@@ -388,11 +388,14 @@ class Hub:
         for task in list(self._probe_tasks.values()):
             task.cancel()
         self._probe_tasks.clear()
-        for key in list(self.adapters):
+        # All robots at once: one by one, ten robots that stopped answering
+        # would hold Quit for 50 s.
+        async def disconnect(adapter: Any) -> None:
             try:
-                await asyncio.wait_for(self.adapters[key].disconnect(), 5)
+                await asyncio.wait_for(adapter.disconnect(), 5)
             except Exception:  # noqa: BLE001
                 pass
+        await asyncio.gather(*(disconnect(a) for a in list(self.adapters.values())))
         if self._manager is not None:
             await self._manager.stop()
 

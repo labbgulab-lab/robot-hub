@@ -78,7 +78,7 @@ Do this on a Windows lab laptop with robot-hub and reachy_chat side by side.
    powershell -ExecutionPolicy Bypass -File tools\install.ps1 -Zip dist\RobotHub-<version>.zip -Root <temp folder>\root -DesktopDir <temp folder> -StartMenuDir <temp folder>
    ```
 
-   The app opens by itself. Press **Settings**, **About**, **Quit**, **Press again to quit**. Then remove the test install with the same folder:
+   The app opens by itself. Press **Settings**, **About**, **Quit**: the hub, the tray icon and the window all close. Then remove the test install with the same folder:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File tools\install.ps1 -Uninstall -RemoveData -Root <temp folder>\root -DesktopDir <temp folder> -StartMenuDir <temp folder>

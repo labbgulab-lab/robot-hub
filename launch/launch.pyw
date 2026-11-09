@@ -672,7 +672,19 @@ def main(argv: list[str]) -> int:
                 return 1
         if "--no-window" not in argv:
             open_window()
+        wait_and_close(hub)
     return 0
+
+
+def wait_and_close(hub: HubProcess) -> None:
+    """Without the tray: stay until the hub this launcher started ends, so a
+    Quit from the page still closes the app window."""
+    if hub.proc is None:
+        return
+    code = hub.proc.wait()
+    log.info("the hub ended (exit code %s)", code)
+    if code in CLEAN_EXITS:
+        close_windows()
 
 
 if __name__ == "__main__":

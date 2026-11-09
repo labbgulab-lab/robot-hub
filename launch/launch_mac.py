@@ -451,8 +451,15 @@ def quit_hub() -> int:
         print(json.dumps({"ok": True, "running": False}))
         return 0
     status, _ = _http("POST", "/api/app/quit", timeout=5)
-    print(json.dumps({"ok": status == 200, "running": True, "status": status}))
-    return 0 if status == 200 else 1
+    # Done only when the hub is gone: it stops the robots first (up to 20 s),
+    # then ends by itself, even when part of its shutdown hangs.
+    end = time.monotonic() + QUIT_TIMEOUT
+    while status == 200 and hub_answers() and time.monotonic() < end:
+        time.sleep(0.3)
+    stopped = not hub_answers()
+    print(json.dumps({"ok": status == 200 and stopped, "running": True, "status": status,
+                      "stopped": stopped}))
+    return 0 if status == 200 and stopped else 1
 
 
 def main(argv: list[str]) -> int:
