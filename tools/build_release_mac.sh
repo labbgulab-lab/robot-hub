@@ -313,10 +313,36 @@ if [ -f "$MAC_CONSTRAINTS" ]; then
     done < "$MAC_CONSTRAINTS"
 fi
 
+# zeroconf publishes no wheel for Intel Macs (checked 2026-11-09, up to
+# 0.154): build it here as plain Python (SKIP_CYTHON=1, its own switch), tag
+# that wheel py3-none-any and offer it to pip. Plain Python runs on any Mac;
+# the build fails if anything compiled ended up inside.
+WHEELHOUSE="$STAGING/wheelhouse"
+mkdir -p "$WHEELHOUSE"
+if [ "$ARCH" = "x86_64" ]; then
+    step "zeroconf as plain Python (no Intel Mac wheel on PyPI)"
+    zc_pin=$(grep -i '^zeroconf==' "$CONSTRAINTS" | head -n 1 | sed 's/^[^=]*==//')
+    zc_spec="zeroconf${zc_pin:+==$zc_pin}"
+    rm -rf "$STAGING/zc-raw" "$STAGING/wheeltool"
+    SKIP_CYTHON=1 "$PY" -m pip wheel --no-deps --no-binary zeroconf "$zc_spec" \
+        -w "$STAGING/zc-raw" > "$STAGING/pip-zeroconf.log" 2>&1 \
+        || { tail -n 20 "$STAGING/pip-zeroconf.log"; die "could not build $zc_spec as plain Python"; }
+    "$PY" -m pip install -q --no-warn-script-location --target "$STAGING/wheeltool" wheel \
+        || die "could not get the wheel tool"
+    for w in "$STAGING/zc-raw"/zeroconf-*.whl; do
+        if unzip -l "$w" | grep -qE '\.(so|dylib)$'; then die "the zeroconf wheel holds compiled code: $w"; fi
+        PYTHONPATH="$STAGING/wheeltool" "$PY" -m wheel tags --remove --python-tag py3 \
+            --abi-tag none --platform-tag any "$w" > /dev/null || die "could not retag $w"
+    done
+    mv "$STAGING/zc-raw"/zeroconf-*-py3-none-any.whl "$WHEELHOUSE/" || die "no plain-Python zeroconf wheel"
+    echo "    $(cd "$WHEELHOUSE" && ls zeroconf-*.whl)"
+fi
+
 pip_for_macos() {   # pip_for_macos <min macOS> <requirements file>: wheels for that macOS, into the runtime
     local min="$1" req="$2" target="$STAGING/site-$1"
     rm -rf "$target"
     "$PY" -m pip install --no-warn-script-location --only-binary=:all: \
+        --find-links "$WHEELHOUSE" \
         --platform "macosx_${min%%.*}_${min#*.}_$ARCH" --target "$target" \
         -r "$req" -c "$CONSTRAINTS" > "$STAGING/pip-$min.log" 2>&1 || return 1
     rm -rf "$target/bin"
@@ -365,6 +391,7 @@ if [ -z "$MACOS_MIN" ]; then
     REQ_LAST="$REQ_ALL"
     [ -f "$REQ_ALL.noort" ] && REQ_LAST="$REQ_ALL.noort"
     "$PY" -m pip install --no-warn-script-location --only-binary=:all: \
+        --find-links "$WHEELHOUSE" \
         -r "$REQ_LAST" -c "$CONSTRAINTS" || die "pip install failed: no Mac wheel for ${BLOCKER:-a package (see the log above)}"
 fi
 printf '%s' "$MACOS_MIN" > "$APP/MACOS_MIN"
