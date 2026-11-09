@@ -298,8 +298,12 @@ CONSTRAINTS="$STAGING/constraints-mac.txt"
 # same name).
 cp "$HUB_REPO/tools/release-constraints.txt" "$CONSTRAINTS"
 if [ "$ARCH" = "x86_64" ]; then
-    grep -iv '^onnxruntime==' "$CONSTRAINTS" > "$CONSTRAINTS.tmp" || true
-    mv "$CONSTRAINTS.tmp" "$CONSTRAINTS"
+    # Intel Macs: many packages no longer publish wheels for them at the
+    # pinned versions (2026-11-09: zeroconf, cryptography, onnxruntime). No
+    # exact pins here: pip takes, per package, the newest version that still
+    # has an Intel Mac wheel, within requirements.txt's own lower bounds.
+    # Apple Silicon keeps the exact, tested pins.
+    : > "$CONSTRAINTS"
 fi
 MAC_CONSTRAINTS="$HUB_REPO/tools/release-constraints-mac.txt"
 if [ -f "$MAC_CONSTRAINTS" ]; then
