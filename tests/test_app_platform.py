@@ -16,6 +16,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -382,6 +383,32 @@ def test_get_app_pokes_an_enabled_checker_in_the_background(tmp_path):
             time.sleep(0.02)
         assert client.get("/api/app").json()["update"]["available"] is True
     assert seen == [1]                  # once, not on every request
+
+
+def test_check_for_updates_button_forces_a_check_at_most_once_a_minute(tmp_path):
+    seen = []
+
+    async def fetch():
+        seen.append(1)
+        return {"tag": "v1.0.1", "url": "u"}
+    checker = UpdateChecker("1.0.0", fetch=fetch)
+    checker.enable()
+    # Checked 2 minutes ago: a plain GET waits the full 6 hours, the button does not.
+    client, _hub, _ = _client(tmp_path, checker=checker)
+    with client:
+        checker.checked_at = time.time() - 120
+        client.get("/api/app")
+        assert seen == []               # plain GET: not due yet
+        client.get("/api/app?refresh=1")
+        for _ in range(50):
+            if seen:
+                break
+            time.sleep(0.02)
+        assert seen == [1]
+        client.get("/api/app?refresh=1")  # again within the minute: no new call
+        time.sleep(0.1)
+        assert seen == [1]
+        assert client.get("/api/app").json()["update"]["latest"] == "v1.0.1"
 
 
 def test_settings_routes(tmp_path, monkeypatch):

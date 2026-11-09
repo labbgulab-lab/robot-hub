@@ -41,6 +41,7 @@ from ..adapters.base import Found
 from ..config import Config
 from ..events import EventBus
 from ..winproc import no_window
+from . import icmp
 
 log = logging.getLogger("hub.discovery.netscan")
 
@@ -58,6 +59,8 @@ KNOWN_REFRESH_S = 3.0
 # Silent this many refreshes in a row (~9 s) before the sweep has to find it again.
 KNOWN_MISSES = 3
 PING_TIMEOUT_S = 2.0
+# Worker threads for ICMP echoes on Windows, as many as pings in flight.
+_ICMP_POOL = icmp.DaemonPool(MAX_CONCURRENCY)
 HTTP_TIMEOUT_S = 2.5
 BODY_LIMIT = 20000
 
@@ -417,6 +420,21 @@ class NetscanDetector:
 
     # ---------------------------------------------------------------- probes
     async def _ping(self, ip: str) -> bool:
+        # Windows: one IcmpSendEcho on a worker thread (hub/discovery/icmp.py),
+        # never a ping.exe started from the event loop. A call stuck in
+        # Windows costs one worker, and the address counts as silent.
+        if sys.platform == "win32" and icmp.available():
+            async with self._sem:
+                try:
+                    # On a timeout wait_for cancels the job, and a worker
+                    # that reaches it later skips it.
+                    return bool(await asyncio.wait_for(
+                        _ICMP_POOL.submit(icmp.echo, ip, 700), PING_TIMEOUT_S))
+                except asyncio.TimeoutError:
+                    return False
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("ICMP echo to %s failed: %s", ip, exc)
+                    return False
         if sys.platform == "win32":
             args = ["ping", "-n", "1", "-w", "700", ip]
         else:

@@ -1,6 +1,7 @@
 """The student app's own routes: version and updates, quit, settings, logs.
 
     GET  /api/app                    {version, data_dir, first_run, update}
+                                     (?refresh=1: ask GitHub now, at most once a minute)
     POST /api/app/quit               stop the robots' programs, then the hub
     POST /api/app/update             start the installer, then quit
     GET  /api/settings               the settings (hub/settings.py)
@@ -42,6 +43,10 @@ RELEASE_REPO = os.environ.get("ROBOT_HUB_RELEASE_REPO", "labbgulab-lab/robot-hub
 RELEASES_API = "https://api.github.com/repos/{}/releases?per_page=30"
 INSTALL_URL = "https://github.com/{}/releases/latest/download/install.ps1"
 UPDATE_EVERY_S = 6 * 3600.0
+# "Check for updates" asks GitHub at once, but not more than once a minute:
+# GitHub allows 60 unauthenticated API calls an hour per address, and a lab
+# shares one address.
+FORCED_CHECK_MIN_S = 60.0
 
 
 def read_version(root: Path = REPO_ROOT) -> str:
@@ -142,13 +147,16 @@ class UpdateChecker:
             log.info("a newer Robot Hub is out: %s (this is %s)", self.latest, self.version)
         return self.public()
 
-    def due(self, now: Optional[float] = None) -> bool:
+    def due(self, now: Optional[float] = None, force: bool = False) -> bool:
         now = time.time() if now is None else now
-        return self.checked_at is None or now - self.checked_at >= self.interval_s
+        wait = FORCED_CHECK_MIN_S if force else self.interval_s
+        return self.checked_at is None or now - self.checked_at >= wait
 
-    def poke(self) -> None:
-        """Start a background check if one is due (never waits for it)."""
-        if not self.enabled or not self.due():
+    def poke(self, force: bool = False) -> None:
+        """Start a background check if one is due (never waits for it).
+        `force` is the Check for updates button: due after a minute, not
+        after the full interval."""
+        if not self.enabled or not self.due(force=force):
             return
         if self._task is not None and not self._task.done():
             return
@@ -231,8 +239,9 @@ def make_router(hub: Any, *, checker: UpdateChecker,
 
     # -- app ------------------------------------------------------------
     @router.get("/api/app")
-    async def get_app() -> dict[str, Any]:
-        checker.poke()
+    async def get_app(refresh: bool = False) -> dict[str, Any]:
+        # ?refresh=1 is the Check for updates button.
+        checker.poke(force=refresh)
         return {"version": checker.version, "data_dir": str(data_dir()),
                 "first_run": bool(store.first_run), "update": checker.public()}
 

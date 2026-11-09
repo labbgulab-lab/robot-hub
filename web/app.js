@@ -1931,7 +1931,7 @@
       case 'logs': toggleLogs(); break;
       case 'settings': location.hash = '#settings'; break;
       case 'update': ui.updating = true; render(); { const r = await api('POST', '/api/app/update'); if (!r.ok) { ui.updating = false; toast(sentence(r.error || "Couldn't start the update."), 'err'); render(); } } break;
-      case 'update-check': { const r = await api('GET', '/api/app'); if (r.version !== undefined) S.app = r; toast(r.update && r.update.available ? `New version ${r.update.latest}` : 'Checking for updates. It can take a few seconds.', 'info'); setTimeout(refreshApp, 5000); render(); } break;
+      case 'update-check': { const r = await api('GET', '/api/app?refresh=1'); if (r.version !== undefined) S.app = r; toast(r.update && r.update.available ? `New version ${r.update.latest}` : 'Checking for updates. It can take a few seconds.', 'info'); setTimeout(refreshApp, 5000); render(); } break;
       case 'bar-x': ui.barDismissed[el.dataset.id] = true; render(); break;
       case 'wifi-settings': { const r = await api('POST', '/api/network/open_wifi_settings'); if (!r.ok) toast(sentence(r.error || "Couldn't open the WiFi settings."), 'err'); } break;
       case 'add-key': openPopup(); ui.sheet = null; render(); break;
