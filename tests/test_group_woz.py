@@ -429,8 +429,20 @@ def test_connect_opens_only_the_links(tmp_path, monkeypatch):
     r = run(gm.woz.connect())
     assert r == {"ok": True, "connected": ["k1", "k2", "k3"], "missing": []}
     assert opened == [["k1", "k2", "k3"]]
-    # A dropped link: connecting again opens them again.
+    # A dropped link: connecting again opens only that robot again.
     gm.session.links["k2"].connected = False
+    reopened = []
+
+    async def reopen(more):
+        reopened.append([s["key"] for s in more])
+        gm.session.links["k2"] = Link("k2")
+    gm.session.open_lite = reopen
+    r = run(gm.woz.connect())
+    assert len(opened) == 1 and reopened == [["k2"]]
+    assert r["connected"] == ["k1", "k2", "k3"] and r["missing"] == []
+    # Every link dead (the WiFi went): the whole connection is opened again.
+    for link in gm.session.links.values():
+        link.connected = False
 
     async def no_close():
         gm.session = None
@@ -657,6 +669,30 @@ def test_woz_stop_also_cuts_the_conversation_line(tmp_path, monkeypatch):
     assert session.cut_seq == seq + 1 and all(l.stops for l in session.links.values())
 
 
+@pytest.mark.parametrize("with_cue,cut_line", [(True, False), (True, True), (False, True)])
+def test_stop_keeps_the_floor_until_the_robots_are_cleared(tmp_path, monkeypatch, with_cue,
+                                                           cut_line):
+    # Finish or Esc during a cue: a line that waited for it must not send its
+    # first piece while the clears are still going out (it would be flushed).
+    gm, session = setup(tmp_path, monkeypatch, seconds=2.0)
+    seen = []
+
+    async def go():
+        if with_cue:
+            await gm.woz.fire("greet", "k1")
+        for link in session.links.values():
+            async def stop_audio():
+                seen.append(session.floor_taken())
+                await asyncio.sleep(0.05)
+            link.stop_audio = stop_audio
+        await gm.woz.stop(cut_line=cut_line)
+        return session.floor_taken(), gm.woz.busy()
+
+    taken, busy = run(go())
+    assert seen and all(seen), "held while the robots are cleared"
+    assert not taken and not busy, "and free once they are"
+
+
 def test_pile_on_and_defend_keep_off_a_cue(tmp_path, monkeypatch):
     from types import SimpleNamespace
     gm, session = setup(tmp_path, monkeypatch, seconds=2.0)
@@ -771,21 +807,42 @@ def test_manifest_matches_build_show_exactly(tmp_path, monkeypatch):
     assert cue["text"] == "hello there" and gm.woz.audio_file(cue) is not None
 
 
-def test_dances_are_left_out_and_said_so(tmp_path, monkeypatch):
+def test_dances_play_their_stand_in_and_say_so(tmp_path, monkeypatch):
     gm, session = setup(tmp_path, monkeypatch)
     cues = {c_["id"]: c_ for s in gm.woz.state()["script"]["sections"] for c_ in s["cues"]}
-    assert cues["other"]["note"] and cues["sway"]["note"] and "note" not in cues["greet"]
+    assert "yes1" in cues["other"]["note"] and "dance1" in cues["sway"]["note"]
+    assert "note" not in cues["greet"]
+    assert cues["sway"]["ready"], "a dance with a stand-in can be fired"
 
     async def go():
-        r = await gm.woz.fire("other", "k1")
+        r1 = await gm.woz.fire("other", "k1")
         await settle(gm)
+        r2 = await gm.woz.fire("sway", "k1")
+        await settle(gm)
+        return r1, r2
+
+    r1, r2 = run(go())
+    assert r1["note"] and r2["note"] and session.links["k1"].played
+    assert session.links["k1"].motions == [{"type": "emotion", "name": "yes1"},
+                                           {"type": "emotion", "name": "dance1"}]
+    assert session.busy_until["k1"] > 0
+
+
+def test_a_dance_with_no_stand_in_is_not_ready(tmp_path, monkeypatch):
+    # The page must not offer a reaction key that moves nothing (review #16).
+    gm, session = setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(woz_mod, "DANCE_STAND_IN", "no_such_move")
+    cues = {c_["id"]: c_ for s in gm.woz.state()["script"]["sections"] for c_ in s["cues"]}
+    assert not cues["sway"]["ready"] and cues["sway"]["note"]
+    assert cues["nod"]["ready"] and cues["think"]["ready"]
+    assert cues["other"]["ready"], "a line still plays; its nod is a nod"
+
+    async def go():
         with pytest.raises(WozError) as e:
             await gm.woz.fire("sway", "k1")
-        return r, e.value.code
+        return e.value.code
 
-    r, code = run(go())
-    assert r["note"] and session.links["k1"].played and not session.links["k1"].motions
-    assert code == "NO_MOTION"
+    assert run(go()) == "NO_MOTION" and not session.links["k1"].motions
 
 
 def test_connect_keeps_a_get_ready_connection_and_names_the_missing(tmp_path, monkeypatch):
@@ -806,22 +863,62 @@ def test_connect_brings_back_a_robot_that_did_not_join(tmp_path, monkeypatch):
     gm, session = setup(tmp_path, monkeypatch)
     del session.links["k3"]                         # it did not join the last time
     session.seats = [s for s in session.seats if s["key"] != "k3"]
-    opened = []
+    kept = dict(session.links)
+    opened, torn = [], []
 
-    async def open_lite(seats):
-        opened.append([s["key"] for s in seats])
-        s = c.Session(gm, seats, {"simulate": False}, gm.shared_services(), lite=True)
-        s.links = {x["key"]: Link(x["key"]) for x in seats if x["key"] != "k3"}
-        gm.session = s
-        return None
+    async def reopen(more):
+        opened.append([s["key"] for s in more])     # still off: it stays out
 
     async def no_close():
-        gm.session = None
-    gm.open_lite, gm._disconnect = open_lite, no_close
+        torn.append(1)
+    session.open_lite, gm._disconnect = reopen, no_close
     monkeypatch.setattr(gm.woz, "prepare_soon", lambda: None)
+    # The page sees it: a target, not connected, and named in missing.
+    body = gm.woz.state()
+    assert "k3" in [k for t in body["targets"] for k in t["members"]]
+    assert body["missing"] == ["k3"] and "k3" not in body["connected"]
     r = run(gm.woz.connect())
-    assert opened == [["k1", "k2", "k3"]], "tried again"
+    assert opened == [["k3"]], "only the one that is missing is opened again"
+    assert not torn and gm.session is session and all(session.links[k] is l
+                                                      for k, l in kept.items())
     assert r["missing"] == ["reachy3"], "and still says who is missing"
+
+
+def test_a_lite_connection_adds_the_robots_it_reopens(tmp_path, monkeypatch):
+    # Session.open_lite(more): the dead link is closed, the robot opened again,
+    # the robots that are on are not touched.
+    from hub.group import robots as robots_mod
+    gm, session = setup(tmp_path, monkeypatch, dead=("k2",))
+    session.settings["simulate"] = True
+    del session.links["k3"]
+    session.seats = [s for s in session.seats if s["key"] != "k3"]
+    dead, k1 = session.links["k2"], session.links["k1"]
+    closed = []
+
+    async def close():
+        closed.append(1)
+    dead.close = close
+
+    class Fresh(Link):
+        def __init__(self, key, name, listen=False):
+            super().__init__(key)
+            self.opened = False
+
+        async def open(self):
+            if self.key == "k3":
+                raise RuntimeError("off the WiFi")
+            self.opened = True
+
+    async def no_clocks():
+        pass
+    monkeypatch.setattr(robots_mod, "LaptopLink", Fresh)
+    session.measure_clocks = no_clocks
+    more = [s for s in gm.seats() if s["key"] in ("k2", "k3")]
+    run(session.open_lite(more))
+    assert closed and session.links["k1"] is k1
+    assert session.links["k2"] is not dead and session.links["k2"].opened
+    assert "k3" not in session.links, "one that could not join stays out"
+    assert [s["key"] for s in session.seats] == ["k1", "k2"]
 
 
 def test_settings_on_a_woz_connection_start_no_paid_warm_up(tmp_path, monkeypatch):

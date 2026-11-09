@@ -20,7 +20,9 @@ the lab's script through the same robot links the conversation uses:
   * one floor (2026-11-09 review): a cue with a voice holds it from the moment
     it is fired (before anything is cut) until it has played or is stopped,
     and no conversation line sends audio while it is held (Session.wait_floor,
-    Conversation.speak); Stop also cancels a cue that is still being started.
+    Conversation.speak); Stop also cancels a cue that is still being started;
+  * the robots have no dances: a dance cue plays a stand-in emotion and says
+    so (motion_of); Connect brings back only the robots that are missing.
 """
 
 from __future__ import annotations
@@ -55,6 +57,12 @@ FLOOR_SPARE_S = 5.0          # the floor outlasts a cue's own length by this, no
 DEFAULT_VOICE = "Aoede"      # reachy_chat conversation.GEMINI_VOICE (build_show.py)
 DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview"
 NO_DANCE = "no dances on the robots"
+# The robots have no dance library, so a dance cue plays the nearest move the
+# emotions library has (2026-11-09 review): a nod is a nod, any other dance is
+# the library's own dance1. A stand-in the robots lack makes the cue not ready.
+DANCE_STAND_INS = {"yeah_nod": "yes1"}
+DANCE_STAND_IN = "dance1"
+STOP_HOLD_S = 4.0            # Stop keeps the floor while the robots are cleared
 
 
 class _Stopped(Exception):
@@ -231,7 +239,11 @@ class TableWoz:
         return made if made.is_file() else None
 
     def is_ready(self, cue: dict, script: dict) -> bool:
-        return not cue["text"] or self.audio_file(cue, script) is not None
+        """It can be fired now: its audio is here, or (no words) its motion
+        is one the robots can do."""
+        if not cue["text"]:
+            return self.motion_of(cue)[0] is not None
+        return self.audio_file(cue, script) is not None
 
     @staticmethod
     def _file_sig(path: Optional[Path]) -> Optional[tuple]:
@@ -354,8 +366,12 @@ class TableWoz:
 
     # ----------------------------------------------------------- targets
     def _seats(self) -> list[dict]:
+        """A conversation's (or Get ready's) own seats; a Wizard of Oz
+        connection's are every included robot, so one that did not join or
+        dropped out stays in the targets, not connected, and the page offers
+        Connect for it (connect() opens the robots again)."""
         session = self.m.session
-        if session is not None:
+        if session is not None and (self.m.running or not getattr(session, "lite", False)):
             return list(session.seats)
         return [s for s in self.m.seats() if s.get("included")]
 
@@ -391,6 +407,16 @@ class TableWoz:
         if session is None:
             return []
         return [k for k, link in session.links.items() if getattr(link, "connected", True)]
+
+    def missing(self) -> list[str]:
+        """Included robots with no live link (dropped out, or never joined)."""
+        try:
+            alive = set(self.alive())
+            return [s["key"] for s in self.m.seats() if s.get("included")
+                    and s["key"] not in alive]
+        except Exception:  # noqa: BLE001 - a half-built seat list must not break the page
+            log.exception("woz: listing the missing robots failed")
+            return []
 
     def choose(self, plan: dict, wanted: str) -> dict:
         targets = plan["targets"]
@@ -434,10 +460,15 @@ class TableWoz:
     def motion_of(cue: dict) -> tuple[Optional[dict], str]:
         """(the motion the robots can do, a note): the robots have no dance
         library (moves.DANCES_ON_ROBOTS), and reachy_chat's own show player
-        sends dances to the same player, which ignores them; so a dance is
-        left out and said so rather than pretended."""
+        sends dances to the same player, which ignores them; so a dance plays
+        its stand-in emotion (DANCE_STAND_INS), or is left out, and the note
+        says which rather than pretending."""
         motion = cue.get("motion")
         if motion and motion.get("type") == "dance" and not moves.DANCES_ON_ROBOTS:
+            name = DANCE_STAND_INS.get(str(motion.get("name") or ""), DANCE_STAND_IN)
+            if name in moves.EMOTIONS:
+                return ({"type": "emotion", "name": name},
+                        "played as {} ({})".format(name, NO_DANCE))
             return None, NO_DANCE
         return motion, ""
 
@@ -465,6 +496,7 @@ class TableWoz:
                 "targets": [{"id": t["id"], "name": t["name"], "members": t["members"]}
                             for t in plan["targets"]],
                 "choir": plan["choir"], "connected": self.alive(),
+                "missing": self.missing(),
                 "preparing": self._prep is not None and not self._prep.done(),
                 "playing": dict(self._playing) if self._playing else None}
         if script["error"]:
@@ -513,9 +545,9 @@ class TableWoz:
     async def connect(self) -> dict:
         """Connect the robots for the Wizard of Oz, without the AI: nothing but
         their links. Runs again to bring back robots that dropped out or did
-        not join (a Wizard of Oz connection only: a conversation's, or one
-        Get ready opened, is never torn down for one robot; those robots are
-        named in "missing" instead)."""
+        not join: on a Wizard of Oz connection only those are opened again,
+        the others keep playing; a conversation's, or one Get ready opened,
+        is never touched for one robot (they are named in "missing")."""
         m = self.m
         async with m._lock:
             session = m.session
@@ -523,17 +555,20 @@ class TableWoz:
                 pass            # the conversation has them
             else:
                 connecting = m._connecting is not None and not m._connecting.done()
-                dead = []
+                gone = False
                 if session is not None and not connecting:
                     linked = {k for k, l in session.links.items()
                               if getattr(l, "connected", True)}
-                    wanted = [s["key"] for s in m.seats() if s.get("included")]
-                    dead = [k for k in wanted if k not in linked]
-                    if not session.links or not linked:
-                        dead = dead or ["all"]          # nothing left to keep
-                    elif not getattr(session, "lite", False):
-                        dead = []       # Get ready's connection: keep it, name them
-                if dead:
+                    dead = [s for s in m.seats() if s.get("included") and s["key"] not in linked]
+                    if not linked:
+                        gone = True             # nothing left to keep: open them again
+                    elif dead and getattr(session, "lite", False):
+                        try:
+                            await session.open_lite(dead)
+                        except Exception:  # noqa: BLE001 - the robots that are on stay on
+                            log.exception("woz: bringing back %s failed",
+                                          ", ".join(s["key"] for s in dead))
+                if gone:
                     await m._disconnect()       # lost the WiFi: open them again
                     session = None
                 if session is None:
@@ -550,8 +585,8 @@ class TableWoz:
         self.publish_state()
         # Every included robot that has no live link: dropped out, or never
         # joined (the session's own seats leave those out).
-        missing = [s.get("name") or s["key"] for s in m.seats()
-                   if s.get("included") and s["key"] not in alive]
+        names = {s["key"]: s.get("name") or s["key"] for s in m.seats()}
+        missing = [names.get(k, k) for k in self.missing()]
         return {"ok": True, "connected": alive, "missing": missing}
 
     # ------------------------------------------------------------ firing
@@ -831,12 +866,20 @@ class TableWoz:
         if session is not None and cut_line:
             session.cut_seq += 1
         if session is not None and (was or cut_line):
+            # The floor stays taken until the robots are cleared, so a line
+            # that waited for the cue cannot send a first piece the clear
+            # then flushes (halt() freed the cue's own hold).
+            token = object()
+            self._floor[token] = time.monotonic() + STOP_HOLD_S
             sends = []
             for link in session.links.values():
                 sends.append(asyncio.wait_for(link.stop_audio(), 3.0))
                 if was:
                     sends.append(asyncio.wait_for(link.motion({"type": "stop"}), 3.0))
-            await asyncio.gather(*sends, return_exceptions=True)
+            try:
+                await asyncio.gather(*sends, return_exceptions=True)
+            finally:
+                self._floor.pop(token, None)
         if tasks:
             await asyncio.wait(tasks, timeout=2.0)
         return {"ok": True}

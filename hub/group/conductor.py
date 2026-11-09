@@ -1286,13 +1286,26 @@ class Session:
         self.rewarm()
 
     # ------------------------------------------------------- the people's mic
-    async def open_lite(self) -> None:
+    async def open_lite(self, more: Optional[list[dict]] = None) -> None:
         """Only the robots' links, for the Wizard of Oz with no conversation
         (2026-11-09): no internet, no keys, no voice detection. The same steps
         as open() for the links; clocks are measured so a Choir cue still
-        starts on every robot together."""
+        starts on every robot together. `more` (2026-11-09 review): robots to
+        add to this open connection (they did not join, or their link died);
+        only those are opened, the others go on playing meanwhile."""
         from .robots import LaptopLink, RobotLink
 
+        seats = list(self.seats) if more is None else list(more)
+        if more is not None:
+            # A dead link is closed before its robot is opened again.
+            old = [self.links.pop(s["key"]) for s in seats if s["key"] in self.links]
+
+            async def _close(link: Any) -> None:
+                try:
+                    await asyncio.wait_for(link.close(), 10)
+                except Exception as exc:  # noqa: BLE001
+                    log.info("closing a dead link: %s", exc)
+            await asyncio.gather(*(_close(l) for l in old))
         simulate = bool(self.settings.get("simulate"))
         if not simulate:
             async def _stop(seat: dict) -> None:
@@ -1304,8 +1317,9 @@ class Session:
                     await asyncio.wait_for(stop(), 40)
                 except Exception as exc:  # noqa: BLE001
                     self.note("could not stop {}'s own app: {}".format(seat["name"], exc))
-            await asyncio.gather(*(_stop(s) for s in self.seats))
-        for seat in self.seats:
+            await asyncio.gather(*(_stop(s) for s in seats))
+        opening: dict[str, Any] = {}
+        for seat in seats:
             if simulate or is_laptop_seat(seat):
                 link = LaptopLink(seat["key"], seat["name"], listen=False)
             else:
@@ -1320,16 +1334,24 @@ class Session:
                 user, password = adapter._ssh_creds()
                 link = RobotLink(seat["key"], seat["name"], robot.address, user, password,
                                  listen=False, standby=False)
-            self.links[seat["key"]] = link
+            # In the links while it opens, so a connection closed meanwhile
+            # closes it too (a link counts as live only once it is open).
+            opening[seat["key"]] = self.links[seat["key"]] = link
 
         async def _open(key: str, link: Any) -> None:
             try:
                 await asyncio.wait_for(link.open(), 60)
             except Exception as exc:  # noqa: BLE001
-                self.links.pop(key, None)
+                if self.links.get(key) is link:
+                    self.links.pop(key, None)
                 self.note("{} could not join: {}".format(link.name, exc))
 
-        await asyncio.gather(*(_open(k, l) for k, l in list(self.links.items())))
+        await asyncio.gather(*(_open(k, l) for k, l in opening.items()))
+        if more is not None:
+            have = {s["key"] for s in self.seats}
+            self.seats += [s for s in seats if s["key"] in self.links and s["key"] not in have]
+            await self.measure_clocks()
+            return
         self.seats = [s for s in self.seats if s["key"] in self.links]
         if not self.seats:
             raise RuntimeError("no robot could be reached")
