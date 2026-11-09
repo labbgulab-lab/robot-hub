@@ -1,39 +1,87 @@
-# Robot Hub
+# LabaLab Robot Hub
 
-## Install (students)
+The lab's app for the robots. It finds Reachy Mini, Pepper, NAO and Furhat on
+the WiFi, connects them, and lets you talk to them, run group conversations
+and drive them by hand.
 
-Windows 10 and 11. No admin, Python or Git needed. Open PowerShell
-(press Start, type `PowerShell`, press Enter), paste this line and press Enter:
+For Windows 10 and 11. You do not need admin rights, Python or Git.
+
+## Install in 3 steps
+
+**1. Open PowerShell.**
+Press the Start button, type `PowerShell`, and press Enter. A blue or black
+window opens.
+
+**2. Copy this line, paste it into that window, and press Enter.**
 
 ```powershell
 irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.ps1 | iex
 ```
 
-- **What it does:** downloads the app (about 120 MB) from the
-  [latest release](https://github.com/labbgulab-lab/robot-hub/releases/latest)
-  into `%LOCALAPPDATA%\LabaLab\RobotHub`, for your Windows user only. It puts
-  a **LabaLab Robot Hub** icon on the desktop and in the Start menu, and opens
-  the app.
-- **Every later day:** double-click the icon. Closing the window leaves the
-  robots running; Quit is in Settings and in the tray icon.
-- **Update:** run the same line again. Your keys and settings stay.
-- **Commands blocked?** Download `RobotHub-<version>.zip` from the latest
-  release, unzip it and double-click `Install Robot Hub.cmd`.
-- **Uninstall:** in PowerShell,
-  `& ([scriptblock]::Create((irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.ps1))) -Uninstall`.
-  Add `-RemoveData` to delete your keys, settings and logs too.
+To paste in PowerShell, right-click inside the window, or press Ctrl+V.
 
-**Guides:** [Student guide](docs/guides/STUDENT.md) · [Lab staff guide](docs/guides/LAB-STAFF.md)
+**3. Wait about two minutes.**
+It downloads the app (about 114 MB), puts a **LabaLab Robot Hub** icon on your
+desktop, and opens the app. When it says "You can close this window", close
+PowerShell.
 
-Lab members who work on the code use the git setup below instead.
+That's it. You do not need to download anything from the Releases page by
+hand.
 
-**Making a release (lab):** bump `VERSION`, commit, then on Windows run
+## First time in the app
+
+1. **Add a key.** The app asks for one. Paste the key you got from the lab,
+   press **Test and save**, wait for **It works**, then press **Done**.
+2. **Join the lab WiFi** (HOT-WiFi) on your laptop.
+3. **Switch the robots on.** Each one shows up as a card within about 30
+   seconds.
+4. **Press Connect** on a card. The robot says a sentence out loud, so you
+   know it works.
+5. **Press Talk** (Reachy) or the robot's main button, and start.
+
+## Every day after that
+
+- **Open:** double-click **LabaLab Robot Hub** on the desktop.
+- **Close:** **Settings**, **About**, **Quit**, then **Press again to quit**.
+  Closing the window alone leaves the robots running.
+- **Update:** when the app shows **New version**, press **Update**. Or run
+  the same line from step 2 again. Your keys and settings stay.
+
+## If something goes wrong
+
+| Problem | What to do |
+|---|---|
+| PowerShell says the line is blocked | Open the [latest release](https://github.com/labbgulab-lab/robot-hub/releases/latest), download `RobotHub-<version>.zip`, unzip it, and double-click `Install Robot Hub.cmd`. |
+| No robot cards appear | Check your laptop is on HOT-WiFi, then press **Scan** at the top of the app. |
+| A robot does not answer | Switch it off and on, wait a minute, press **Scan**. |
+| Anything else | In the app, press **Logs** at the top, then **Save a report for the lab**. It goes to your Downloads folder, with keys taken out. Send that file to the lab. |
+
+**Uninstall:** paste this into PowerShell and press Enter. Add ` -RemoveData`
+at the end to delete your keys and settings too.
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/labbgulab-lab/robot-hub/releases/latest/download/install.ps1))) -Uninstall
+```
+
+**More help:** the [student guide](docs/guides/STUDENT.md) explains every
+screen: keys, Talk, group conversation, Choir, Wizard of Oz, Pepper and NAO.
+
+---
+
+# For lab staff and developers
+
+[Lab staff guide](docs/guides/LAB-STAFF.md): releases, robot set-up, the
+network.
+
+**Making a release:** bump `VERSION`, commit, then on Windows run
 `powershell -ExecutionPolicy Bypass -File tools\build_release.ps1` (it builds
 from the committed HEAD of robot-hub and of reachy_chat's `multi-provider`
 branch). Make a GitHub release tagged `v<version>` and upload
-`dist\RobotHub-<version>.zip` and `dist\install.ps1`.
+`dist\RobotHub-<version>.zip` and `dist\install.ps1`, marked as the latest
+release.
 
----
+Lab members who work on the code use the git setup below instead of the
+installer.
 
 One local page for the lab's four robots — **Furhat, Reachy-Mini,
 Reachy-Mini-Lite, NAOqi**.
