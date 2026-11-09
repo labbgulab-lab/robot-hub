@@ -49,6 +49,20 @@ UPDATE_EVERY_S = 6 * 3600.0
 FORCED_CHECK_MIN_S = 60.0
 
 
+# How long after the hub starts a newer version still updates by itself (the
+# page shows a 5-second countdown with Not now). Later, only the Update button:
+# never in the middle of a demo.
+AUTO_UPDATE_WINDOW_S = 180.0
+STARTED_AT = time.time()
+
+
+def is_installed(root: Path = REPO_ROOT) -> bool:
+    """The student app (app/robot-hub next to app/runtime and app/launch.pyw),
+    not a lab checkout run from git: only the installed app updates itself."""
+    app = root.parent
+    return (app / "launch.pyw").is_file() and (app / "runtime").is_dir()
+
+
 def read_version(root: Path = REPO_ROOT) -> str:
     """robot-hub/VERSION, or the bundle's app/VERSION one level up."""
     for path in (root / "VERSION", root.parent / "VERSION"):
@@ -228,6 +242,7 @@ def make_router(hub: Any, *, checker: UpdateChecker,
                 downloads: Callable[[], Path] = applog.downloads_dir) -> APIRouter:
     router = APIRouter()
     store = hub.settings
+    installed = is_installed()
 
     def data_dir() -> Path:
         return Path(hub.config.data_dir)
@@ -242,8 +257,14 @@ def make_router(hub: Any, *, checker: UpdateChecker,
     async def get_app(refresh: bool = False) -> dict[str, Any]:
         # ?refresh=1 is the Check for updates button.
         checker.poke(force=refresh)
+        uptime = time.time() - STARTED_AT
         return {"version": checker.version, "data_dir": str(data_dir()),
-                "first_run": bool(store.first_run), "update": checker.public()}
+                "first_run": bool(store.first_run), "update": checker.public(),
+                "installed": installed, "uptime_s": round(uptime, 1),
+                # The page may update by itself (countdown + Not now) only
+                # right after a start, and only in the installed app.
+                "auto_update": bool(installed and checker.available
+                                    and uptime < AUTO_UPDATE_WINDOW_S)}
 
     @router.get("/api/version")
     async def get_version() -> dict[str, Any]:

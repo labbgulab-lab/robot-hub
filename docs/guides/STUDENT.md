@@ -88,6 +88,8 @@ A conversation is saved as a transcript on this laptop while the **Saving transc
 
 ## Update
 
+When you open the app and a new version is out, it updates itself: the logo spins, it says **Please wait**, and the app opens again in about two minutes. Press **Not now** to skip it once. If you skipped it:
+
 1. When a new version is out, **New version** and an **Update** button appear at the top. Or open **Settings**, then **About**, and press **Check for updates**.
 2. Press **Update**. A PowerShell window opens, the app closes, and the new version opens. Robots stop for about a minute.
 

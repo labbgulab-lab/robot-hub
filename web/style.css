@@ -336,6 +336,8 @@ code{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:12.5
 .over.boot{background:#FAF8F5}
 .center{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
 .mark{width:120px;height:auto}
+.mark.spin{animation:spin 2.4s linear infinite}
+@media (prefers-reduced-motion:reduce){.mark.spin{animation:none}}
 .bigspin{width:22px;height:22px;border-radius:50%;border:2.5px solid #E8E3DC;border-top-color:#FD9903;animation:spin 800ms linear infinite}
 .stopscrim{position:absolute;inset:64px 0 0 0;background:rgba(250,248,245,.86);display:flex;align-items:center;justify-content:center;padding:24px}
 .box{background:#FFFFFF;border:1px solid #E8E3DC;border-radius:16px;padding:22px;box-shadow:0 24px 64px -16px rgba(28,25,23,.28);display:flex;flex-direction:column;gap:12px;align-items:flex-start;max-width:320px}

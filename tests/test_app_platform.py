@@ -743,3 +743,51 @@ def test_update_check_only_counts_app_releases():
     ]
     assert pick_app_release(releases) == {"tag": "v1.1.0", "url": "b"}
     assert pick_app_release([]) == {}
+
+
+def test_only_the_installed_app_updates_itself_and_only_right_after_start(tmp_path, monkeypatch):
+    """2026-11-09: on start, a newer release installs itself (the page counts
+    down 5 s with Not now). Never from a lab checkout, never later than
+    AUTO_UPDATE_WINDOW_S after the start: a demo is never cut."""
+    from hub import app_api
+
+    app_dir = tmp_path / "app"
+    (app_dir / "robot-hub").mkdir(parents=True)
+    assert app_api.is_installed(app_dir / "robot-hub") is False
+    (app_dir / "runtime").mkdir()
+    (app_dir / "launch.pyw").write_text("")
+    assert app_api.is_installed(app_dir / "robot-hub") is True
+    assert app_api.is_installed() is False          # this checkout
+
+    newer = UpdateChecker("1.0.0")
+    newer.latest = "v1.0.3"
+    monkeypatch.setattr(app_api, "is_installed", lambda root=None: True)
+    monkeypatch.setattr(app_api, "STARTED_AT", time.time() - 10)
+    client, _hub, _ = _client(tmp_path, checker=newer)
+    body = client.get("/api/app").json()
+    assert body["installed"] is True and body["auto_update"] is True
+    assert 0 <= body["uptime_s"] < app_api.AUTO_UPDATE_WINDOW_S
+
+    monkeypatch.setattr(app_api, "STARTED_AT", time.time() - app_api.AUTO_UPDATE_WINDOW_S - 5)
+    assert client.get("/api/app").json()["auto_update"] is False   # too late: Update button only
+
+    same = UpdateChecker("1.0.3")
+    same.latest = "v1.0.3"
+    monkeypatch.setattr(app_api, "STARTED_AT", time.time())
+    client2, _h, _ = _client(tmp_path, checker=same)
+    assert client2.get("/api/app").json()["auto_update"] is False  # nothing newer
+
+    monkeypatch.setattr(app_api, "is_installed", lambda root=None: False)
+    client3, _h, _ = _client(tmp_path, checker=newer)
+    body3 = client3.get("/api/app").json()
+    assert body3["installed"] is False and body3["auto_update"] is False   # lab checkout
+
+
+def test_page_counts_down_and_never_updates_with_a_robot_connected():
+    js = (REPO_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    auto = js[js.index("function maybeAutoUpdate"):js.index("async function startUpdate")]
+    assert "S.app.auto_update" in auto
+    assert "CONNECTED.includes(r.state)" in auto and "CONNECTING" in auto
+    assert "AUTO_UPDATE_COUNTDOWN_MS = 5000" in js
+    assert "data-act=\"update-later\"" in js and "Not now" in js
+    assert "watchStartupUpdate();" in js

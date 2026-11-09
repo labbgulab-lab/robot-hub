@@ -202,7 +202,47 @@
 
   async function refreshApp() {
     const a = await api('GET', '/api/app');
-    if (a && a.version !== undefined) { S.app = a; render(); }
+    if (a && a.version !== undefined) { S.app = a; render(); maybeAutoUpdate(); }
+  }
+
+  // Right after the installed app starts, a newer version on GitHub installs
+  // itself: a 5-second countdown with Not now, then the installer (the app
+  // opens again by itself). Never while a robot is connected, and later only
+  // the Update button, so a demo is never cut.
+  const AUTO_UPDATE_COUNTDOWN_MS = 5000;
+  function skippedUpdate() { try { return sessionStorage.getItem('hub.skipUpdate') || ''; } catch (err) { return ''; } }
+  function maybeAutoUpdate() {
+    const up = S.app.update || {};
+    if (!S.app.auto_update || !up.latest || ui.updating || ui.autoUpd || skippedUpdate() === up.latest) return;
+    if (realRobots().some(r => CONNECTED.includes(r.state) || r.state === 'CONNECTING')) return;
+    ui.autoUpd = { version: up.latest, end: Date.now() + AUTO_UPDATE_COUNTDOWN_MS };
+    const tick = () => {
+      if (!ui.autoUpd) return;
+      if (Date.now() >= ui.autoUpd.end) { ui.autoUpd = null; startUpdate(); return; }
+      render();
+      setTimeout(tick, 250);
+    };
+    tick();
+  }
+  async function startUpdate() {
+    ui.updating = true;
+    render();
+    const r = await api('POST', '/api/app/update');
+    if (!r.ok) { ui.updating = false; toast(sentence(r.error || "Couldn't start the update."), 'err'); render(); }
+  }
+  // The hub asks GitHub as it starts; the answer comes a few seconds later.
+  // Ask the hub again every 4 s for the first minutes so the page hears it.
+  function watchStartupUpdate() {
+    let tries = 0;
+    const again = () => {
+      tries += 1;
+      if (tries > 45 || ui.updating || ui.autoUpd) return;
+      const up = S.app.update || {};
+      if (S.app.version !== undefined && (!S.app.installed || up.available
+          || Number(S.app.uptime_s || 0) > 180)) return;
+      refreshApp().finally(() => setTimeout(again, 4000));
+    };
+    setTimeout(again, 4000);
   }
 
   /* ------------------------------------------------------------ events */
@@ -1333,7 +1373,19 @@
   function renderOverlays() {
     const host = $('#over-layer');
     if (ui.updating) {
-      put(host, `<div class="over boot" role="status"><div class="center"><img class="mark" src="${img('labalab-mark.png')}" alt=""><span class="bigspin" aria-hidden="true"></span><p class="muted" style="margin:0">Updating. Robots stop for a minute.</p></div></div>`);
+      const v = (S.app.update || {}).latest || '';
+      put(host, `<div class="over boot" role="status"><div class="center"><img class="mark spin" src="${img('labalab-mark.png')}" alt="">
+        <p class="h" style="margin:0">Updating Robot Hub${v ? ` to ${esc(v)}` : ''}</p>
+        <p class="muted" style="margin:0">Please wait, about two minutes. It opens again by itself.</p></div></div>`);
+      return;
+    }
+    if (ui.autoUpd) {
+      const left = Math.max(0, Math.ceil((ui.autoUpd.end - Date.now()) / 1000));
+      put(host, `<div class="over boot" role="alertdialog" aria-labelledby="au-title"><div class="center"><img class="mark spin" src="${img('labalab-mark.png')}" alt="">
+        <p id="au-title" class="h" style="margin:0">Robot Hub ${esc(ui.autoUpd.version)} is out</p>
+        <p class="muted" style="margin:0">Updating in ${left} s. Please wait, it opens again by itself.</p>
+        <div class="row" style="gap:8px;justify-content:center"><button class="btn btn-primary" type="button" data-act="update-now">Update now</button>
+        <button class="btn btn-ghost" type="button" data-act="update-later">Not now</button></div></div></div>`);
       return;
     }
     if (ui.stopped) {
@@ -1930,7 +1982,9 @@
       case 'scan': scan(); break;
       case 'logs': toggleLogs(); break;
       case 'settings': location.hash = '#settings'; break;
-      case 'update': ui.updating = true; render(); { const r = await api('POST', '/api/app/update'); if (!r.ok) { ui.updating = false; toast(sentence(r.error || "Couldn't start the update."), 'err'); render(); } } break;
+      case 'update': await startUpdate(); break;
+      case 'update-now': ui.autoUpd = null; await startUpdate(); break;
+      case 'update-later': try { sessionStorage.setItem('hub.skipUpdate', (ui.autoUpd || {}).version || ''); } catch (err) { /* private window */ } ui.autoUpd = null; render(); break;
       case 'update-check': { const r = await api('GET', '/api/app?refresh=1'); if (r.version !== undefined) S.app = r; toast(r.update && r.update.available ? `New version ${r.update.latest}` : 'Checking for updates. It can take a few seconds.', 'info'); setTimeout(refreshApp, 5000); render(); } break;
       case 'bar-x': ui.barDismissed[el.dataset.id] = true; render(); break;
       case 'wifi-settings': { const r = await api('POST', '/api/network/open_wifi_settings'); if (!r.ok) toast(sentence(r.error || "Couldn't open the WiFi settings."), 'err'); } break;
@@ -2189,6 +2243,7 @@
     }
     refreshApp();
     connectWs();
+    watchStartupUpdate();
   }
   start();
 })();

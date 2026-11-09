@@ -44,8 +44,9 @@ hand.
 - **Open:** double-click **LabaLab Robot Hub** on the desktop.
 - **Close:** **Settings**, **About**, **Quit**, then **Press again to quit**.
   Closing the window alone leaves the robots running.
-- **Update:** when the app shows **New version**, press **Update**. Or run
-  the same line from step 2 again. Your keys and settings stay.
+- **Update:** nothing to do. When a new version is out, the app updates
+  itself as it starts: it shows the spinning logo and "Please wait", then
+  opens again. Press **Not now** to skip it once. Your keys and settings stay.
 
 ## If something goes wrong
 

@@ -94,6 +94,7 @@ Do this on a Windows lab laptop with robot-hub and reachy_chat side by side.
 
 - The hub asks GitHub for the repo's releases at most every 6 hours (also when the app starts). **Check for updates** asks GitHub at once (at most once a minute), so right after you publish, press it and a running app offers **Update**. It picks the highest version among the published releases whose tag starts with `v` and which has a `RobotHub-*.zip`. Drafts, pre-releases and `robot-files` are skipped.
 - If that version is newer than the installed one, students see **New version** and **Update** at the top, and **Update** in **Settings**, **About**.
+- **Updates itself on start (1.0.3 and later):** when the installed app finds a newer release in its first 3 minutes and no robot is connected, it shows the spinning logo, "Robot Hub <version> is out", and counts down 5 s (**Update now**, **Not now**). Then it installs the update and opens again. A lab checkout never does this. Apps older than 1.0.3 need one manual **Update** to get this.
 - **Update** opens PowerShell, runs the install line, stops the hub, swaps the app folder and opens the app again. If the network is down, the check fails quietly and tries again later.
 - The previous app stays as `app.old` until the next install.
 
